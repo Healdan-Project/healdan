@@ -240,26 +240,34 @@ describe('FolderView', () => {
     expect(JSON.parse(window.localStorage.getItem('healdan.columns.folder')!).shown).toEqual(['title', 'docNumber', 'version', 'author', 'edited', 'client'])
   })
 
-  it("doesn't sort by a column the server doesn't sort a folder by yet: no arrow and no Sort items", async () => {
-    window.localStorage.setItem('healdan.columns.folder', JSON.stringify({ v: 1, shown: ['title', 'docNumber', 'matter', 'size'], widths: {} }))
+  it('every document column sorts on a folder, asking the server: Date Filed newest first, the others A to Z', async () => {
+    window.localStorage.setItem(
+      'healdan.columns.folder',
+      JSON.stringify({ v: 1, shown: ['title', 'docNumber', 'version', 'author', 'edited', 'matter', 'client', 'location', 'filed', 'size', 'type'], widths: {} }),
+    )
     const { api, router } = await renderApp('/folders/7', routes())
     await findRow(/Drafts/)
-    expect(headerNames()).toEqual(['Title', 'Doc #', 'Matter', 'Size'])
-    expect(header('Matter').getAttribute('aria-sort')).toBeNull()
-    expect(header('Size').getAttribute('aria-sort')).toBeNull()
-    expect(header('Doc #').getAttribute('aria-sort')).toBe('none')
+    expect(headerNames()).toEqual(['Title', 'Doc #', 'Version', 'Author', 'Edit Date', 'Matter', 'Client', 'Location', 'Date Filed', 'Size', 'File Type'])
+    // Every heading sorts: an arrow on the one the list is in, and room for one on the others
+    expect(within(list()).getAllByRole('columnheader').map((one) => one.getAttribute('aria-sort'))).toEqual(['ascending', ...Array(10).fill('none')])
+    const firsts = { Matter: ['matter', 'asc'], Client: ['client', 'asc'], Location: ['location', 'asc'], 'Date Filed': ['filed', 'desc'], Size: ['size', 'asc'], 'File Type': ['type', 'asc'] }
+    for (const [name, [sort, order]] of Object.entries(firsts)) {
+      fireEvent.click(header(name))
+      await waitFor(() => expect(router.history.location.search).toBe(`?sort=${sort}&order=${order}`))
+      await waitFor(() => expect(api.callsTo('GET /v1/folders/7/children').at(-1)?.query).toEqual({ sort, order, zone, offset: 0, limit: 100 }))
+      await waitFor(() => expect(header(name).getAttribute('aria-sort')).toBe(order === 'asc' ? 'ascending' : 'descending'))
+    }
+    // And a heading's menu sorts it
     const menu = await headingMenu('Matter')
-    expect(within(menu).queryByRole('menuitemradio', { name: 'Sort Ascending' })).toBeNull()
-    expect(within(menu).queryByRole('menuitemradio', { name: 'Sort Descending' })).toBeNull()
-    expect(within(menu).getByRole('menuitem', { name: 'Hide Matter' })).toBeTruthy()
-    await userEvent.keyboard('{Escape}')
-    await waitFor(() => expect(screen.queryByRole('menu', { name: 'Matter Column' })).toBeNull())
-    fireEvent.click(header('Matter'))
-    // A sort would be in the address as the click ends (Doc #'s, below, is): there is none, and the list isn't asked again
-    expect(router.history.location.search).toBe('')
-    expect(api.callsTo('GET /v1/folders/7/children')).toHaveLength(1)
-    fireEvent.click(header('Doc #'))
-    expect(router.history.location.search).toBe('?sort=docNumber&order=asc')
+    await userEvent.click(within(menu).getByRole('menuitemradio', { name: 'Sort Descending' }))
+    await waitFor(() => expect(router.history.location.search).toBe('?sort=matter&order=desc'))
+    await waitFor(() => expect(api.callsTo('GET /v1/folders/7/children').at(-1)?.query).toEqual({ sort: 'matter', order: 'desc', zone, offset: 0, limit: 100 }))
+  })
+
+  it('keeps a sort by Matter from the address', async () => {
+    const { api } = await renderApp('/folders/7?sort=matter&order=desc', routes())
+    await findRow(/Drafts/)
+    expect(api.callsTo('GET /v1/folders/7/children')[0]?.query).toEqual({ sort: 'matter', order: 'desc', zone, offset: 0, limit: 100 })
   })
 
   it('a refetch while the Columns panel is open keeps it open and its focus', async () => {

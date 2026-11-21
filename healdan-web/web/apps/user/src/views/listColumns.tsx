@@ -5,7 +5,7 @@ import type { components } from '@healdan/api'
 import { formatDate, formatDateTime, formatSize, formatVersion, Icon, t, VisuallyHidden, type TableColumn, type TableRow } from '@healdan/ui'
 import { computerLabel } from '../actions/checkout'
 import { HoldMarker } from '../actions/HoldMarker'
-import type { OtherScope } from '../search/scopes'
+import { scopeSorts, type OtherScope } from '../search/scopes'
 import { typeLabel } from '../filters/FiltersPanel'
 import { itemIcon } from '../kindIcons'
 import { DocumentTitle, FolderName } from '../organising/RenameField'
@@ -164,8 +164,8 @@ export function offeredFor(kind: DocumentListKind): string[] {
 }
 
 /**
- * What the server can sort a paged list by yet (spec 6), the columns a folder's or a search's sort takes (`sortColumns`); the
- * other columns sort only a list the browser holds whole
+ * What the server sorts a paged list by (spec 5.2), the columns a folder's or a search's sort takes (`sortColumns`): every
+ * document column. Last Used, Computer and Checked Out are only the one-page lists', which the browser sorts.
  */
 export const SERVER_SORTS: ReadonlySet<string> = new Set(sortColumns)
 
@@ -211,14 +211,20 @@ export function columnsFor(kind: ListKind, shown: string[], serverSorted: boolea
 
 /**
  * The columns of a search's Folders, Matters or Clients scope, which aren't chosen (spec 4.8): only their widths are kept.
- * A document scope's are chosen, as every list of documents' are (`useDocumentListColumns`).
+ * Each sorts on the server by what its scope's search takes (`scopeSorts`, spec 5.2), its id being the sort's name. A
+ * document scope's are chosen, as every list of documents' are (`useDocumentListColumns`).
  */
 export function hitColumns(scope: OtherScope): TableColumn<ListRow>[] {
-  if (scope === 'folders') return columnsFor('folders', ['title', 'matter'], true)
-  // A Client column of their own: the documents' Client shows the client of the matter a document or folder is in, and
-  // leaves a matter's own row blank, where this one shows the matter's client
-  return [
-    { ...title, name: t('list.matter'), allowsSorting: false },
-    { id: 'client', name: t('list.client'), width: '1fr', cell: ({ item }) => item.type === 'matter' && item.client.name },
-  ]
+  const sorts: readonly string[] = scopeSorts(scope)
+  const columns: TableColumn<ListRow>[] =
+    scope === 'folders'
+      ? columnsFor('folders', ['title', 'matter'], false)
+      : [
+          // The matters' own column, the matter, which their Matter sort orders
+          { ...title, id: 'matter', name: t('list.matter') },
+          // A Client column of their own: the documents' Client shows the client of the matter a document or folder is in,
+          // and leaves a matter's own row blank, where this one shows the matter's client
+          { id: 'client', name: t('list.client'), width: '1fr', cell: ({ item }) => item.type === 'matter' && item.client.name },
+        ]
+  return columns.map((column) => ({ ...column, allowsSorting: sorts.includes(column.id) }))
 }

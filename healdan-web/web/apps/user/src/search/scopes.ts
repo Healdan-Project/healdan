@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { clientIcon, documentIcon, emailIcon, folderIcon, matterIcon, type KindIcon } from '../kindIcons'
+import { sortColumns, type SortColumn } from '../views/useListing'
 
 /** What the scope picker offers, in the API's own words for `scope` (spec section 4). */
 export const searchScopes = ['documents', 'emails', 'all', 'folders', 'matters', 'clients'] as const
@@ -29,12 +30,29 @@ export function isRecentKind(value: unknown): value is RecentKind {
   return recentKinds.some((kind) => kind === value)
 }
 
-/** The scopes that search documents, which take filters and sorting */
+/** The scopes that search documents, which take filters and sort by every document column */
 export type DocumentScope = 'documents' | 'emails' | 'all'
-/** The scopes that search folders, matters or clients */
+/** The scopes that search folders, matters or clients, which sort by their own few columns */
 export type OtherScope = Exclude<SearchScope, DocumentScope>
 
-/** The scopes that search documents, which take filters and sorting. */
+/** The scopes that search documents, which take filters and sort by every document column. */
 export function searchesDocuments(scope: SearchScope): scope is DocumentScope {
   return scope === 'documents' || scope === 'emails' || scope === 'all'
+}
+
+/** What the Folders, Matters and Clients scopes sort by (list columns spec 5.2), in the API's words, which are their columns' ids */
+const otherSorts: Record<OtherScope, readonly SortColumn[]> = {
+  folders: ['title', 'matter'],
+  matters: ['matter', 'client'],
+  clients: ['client'],
+}
+
+/** What the scope's search sorts by: a document scope by what a folder sorts by, the others by their own */
+export function scopeSorts(scope: SearchScope): readonly SortColumn[] {
+  return searchesDocuments(scope) ? sortColumns : otherSorts[scope]
+}
+
+/** Whether the scope's search sorts by the value: the API refuses any other with 400 */
+export function isScopeSort(scope: SearchScope, value: unknown): value is SortColumn {
+  return scopeSorts(scope).some((sort) => sort === value)
 }

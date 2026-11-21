@@ -144,9 +144,6 @@ describe('The Trash', () => {
     fireEvent.click(within(await grid()).getByRole('columnheader', { name: /Name/ }))
     await waitFor(() => expect(router.state.location.search).toMatchObject({ sort: 'name', order: 'asc' }))
     await waitFor(() => expect(api.callsTo('GET /v1/trash').at(-1)?.query).toEqual({ view: 'mine', sort: 'name', order: 'asc', offset: 0, limit: 100 }))
-    // Doc # and Deleted From don't sort
-    expect(within(await grid()).getByRole('columnheader', { name: /Doc #/ }).hasAttribute('aria-sort')).toBe(false)
-    expect(within(await grid()).getByRole('columnheader', { name: /Deleted From/ }).hasAttribute('aria-sort')).toBe(false)
   })
 
   it("sorts Deleted newest first at its first click, as the server's own order is", async () => {
@@ -154,6 +151,43 @@ describe('The Trash', () => {
     await row(/Old Drafts/)
     fireEvent.click(within(await grid()).getByRole('columnheader', { name: /Deleted$/ }))
     await waitFor(() => expect(router.state.location.search).toMatchObject({ sort: 'deleted', order: 'desc' }))
+  })
+
+  // Spec 4.2 and 5.2: every column of the three views sorts on the server, the dates newest first at the first click and the
+  // others A to Z
+  it.each([
+    { view: 'mine', firsts: { 'Doc #': ['docNumber', 'asc'], 'Deleted From': ['deletedFrom', 'asc'], Deleted: ['deleted', 'desc'], Name: ['name', 'asc'] } },
+    { view: 'everyone', firsts: { 'Deleted By': ['deletedBy', 'asc'] } },
+    { view: 'removed', firsts: { 'Deleted By': ['deletedBy', 'asc'], 'Removed By': ['removedBy', 'asc'], Removed: ['removed', 'desc'], Destroyed: ['destroyed', 'desc'] } },
+  ])("the Trash's $view view sorts by every column, asking the server", async ({ view, firsts }) => {
+    const { api, router } = await renderApp(view === 'mine' ? '/trash' : `/trash?view=${view}`, routes({ 'GET /v1/me': admin }))
+    await within(await grid()).findAllByRole('row', { name: /Rent|Drafts/ })
+    const heading = async (name: string) => within(await grid()).getByRole('columnheader', { name: new RegExp(`^${name}$`) })
+    // Every heading sorts: the server's own order's arrow on one, and room for one on each of the others
+    const sorts = within(await grid()).getAllByRole('columnheader').map((one) => one.getAttribute('aria-sort'))
+    expect(sorts.filter((one) => one === 'none')).toHaveLength(sorts.length - 1)
+    expect(sorts).toContain('descending')
+    for (const [name, [sort, order]] of Object.entries(firsts)) {
+      fireEvent.click(await heading(name))
+      await waitFor(() => expect(router.state.location.search).toMatchObject({ sort, order }))
+      await waitFor(() => expect(api.callsTo('GET /v1/trash').at(-1)?.query).toEqual({ view, sort, order, offset: 0, limit: 100 }))
+      await waitFor(async () => expect((await heading(name)).getAttribute('aria-sort')).toBe(order === 'asc' ? 'ascending' : 'descending'))
+    }
+  })
+
+  it("shows a sort from the address without an order as the server's first: a date newest first, the others A to Z", async () => {
+    const shownAs = async (address: string, name: RegExp) => {
+      const { api, view } = await renderApp(address, routes({ 'GET /v1/me': admin }))
+      await within(await grid()).findAllByRole('row', { name: /Rent|Drafts/ })
+      const sort = within(await grid()).getByRole('columnheader', { name }).getAttribute('aria-sort')
+      const asked = api.callsTo('GET /v1/trash').at(-1)?.query
+      view.unmount()
+      return [sort, asked]
+    }
+    expect(await shownAs('/trash?sort=docNumber', /^Doc #$/)).toEqual(['ascending', { view: 'mine', sort: 'docNumber', offset: 0, limit: 100 }])
+    expect(await shownAs('/trash?sort=deletedFrom', /^Deleted From$/)).toEqual(['ascending', { view: 'mine', sort: 'deletedFrom', offset: 0, limit: 100 }])
+    expect(await shownAs('/trash?view=removed&sort=removedBy', /^Removed By$/)).toEqual(['ascending', { view: 'removed', sort: 'removedBy', offset: 0, limit: 100 }])
+    expect(await shownAs('/trash?view=removed&sort=destroyed', /^Destroyed$/)).toEqual(['descending', { view: 'removed', sort: 'destroyed', offset: 0, limit: 100 }])
   })
 
   it("the Trash's columns resize, and keep their sorts", async () => {

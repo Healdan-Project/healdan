@@ -146,11 +146,34 @@ describe('every document column (spec 4.7)', () => {
     expect(cellOf('recentDocuments', 'location', document({ matter: null })).firstElementChild?.getAttribute('title')).toBe('Documents')
   })
 
-  it("a column the server can't sort yet doesn't sort on a paged list", () => {
-    expect([...SERVER_SORTS]).toEqual(['title', 'docNumber', 'version', 'author', 'edited'])
-    const paged = columnsFor('documents', offeredFor('documents'), true)
-    for (const one of paged) expect(one.allowsSorting, one.id).toBe(SERVER_SORTS.has(one.id))
+  it('every document column sorts on a folder and a search', () => {
+    // What a folder's and a search's sort take (spec 5.2), the columns PR 3 adds included
+    expect([...SERVER_SORTS]).toEqual(['title', 'docNumber', 'version', 'author', 'edited', 'matter', 'client', 'location', 'filed', 'size', 'type', 'class', 'subclass', 'typist', 'from', 'to', 'sent'])
+    for (const kind of ['folder', 'documents', 'all', 'emails'] as const) {
+      const paged = columnsFor(kind, offeredFor(kind), true)
+      expect(paged.map((one) => one.id)).toEqual(offeredFor(kind))
+      for (const one of paged) expect(one.allowsSorting, `${kind} ${one.id}`).toBe(true)
+    }
     for (const one of columnsFor('recentDocuments', offeredFor('recentDocuments'), false)) expect(one.allowsSorting, one.id).toBe(true)
+    // Last Used, Computer and Checked Out are only the one-page lists', which the browser sorts: a paged list never sorts by them
+    for (const id of ['lastUsed', 'computer', 'checkedOut']) expect(SERVER_SORTS.has(id), id).toBe(false)
+  })
+
+  it('the Folders scope sorts by Title and Matter, the Matters scope by Matter and Client, the Clients scope by Client', () => {
+    const sorting = (columns: TableColumn<ListRow>[]) => columns.map((one) => [one.id, Boolean(one.allowsSorting)])
+    expect(sorting(hitColumns('folders'))).toEqual([
+      ['title', true],
+      ['matter', true],
+    ])
+    // Their first column is the matter, the sort's name
+    expect(sorting(hitColumns('matters'))).toEqual([
+      ['matter', true],
+      ['client', true],
+    ])
+    expect(sorting(hitColumns('clients'))).toEqual([
+      ['matter', false],
+      ['client', true],
+    ])
   })
 
   it('date columns sort newest first at their first click', () => {

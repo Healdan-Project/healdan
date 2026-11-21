@@ -23,16 +23,17 @@ export interface SearchOptions {
   scope: SearchScope
   /** The words, trimmed; nothing is asked while they're empty */
   q: string
+  /** One the scope's search takes (`scopeSorts`); none keeps the search's own order */
   sort?: { column: SortColumn; direction: TableSort['direction'] }
   filters?: Filters
 }
 
-// Only the document scopes take filters and sorting: the API refuses them with 400 for the others, so an address that
-// holds some never sends them.
+// Only the document scopes take filters: the API refuses them with 400 for the others, so an address that holds some never
+// sends them. Every scope takes a sort, each its own, which the route keeps an address's to.
 function paramsOf({ scope, q, sort, filters = noFilters }: SearchOptions): Record<string, string | string[]> {
   const params: Record<string, string | string[]> = { scope, q }
-  if (!searchesDocuments(scope)) return params
   if (sort) Object.assign(params, { sort: sort.column, order: sort.direction === 'descending' ? 'desc' : 'asc' })
+  if (!searchesDocuments(scope)) return params
   return { ...params, ...filterParams(filters) }
 }
 

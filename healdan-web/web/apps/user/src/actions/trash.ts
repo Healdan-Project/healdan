@@ -9,8 +9,8 @@ type S = components['schemas']
 export const trashViews = ['mine', 'everyone', 'removed'] as const
 export type TrashViewName = (typeof trashViews)[number]
 
-/** What the Trash sorts by (plan correction 11): Doc # and Deleted From don't sort */
-export const trashSorts = ['name', 'deleted', 'removed'] as const
+/** What the Trash sorts by (list columns spec 5.2): every column of its three views, each by its id */
+export const trashSorts = ['name', 'docNumber', 'deletedFrom', 'deleted', 'deletedBy', 'removedBy', 'removed', 'destroyed'] as const
 export type TrashSort = (typeof trashSorts)[number]
 
 export function isTrashView(value: unknown): value is TrashViewName {

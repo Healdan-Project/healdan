@@ -19,12 +19,12 @@ import { useFilters } from '../filters/useFilters'
 import { useMatterNames } from '../filters/useMatterNames'
 import { ErrorPanel } from '../frame/ErrorPanel'
 import { RightRegionView, useRegionKind, useRightRegion } from '../frame/RightRegion'
-import { searchesDocuments, type SearchScope } from '../search/scopes'
+import { isScopeSort, searchesDocuments, type SearchScope } from '../search/scopes'
 import { useSearchFacets, useSearchResults } from '../search/useSearchResults'
 import { Toolbar, type ListCount } from './Toolbar'
 import { hitColumns, rowOf, type ListRow } from './listColumns'
 import { useDocumentListColumns, useListWidths, type DocumentListColumns, type ListWidths } from './useListColumns'
-import { isSortColumn, type ListingOrder, type SortColumn } from './useListing'
+import type { ListingOrder, SortColumn } from './useListing'
 import { useRowSelection } from './useRowSelection'
 import styles from './views.module.css'
 
@@ -32,6 +32,7 @@ export interface SearchViewProps {
   scope: SearchScope
   /** The words from the address; none means nothing has been searched for yet */
   q?: string
+  /** One the scope's search takes (`scopeSorts`), as the route keeps it */
   sort?: SortColumn
   order?: ListingOrder
 }
@@ -39,8 +40,9 @@ export interface SearchViewProps {
 /**
  * /search: what the search box found, in the scope it was run in (spec section 6.3). Documents come by relevance until
  * a header sorts them, and Sort by Relevance in a heading's menu takes them back, with Filters beside them; folders and
- * matters are lists to open. The words, the scope, the
- * filters, the sort and the selection are all in the address, so a search can be linked, reloaded and gone back to.
+ * matters are lists to open, in the search's own order until a header sorts them by one of their scope's few sorts (list
+ * columns spec 5.2), and with no relevance to go back to. The words, the scope, the filters, the sort and the selection
+ * are all in the address, so a search can be linked, reloaded and gone back to.
  */
 export function SearchView({ scope, q, sort, order }: SearchViewProps) {
   const text = q?.trim() ?? ''
@@ -48,7 +50,7 @@ export function SearchView({ scope, q, sort, order }: SearchViewProps) {
   const headingId = useId()
   const navigate = useNavigate()
   const { filters, active, change, remove, clear } = useFilters()
-  const asked = documents && sort ? { column: sort, direction: order === 'desc' ? ('descending' as const) : ('ascending' as const) } : undefined
+  const asked = isScopeSort(scope, sort) ? { column: sort, direction: order === 'desc' ? ('descending' as const) : ('ascending' as const) } : undefined
   const results = useSearchResults({ scope, q: text, sort: asked, filters })
   const region = useRightRegion()
   const funnel = useRef<HTMLButtonElement>(null)
@@ -78,7 +80,7 @@ export function SearchView({ scope, q, sort, order }: SearchViewProps) {
   const sub = documents && !asked ? t('search.inByRelevance', { scope: scopeName }) : t('search.in', { scope: scopeName })
 
   function sortBy(next: TableSort) {
-    if (!isSortColumn(next.column)) return
+    if (!isScopeSort(scope, next.column)) return
     const column = next.column
     void navigate({ to: '/search', search: (prev) => ({ ...prev, sort: column, order: next.direction === 'descending' ? 'desc' : 'asc' }), replace: true })
   }
@@ -124,7 +126,7 @@ export function SearchView({ scope, q, sort, order }: SearchViewProps) {
               {...columns}
               rows={rows}
               sort={asked}
-              onSort={documents ? sortBy : undefined}
+              onSort={sortBy}
               relevance={documents ? relevance : undefined}
               selectionMode="multiple"
               selection={selection}
@@ -174,9 +176,9 @@ export function SearchView({ scope, q, sort, order }: SearchViewProps) {
 
 /**
  * A search's columns (spec 4.8): a document scope's are chosen, in the scope's own layout or beside the reading pane in that
- * one's, and sort on the server, by the columns it sorts by yet; the Folders, Matters and Clients scopes keep their own
- * columns, each scope its widths. Both hooks run at every render, as hooks can't be called by turns: the one a scope doesn't
- * use reads a layout it never draws or writes.
+ * one's, and sort on the server, every one; the Folders, Matters and Clients scopes keep their own columns, each scope its
+ * widths, and sort by their scope's sorts. Both hooks run at every render, as hooks can't be called by turns: the one a scope
+ * doesn't use reads a layout it never draws or writes.
  */
 function useHitColumns(scope: SearchScope, beside: boolean): DocumentListColumns | ListWidths<ListRow> {
   const documentScope = searchesDocuments(scope) ? scope : undefined
