@@ -3,14 +3,14 @@ title: The Admin App
 weight: -1
 ---
 
-The Admin app is where administrators run Healdan, at `/admin/` on your Healdan address. So far it has the
-Dashboard: what needs your attention, the server's health and how Healdan is used, on one page; the Clients and
-Matters lists, where clients and matters are made, with a page for each client and matter (see
+The Admin app is where administrators run Healdan, at `/admin/` on your Healdan address. So far it has the Dashboard:
+what needs your attention, the server's health and how Healdan is used, on one page; the Clients and Matters lists,
+where clients and matters are made, with a page for each client and matter (see
 [Clients and Matters](../clients-and-matters/)); each matter's workspace, its folders and who can use them; the
 workspace templates (see [Workspace Templates](../workspace-templates/)); the Stores, with a page for each (see
 [Stores](../stores/)); and the storage backends, with a page for each (see [Storage Backends](../storage-backends/)).
-Everything else is still done in the Classic Interface, which
-the rest of this guide describes, and the Admin app links there.
+Everything else is still done in the Classic Interface, which the rest of this guide describes, and the Admin app links
+there.
 
 {{< callout type="warning" >}}
 An administrator can read every document: an account in the `admin` group skips every permission check. Give each

@@ -161,10 +161,10 @@ weight: 13
   - tags, and a bookmark's own name and description (the Bookmarks section; the app's My Favorites adds and removes
     them).
 
-  Administration is there as well, apart from what [the Admin app](#the-admin-app) has: its Dashboard, its clients
-  and matters with their workspaces, the workspace templates, the Stores and the storage backends. A matter's own
-  folder and a Store are moved and deleted only by an administrator, on the matter's or the Store's page in the Admin
-  app, and the User app's Trash doesn't restore a Store's item: a Store is restored from **Deleted Stores** on the
+  Administration is there as well, apart from what [the Admin app](#the-admin-app) has: its Dashboard, its clients and
+  matters with their workspaces, the workspace templates, the Stores and the storage backends. Only an administrator
+  moves or deletes a matter's own folder, on the matter's page in the Admin app, or deletes a Store, on the Store's page
+  there, and the User app's Trash doesn't restore a Store's item: a Store is restored from **Deleted Stores** on the
   Admin app's Stores page, or in the Classic Interface.
 - **The Classic Interface's Trash lists a deleted folder's contents as rows of their own.** Healdan records a folder
   and what it held as one item, but LogicalDOC's Trash screen lists every deleted row, so a deleted folder's documents

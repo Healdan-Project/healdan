@@ -143,7 +143,7 @@ describe('The deleted Stores', () => {
     expect(within(table).getAllByRole('columnheader').map((one) => one.textContent)).toEqual(['Store', 'Deleted', 'Deleted By', 'Matters', 'Where It Is', 'Restore'])
     expect(await deletedRows()).toEqual([
       ['Old Branch', formatDateTime('2026-11-18T15:00:00Z'), 'Sam Okafor', '2', 'In the Trash', 'Restore'],
-      ['Archive 2019', formatDateTime('2026-10-01T09:00:00Z'), 'Not Known', '0', `Removed from the Trash; destroyed for good after ${formatDate('2026-11-01T02:47:00Z')}`, 'Restore'],
+      ['Archive 2019', formatDateTime('2026-10-01T09:00:00Z'), 'Not Known', '0', `Removed from the Trash; what's in it is destroyed for good after ${formatDate('2026-11-01T02:47:00Z')}`, 'Restore'],
     ])
     expect(within(section).getByRole('button', { name: 'Restore Old Branch' })).toBeTruthy()
     await expectNoAxeViolations(view.container)

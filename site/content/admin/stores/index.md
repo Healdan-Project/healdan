@@ -171,10 +171,11 @@ removed from the Trash among them:
 | Deleted | when it was deleted |
 | Deleted By | who deleted it, or **Not Known** when Healdan didn't record who, or their account has been deleted |
 | Matters | the matters its delete took that are still with it |
-| Where It Is | **In the Trash**, or "Removed from the Trash; destroyed for good after" a date: the night the job destroys what's inside its matters, the Store itself staying removed |
+| Where It Is | **In the Trash**, or "Removed from the Trash; what's in it is destroyed for good after" a date: the night the job destroys the documents and folders inside its matters, the Store and its matters' own folders staying removed |
 
 **Restore** brings a Store back directly under the root, with everything its delete took, whether it's in the Trash
-or removed from it. It asks first, "Restore Client Work?", saying it comes back with its matters and everything else
+or removed from it. Restored after that date, a removed Store comes back with its matters, empty: their documents and
+folders have been destroyed. It asks first, "Restore Client Work?", saying it comes back with its matters and everything else
 its delete took, and that anything deleted on its own before the Store was stays in the Trash. Once it's back, Healdan
 says "Restored Client Work", and its matters are in the Matters list again.
 
@@ -204,5 +205,5 @@ as a save of who can see it with nothing changed, isn't recorded.
 ## In the Classic Interface
 
 Right-click a Store in the Classic Interface's folder tree and choose **New workspace** to make one, then name it, or
-**Rename** to rename it. A Store made there usually lets in only the admin who made it: give it the groups that should
-see it in **Who Can See It** on its page here.
+**Rename** to rename it. Give a Store made there the groups that should see it in **Who Can See It**, on its page
+here, before matters are made in it.

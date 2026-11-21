@@ -244,7 +244,7 @@ Switch on `code`, which is stable. `detail` is an English sentence you can show 
 | 409 | `not-held` | A save with `ifHeld: true` found the document free, or, from a device, checked out where no device holds it: its check-out was released |
 | 409 | `version-moved` | A save with `ifVersion` found the document at another version. The problem adds the `document` |
 | 409 | `not-renamable` | `PATCH /folders/{id}` on a Store or a matter's own folder, which takes the matter's name through Edit Matter |
-| 409 | `not-deletable`, `not-movable` | `DELETE /folders/{id}` or `POST /folders/{id}/move` on a Store or a matter's own folder, administrators too. They stay the Classic Interface's |
+| 409 | `not-deletable`, `not-movable` | `DELETE /folders/{id}` or `POST /folders/{id}/move` on a Store or a matter's own folder, administrators too. The Admin app's routes delete them instead (`DELETE /v1/admin/stores/{id}` and `DELETE /v1/admin/matters/{id}`) and move a matter to another Store (`POST /v1/admin/matters/{id}/move`): see [The Admin App's Routes](#the-admin-apps-routes) |
 | 409 | `immutable` | A folder delete found an immutable document inside, administrators too |
 | 409 | `name-taken` | Another folder that you can see in the destination has the folder's name, compared without regard to case. A folder you can't read doesn't count |
 | 409 | `place-gone` | `POST /trash/{id}/restore` with no `folderId`: the folder the item was deleted from is deleted, can't be read by you, or the rules or your permissions no longer let the item in. Restore it again with a `folderId` (see [The Trash](#the-trash)) |

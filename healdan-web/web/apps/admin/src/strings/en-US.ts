@@ -693,7 +693,8 @@ export const adminEnUS = {
   // Who deleted it, when the server's data doesn't say, or their account has been deleted
   'admin.deletedStores.byUnknown': 'Not Known',
   'admin.deletedStores.deleted': 'In the Trash',
-  'admin.deletedStores.removed': 'Removed from the Trash; destroyed for good after {when}',
+  // The nightly job destroys what's in a removed Store's matters, never the Store or a matter's own folder
+  'admin.deletedStores.removed': "Removed from the Trash; what's in it is destroyed for good after {when}",
   'admin.deletedStores.removedUndated': 'Removed from the Trash',
   'admin.deletedStores.restore': 'Restore',
   'admin.deletedStores.restoreName': 'Restore {name}',

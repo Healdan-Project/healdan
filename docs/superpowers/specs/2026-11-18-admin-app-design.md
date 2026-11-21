@@ -1,7 +1,7 @@
 # The Admin App: design
 
 - **Date:** 2026-11-18
-- **Status:** designed with the owner on 2026-11-18, question by question and through mockups in the browser ([`2026-11-18-admin-app-mockups/`](2026-11-18-admin-app-mockups/README.md)). The owner approved this written spec the same day. Implementation plan: [`docs/superpowers/plans/2026-11-18-admin-app.md`](../plans/2026-11-18-admin-app.md), approved the same day, for subagent-driven building. Phase 1 built on 2026-11-19, and Phase 2 on 2026-11-20 (see the plan's decision log); Phases 3 to 6 not built.
+- **Status:** designed with the owner on 2026-11-18, question by question and through mockups in the browser ([`2026-11-18-admin-app-mockups/`](2026-11-18-admin-app-mockups/README.md)). The owner approved this written spec the same day. Implementation plan: [`docs/superpowers/plans/2026-11-18-admin-app.md`](../plans/2026-11-18-admin-app.md), approved the same day, for subagent-driven building. Phase 1 built on 2026-11-19, Phase 2 on 2026-11-20, and Phase 3 on 2026-11-21, in pull request `Admin app: Stores and Backends` (see the plan's decision log); Phases 4 to 6 not built.
 - **Roadmap:** the backlog row "Admin app, then retiring the old GWT UI" in [`docs/ROADMAP.md`](../../ROADMAP.md).
 - **Inputs:**
   - the roadmap's glossary and its M6 decisions "Three separate units" and "Hosting";
@@ -210,7 +210,7 @@ A list (Name, Folders, Matters Made From It) with **New Template** (empty, or a 
 
 ### 8.6 Stores and Backends (`04-index-users-storage.html`)
 
-- **Stores:** Store, Backend, Matters, Documents, Size, Who Can Read and the state of its files, then a page. **New Store** asks for the name, **who can see it** and the backend, so a matter can be made in it at once. A Store's access uses one level, **Can See** (Read), the only permission that matters on a Store. (changed in the build: who can see a Store is given by group, in New Store and on a Store's page alike, as the route takes group ids; a person's row already there is kept and can be removed; the plan's decision log has why.) Default, Templates and the root can't be renamed or deleted here. A Store's delete asks first and says it takes every matter inside. Restoring one is done from its page's deleted list.
+- **Stores:** Store, Backend, Matters, Documents, Size, Who Can Read and the state of its files, then a page. **New Store** asks for the name, **who can see it** and the backend, so a matter can be made in it at once. A Store's access uses one level, **Can See** (Read), the only permission that matters on a Store. (changed in the build: who can see a Store is given by group, in New Store and on a Store's page alike, as the route takes group ids; a person's row already there is kept and can be removed; the plan's decision log has why.) Default, Templates and the root can't be renamed or deleted here. A Store's delete asks first and says it takes every matter inside. Restoring one is done from its page's deleted list. (changed in the build: from Deleted Stores on the Stores page; the plan's decision log has why.)
 - **Backends:** everything the Storage tab does today, with the same rules: add (S3 or a local folder), test, edit, remove, recovery keys (show, confirm, enter, history), switching a Store's backend with its count first, stuck files with Retry, and the holding period, read cache and parallel transfers.
 
 ### 8.7 Users and Groups (`04-index-users-storage.html`)
