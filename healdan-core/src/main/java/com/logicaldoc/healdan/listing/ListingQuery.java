@@ -43,7 +43,31 @@ public record ListingQuery(Sort sort, boolean descending, Set<String> kinds, Set
 		/** The Author's name, as it shows */
 		AUTHOR,
 		/** When the document last changed */
-		EDITED
+		EDITED,
+		/** The stamped client's number, then the matter's, each as a number: 998.9 before 998.10 */
+		MATTER,
+		/** The stamped client's name, ignoring case */
+		CLIENT,
+		/** The folder's name, ignoring case, then as {@link #MATTER} */
+		LOCATION,
+		/** When the document was filed */
+		FILED,
+		/** The file's size */
+		SIZE,
+		/** The names the File Type filter shows, A to Z, then the extension, ignoring case */
+		TYPE,
+		/** The Class, ignoring case */
+		CLASS,
+		/** The Subclass, ignoring case */
+		SUBCLASS,
+		/** The Typist's name, as {@link #AUTHOR} sorts */
+		TYPIST,
+		/** An email's From, ignoring case; a document that isn't an email, by its type, has none */
+		FROM,
+		/** An email's To, ignoring case; a document that isn't an email has none */
+		TO,
+		/** When an email was sent; a document that isn't an email has none */
+		SENT
 	}
 
 	/**

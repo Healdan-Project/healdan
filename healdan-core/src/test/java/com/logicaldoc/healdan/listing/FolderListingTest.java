@@ -55,6 +55,7 @@ import com.logicaldoc.healdan.HealdanConstants;
 import com.logicaldoc.healdan.listing.ListingQuery.Edited;
 import com.logicaldoc.healdan.listing.ListingQuery.Sort;
 import com.logicaldoc.healdan.security.AccessChecks;
+import com.logicaldoc.healdan.security.FolderReads;
 import com.logicaldoc.healdan.support.HealdanFixtures;
 import com.logicaldoc.healdan.util.CacheEvictor;
 import com.logicaldoc.util.spring.Context;
@@ -69,7 +70,8 @@ import com.logicaldoc.util.spring.Context;
  * documents differ in their own ACLs, publishing, deletion and doc #, and
  * Closed, which has an ACL of its own that grants the admin alone.
  * {@link #sortedLayout()} fills Sorted with five documents whose title, doc #,
- * version, author, class and edit date are set to sort and filter by.
+ * version, author, class and edit date are set to sort and filter by, and
+ * {@link #columnsLayout()} Columns with six whose list columns are.
  * <p>
  * Uploads are slow, about a second each, so the layouts upload a few
  * documents and copy the rest, rows and properties and ACL, with JDBC.
@@ -144,6 +146,11 @@ public class FolderListingTest extends AbstractHealdanTestCase {
 
 	/** In Sorted */
 	private long s1, s2, s3, s4, s5;
+
+	private Folder columns;
+
+	/** In Columns */
+	private long k1, k2, k3, k4, k5, k6;
 
 	@Before
 	public void createLayout() throws Exception {
@@ -233,6 +240,127 @@ public class FolderListingTest extends AbstractHealdanTestCase {
 		set(s4, "8000011", "2.9", zed, "Contracts", LocalDateTime.of(2026, 2, 1, 10, 0));
 		set(s5, "90000001", "2.0", abe, null, LocalDateTime.of(2025, 12, 31, 23, 0));
 		evict();
+	}
+
+	/**
+	 * Fills Columns with six documents, in id order, whose new columns (list
+	 * columns spec section 4.7) are set to sort by, some tying, some missing
+	 * (none: no value, a property with no row, or a blank one):
+	 *
+	 * <pre>
+	 *     file          type  matter  filed       size  class      subclass  typist       from               to                 sent
+	 * k1  minutes.docx  docx  998.10  03-01 10h   300   Letters    b         Zoe Abe      [Zara &lt;zara@...&gt;] [team@example.com]  [05-02 9h]
+	 * k2  letter.msg    msg   998.9   01-01       20    contracts  (null)    Aaron Zed    adam@example.com   (blank)            05-01
+	 * k3  mail.eml      eml   998.1   03-01 10h   300   Advice     A         mlee (kept)  Adam@example.com   Board@example.com  (null)
+	 * k4  notes.EML     EML   998.1   02-01       null  (no row)   a         (null)       Zed &lt;zed@...&gt;    alice@example.com  05-02 9h
+	 * k5  scan.PDF      PDF   998.-   04-01       4000  letters    (no row)  Aaron Zed    (null)             [board@example.com] [04-30]
+	 * k6  README        null  -.-     2025-12-31  1     (blank)    c         (blank)      [bob@example.com]  (no row)           (no row)
+	 * </pre>
+	 *
+	 * Abby is Zoe Abe and Zara is Aaron Zed, so their names sort the other way
+	 * from their usernames; mlee is a username kept with no user. Only k2, k3
+	 * and k4 are emails, by their type, so the email fields in brackets, on
+	 * the others, count as none. All are in Columns, in matter 998.1's
+	 * Documents, whatever their stamps say.
+	 */
+	private void columnsLayout() throws Exception {
+		User abby = fx.user("abby");
+		User zara = fx.user("zara");
+		JdbcTemplate jdbc = jdbc();
+		jdbc.update("update ld_user set ld_firstname = 'Zoe', ld_name = 'Abe' where ld_id = ?", abby.getId());
+		jdbc.update("update ld_user set ld_firstname = 'Aaron', ld_name = 'Zed' where ld_id = ?", zara.getId());
+		columns = fx.folder(documents, "Columns");
+		k1 = fx.upload(columns, "minutes.docx", "1", admin).getId();
+		awaitAsyncWork();
+		List<Long> copies = bulk(k1, columns, List.of("letter.msg", "mail.eml", "notes.EML", "scan.PDF", "README"));
+		k2 = copies.get(0);
+		k3 = copies.get(1);
+		k4 = copies.get(2);
+		k5 = copies.get(3);
+		k6 = copies.get(4);
+
+		file(k1, "docx", 300L, LocalDateTime.of(2026, 3, 1, 10, 0));
+		file(k2, "msg", 20L, LocalDateTime.of(2026, 1, 1, 0, 0));
+		file(k3, "eml", 300L, LocalDateTime.of(2026, 3, 1, 10, 0));
+		file(k4, "EML", null, LocalDateTime.of(2026, 2, 1, 0, 0));
+		file(k5, "PDF", 4000L, LocalDateTime.of(2026, 4, 1, 0, 0));
+		file(k6, null, 1L, LocalDateTime.of(2025, 12, 31, 0, 0));
+
+		stamp(k1, "998", "10");
+		stamp(k2, "998", "9");
+		stamp(k3, "998", "1");
+		stamp(k4, "998", "1");
+		stamp(k5, "998", null);
+		stamp(k6, null, null);
+
+		text(k1, HealdanConstants.ATTR_DOCCLASS, "Letters");
+		text(k2, HealdanConstants.ATTR_DOCCLASS, "contracts");
+		text(k3, HealdanConstants.ATTR_DOCCLASS, "Advice");
+		noAttribute(k4, HealdanConstants.ATTR_DOCCLASS);
+		text(k5, HealdanConstants.ATTR_DOCCLASS, "letters");
+		text(k6, HealdanConstants.ATTR_DOCCLASS, "");
+
+		text(k1, HealdanConstants.ATTR_DOCSUBCLASS, "b");
+		text(k2, HealdanConstants.ATTR_DOCSUBCLASS, null);
+		text(k3, HealdanConstants.ATTR_DOCSUBCLASS, "A");
+		text(k4, HealdanConstants.ATTR_DOCSUBCLASS, "a");
+		noAttribute(k5, HealdanConstants.ATTR_DOCSUBCLASS);
+		text(k6, HealdanConstants.ATTR_DOCSUBCLASS, "c");
+
+		attribute(k1, HealdanConstants.ATTR_TYPIST, Attribute.Type.USER, abby.getUsername(), abby.getId());
+		attribute(k2, HealdanConstants.ATTR_TYPIST, Attribute.Type.USER, zara.getUsername(), zara.getId());
+		attribute(k3, HealdanConstants.ATTR_TYPIST, Attribute.Type.USER, "mlee", null);
+		attribute(k4, HealdanConstants.ATTR_TYPIST, Attribute.Type.USER, null, null);
+		attribute(k5, HealdanConstants.ATTR_TYPIST, Attribute.Type.USER, zara.getUsername(), zara.getId());
+		attribute(k6, HealdanConstants.ATTR_TYPIST, Attribute.Type.USER, "", null);
+
+		text(k1, HealdanConstants.ATTR_EMAILFROM, "Zara <zara@example.com>");
+		text(k2, HealdanConstants.ATTR_EMAILFROM, "adam@example.com");
+		text(k3, HealdanConstants.ATTR_EMAILFROM, "Adam@example.com");
+		text(k4, HealdanConstants.ATTR_EMAILFROM, "Zed <zed@example.com>");
+		text(k5, HealdanConstants.ATTR_EMAILFROM, null);
+		text(k6, HealdanConstants.ATTR_EMAILFROM, "bob@example.com");
+
+		text(k1, HealdanConstants.ATTR_EMAILTO, "team@example.com");
+		text(k2, HealdanConstants.ATTR_EMAILTO, "  ");
+		text(k3, HealdanConstants.ATTR_EMAILTO, "Board@example.com");
+		text(k4, HealdanConstants.ATTR_EMAILTO, "alice@example.com");
+		text(k5, HealdanConstants.ATTR_EMAILTO, "board@example.com");
+		noAttribute(k6, HealdanConstants.ATTR_EMAILTO);
+
+		sent(k1, LocalDateTime.of(2026, 5, 2, 9, 0));
+		sent(k2, LocalDateTime.of(2026, 5, 1, 0, 0));
+		sent(k3, null);
+		sent(k4, LocalDateTime.of(2026, 5, 2, 9, 0));
+		sent(k5, LocalDateTime.of(2026, 4, 30, 0, 0));
+		noAttribute(k6, HealdanConstants.ATTR_EMAILSENT);
+		evict();
+	}
+
+	/** Sets a document's type, size and date filed */
+	private void file(long docId, String type, Long size, LocalDateTime filed) {
+		jdbc().update("update ld_document set ld_type = ?, ld_filesize = ?, ld_creation = ? where ld_id = ?", type,
+				size, Timestamp.valueOf(filed), docId);
+	}
+
+	/** Sets a document's Client and Matter properties: the client's number and the matter's own */
+	private void stamp(long docId, String client, String matter) {
+		text(docId, HealdanConstants.ATTR_CLIENT, client);
+		text(docId, HealdanConstants.ATTR_MATTER, matter);
+	}
+
+	private void text(long docId, String name, String value) {
+		attribute(docId, name, Attribute.Type.STRING, value, null);
+	}
+
+	private void sent(long docId, LocalDateTime sent) {
+		attribute(docId, HealdanConstants.ATTR_EMAILSENT, Attribute.Type.DATE, null, null);
+		jdbc().update("update ld_document_ext set ld_datevalue = ? where ld_docid = ? and ld_name = ?",
+				sent == null ? null : Timestamp.valueOf(sent), docId, HealdanConstants.ATTR_EMAILSENT);
+	}
+
+	private void noAttribute(long docId, String name) {
+		jdbc().update("delete from ld_document_ext where ld_docid = ? and ld_name = ?", docId, name);
 	}
 
 	@After
@@ -502,7 +630,8 @@ public class FolderListingTest extends AbstractHealdanTestCase {
 		descending.put(Sort.AUTHOR, list(s5, s1, s4, s2, s3));
 		descending.put(Sort.EDITED, list(s1, s2, s3, s4, s5));
 
-		for (Sort sort : Sort.values()) {
+		// The columns' new sorts have a test of their own
+		for (Sort sort : ascending.keySet()) {
 			assertEquals(sort + " ascending", ascending.get(sort),
 					FolderListing.get().page(sorted, bob, query(sort, false)).docIds());
 			assertEquals(sort + " descending", descending.get(sort),
@@ -518,6 +647,204 @@ public class FolderListingTest extends AbstractHealdanTestCase {
 			paged.addAll(FolderListing.get().page(sorted, bob, ListingQuery.of(Sort.VERSION, false, offset, 1))
 					.docIds());
 		assertEquals(ascending.get(Sort.VERSION), paged);
+	}
+
+	/**
+	 * Each column's sort (list columns spec section 4.7) on Columns, both
+	 * ways: a document with no value last either way, ties by id in the sort's
+	 * direction, and the same order for a search's window of the same
+	 * documents. See {@link #columnsLayout()} for the values.
+	 */
+	@Test
+	public void testEachNewSort() throws Exception {
+		columnsLayout();
+		Map<Sort, List<List<Long>>> orders = new LinkedHashMap<>();
+		// The client's number, then the matter's: 998.1 (k3 and k4 tie), 998.9, 998.10; no matter, then no client
+		orders.put(Sort.MATTER, List.of(list(k3, k4, k2, k1, k5, k6), list(k1, k2, k4, k3, k5, k6)));
+		// Every stamp is client 998, Healdan, but k6's
+		orders.put(Sort.CLIENT, List.of(list(k1, k2, k3, k4, k5, k6), list(k5, k4, k3, k2, k1, k6)));
+		// One folder, so by matter
+		orders.put(Sort.LOCATION, List.of(list(k3, k4, k2, k1, k5, k6), list(k1, k2, k4, k3, k5, k6)));
+		orders.put(Sort.FILED, List.of(list(k6, k2, k4, k1, k3, k5), list(k5, k3, k1, k4, k2, k6)));
+		orders.put(Sort.SIZE, List.of(list(k6, k2, k1, k3, k5, k4), list(k5, k3, k1, k2, k6, k4)));
+		// Email, Other, PDF, Word: the File Type names A to Z; then the extension, ignoring case (eml, EML, msg)
+		orders.put(Sort.TYPE, List.of(list(k3, k4, k2, k6, k5, k1), list(k1, k5, k6, k2, k4, k3)));
+		// Ignoring case, so Letters and letters tie; no row and a blank last
+		orders.put(Sort.CLASS, List.of(list(k3, k2, k1, k5, k4, k6), list(k5, k1, k2, k3, k6, k4)));
+		orders.put(Sort.SUBCLASS, List.of(list(k3, k4, k1, k6, k2, k5), list(k6, k1, k4, k3, k5, k2)));
+		// Aaron Zed, mlee, Zoe Abe: by name, not username, as Author sorts; a blank kept username is no one
+		orders.put(Sort.TYPIST, List.of(list(k2, k5, k3, k1, k4, k6), list(k1, k3, k5, k2, k6, k4)));
+		// The emails alone, k2 to k4: what k1, k5 and k6 hold, which their rows leave blank, sorts as none
+		orders.put(Sort.FROM, List.of(list(k2, k3, k4, k1, k5, k6), list(k4, k3, k2, k6, k5, k1)));
+		orders.put(Sort.TO, List.of(list(k4, k3, k1, k2, k5, k6), list(k3, k4, k6, k5, k2, k1)));
+		orders.put(Sort.SENT, List.of(list(k2, k4, k1, k3, k5, k6), list(k4, k2, k6, k5, k3, k1)));
+		// Every sort the columns added
+		assertEquals(EnumSet.complementOf(EnumSet.of(Sort.TITLE, Sort.DOC_NUMBER, Sort.VERSION, Sort.AUTHOR,
+				Sort.EDITED)), EnumSet.copyOf(orders.keySet()));
+
+		List<Long> ids = list(k1, k2, k3, k4, k5, k6);
+		for (Map.Entry<Sort, List<List<Long>>> sort : orders.entrySet())
+			for (boolean descending : new boolean[] { false, true }) {
+				String what = sort.getKey() + (descending ? " descending" : " ascending");
+				List<Long> expected = sort.getValue().get(descending ? 1 : 0);
+				assertEquals(what, expected,
+						FolderListing.get().page(columns, bob, query(sort.getKey(), descending)).docIds());
+				assertEquals(what + ", a search's window", expected, FolderListing.get()
+						.sortedPage(ids, new FolderReads(bob), query(sort.getKey(), descending)).docIds());
+			}
+	}
+
+	@Test
+	public void testSortedPagesNeitherRepeatNorSkip() throws Exception {
+		columnsLayout();
+		for (boolean descending : new boolean[] { false, true }) {
+			List<Long> whole = FolderListing.get().page(columns, bob, query(Sort.CLASS, descending)).docIds();
+			assertEquals(6, whole.size());
+			List<Long> paged = new ArrayList<>();
+			List<Long> window = new ArrayList<>();
+			for (int offset = 0; offset < 6; offset += 2) {
+				ListingQuery page = ListingQuery.of(Sort.CLASS, descending, offset, 2);
+				ListedPage listed = FolderListing.get().page(columns, bob, page);
+				assertEquals(2, listed.docIds().size());
+				paged.addAll(listed.docIds());
+				window.addAll(FolderListing.get().sortedPage(whole, new FolderReads(bob), page).docIds());
+			}
+			assertEquals("descending " + descending, whole, paged);
+			assertEquals("descending " + descending + ", a search's window", whole, window);
+		}
+	}
+
+	/**
+	 * File Type sorts by the File Type filter's names, A to Z (the app's
+	 * {@code filters.type.*}), then by the extension, ignoring case; a type no
+	 * kind names, or none, is Other
+	 */
+	@Test
+	public void testTypeSortsByTheFileTypeNames() throws Exception {
+		Folder kinds = fx.folder(documents, "Kinds");
+		long word = fx.upload(kinds, "w.docx", "w", admin).getId();
+		awaitAsyncWork();
+		List<Long> copies = bulk(word, kinds,
+				List.of("p.pptx", "i.png", "f.pdf", "t.txt", "o.odt", "x.xlsx", "e.msg", "n", "z.zip"));
+		long powerpoint = copies.get(0), picture = copies.get(1), pdf = copies.get(2), text = copies.get(3),
+				odt = copies.get(4), excel = copies.get(5), email = copies.get(6), none = copies.get(7),
+				zip = copies.get(8);
+		jdbc().update("update ld_document set ld_type = null where ld_id = ?", none);
+		evict();
+
+		assertEquals(list(email, excel, odt, text, zip, none, pdf, picture, powerpoint, word),
+				FolderListing.get().page(kinds, bob, query(Sort.TYPE, false)).docIds());
+		assertEquals(list(word, powerpoint, picture, pdf, zip, text, none, odt, excel, email),
+				FolderListing.get().page(kinds, bob, query(Sort.TYPE, true)).docIds());
+		// The order names every kind once
+		assertEquals(FileKinds.KINDS.size(), FileKinds.BY_NAME.size());
+		assertEquals(Set.copyOf(FileKinds.KINDS), Set.copyOf(FileKinds.BY_NAME));
+	}
+
+	/** Each number as a number, not as text: 998.9 before 998.10, 99 before 998 before 1000 */
+	@Test
+	public void testMatterSortIsNumeric() throws Exception {
+		Folder matters = fx.folder(documents, "Matters");
+		long m1 = fx.upload(matters, "m1.pdf", "m", admin).getId();
+		awaitAsyncWork();
+		List<Long> copies = bulk(m1, matters, List.of("m2.pdf", "m3.pdf", "m4.pdf"));
+		long m2 = copies.get(0), m3 = copies.get(1), m4 = copies.get(2);
+		stamp(m1, "998", "10");
+		stamp(m2, "998", "9");
+		stamp(m3, "1000", "1");
+		stamp(m4, "99", "20");
+		evict();
+
+		List<Long> ids = list(m1, m2, m3, m4);
+		assertEquals(list(m4, m2, m1, m3), FolderListing.get().page(matters, bob, query(Sort.MATTER, false)).docIds());
+		assertEquals(list(m3, m1, m2, m4), FolderListing.get().page(matters, bob, query(Sort.MATTER, true)).docIds());
+		assertEquals(list(m4, m2, m1, m3),
+				FolderListing.get().sortedPage(ids, new FolderReads(bob), query(Sort.MATTER, false)).docIds());
+	}
+
+	/**
+	 * A stamp that isn't 1 to 18 digits is no number: it sorts last both ways,
+	 * and never reaches the cast, which would fail
+	 */
+	@Test
+	public void testMatterSortPutsANumberWithoutDigitsLast() throws Exception {
+		Folder odd = fx.folder(documents, "Odd");
+		long n1 = fx.upload(odd, "n1.pdf", "n", admin).getId();
+		awaitAsyncWork();
+		List<Long> copies = bulk(n1, odd, List.of("n2.pdf", "n3.pdf", "n4.pdf", "n5.pdf", "n6.pdf"));
+		long n2 = copies.get(0), n3 = copies.get(1), n4 = copies.get(2), n5 = copies.get(3), n6 = copies.get(4);
+		stamp(n1, "998", "1");
+		stamp(n2, "998", "1a");
+		stamp(n3, "x", "1");
+		stamp(n4, "998", "1234567890123456789");
+		stamp(n5, "998", "2");
+		stamp(n6, "998", " 3");
+		evict();
+
+		assertEquals(list(n1, n5, n2, n4, n6, n3), FolderListing.get().page(odd, bob, query(Sort.MATTER, false)).docIds());
+		assertEquals(list(n5, n1, n6, n4, n2, n3), FolderListing.get().page(odd, bob, query(Sort.MATTER, true)).docIds());
+		// And Client, which joins the clients by the number
+		assertEquals(list(n1, n2, n4, n5, n6, n3), FolderListing.get().page(odd, bob, query(Sort.CLIENT, false)).docIds());
+	}
+
+	/**
+	 * By the client's name, ignoring case, not its number; a stamp no client
+	 * that isn't deleted has, or that isn't a number, sorts last both ways
+	 */
+	@Test
+	public void testClientSortsByName() throws Exception {
+		fx.client(5, "Zeta");
+		fx.client(1000, "acme");
+		long bravo = fx.client(42, "Bravo").getId();
+		jdbc().update("update hd_client set ld_deleted = 1 where ld_id = ?", bravo);
+		Folder clients = fx.folder(documents, "Clients");
+		long c1 = fx.upload(clients, "c1.pdf", "c", admin).getId();
+		awaitAsyncWork();
+		List<Long> copies = bulk(c1, clients, List.of("c2.pdf", "c3.pdf", "c4.pdf", "c5.pdf", "c6.pdf"));
+		long c2 = copies.get(0), c3 = copies.get(1), c4 = copies.get(2), c5 = copies.get(3), c6 = copies.get(4);
+		stamp(c1, "998", "1");
+		stamp(c2, "5", "1");
+		stamp(c3, "1000", "1");
+		stamp(c4, "77", "1");
+		stamp(c5, "42", "1");
+		stamp(c6, "abc", "1");
+		evict();
+
+		List<Long> ids = list(c1, c2, c3, c4, c5, c6);
+		// acme, Healdan, Zeta; no client 77, a deleted one and no number
+		assertEquals(list(c3, c1, c2, c4, c5, c6), FolderListing.get().page(clients, bob, query(Sort.CLIENT, false)).docIds());
+		assertEquals(list(c2, c1, c3, c6, c5, c4), FolderListing.get().page(clients, bob, query(Sort.CLIENT, true)).docIds());
+		assertEquals(list(c2, c1, c3, c6, c5, c4),
+				FolderListing.get().sortedPage(ids, new FolderReads(bob), query(Sort.CLIENT, true)).docIds());
+	}
+
+	/**
+	 * Location, in a search's window across folders: the folder's name,
+	 * ignoring case, then the matter
+	 */
+	@Test
+	public void testLocationSortsByFolderThenMatter() throws Exception {
+		Folder archive = fx.folder(documents, "archive");
+		Folder briefs = fx.folder(documents, "Briefs");
+		Folder letters = fx.folder(documents, "Letters");
+		long x1 = fx.upload(letters, "x1.pdf", "x", admin).getId();
+		awaitAsyncWork();
+		long x2 = copy(x1, archive, "x2.pdf");
+		long x3 = copy(x1, briefs, "x3.pdf");
+		long x4 = copy(x1, archive, "x4.pdf");
+		long x5 = copy(x1, briefs, "x5.pdf");
+		stamp(x1, "998", "1");
+		stamp(x2, "998", "5");
+		stamp(x3, "998", "1");
+		stamp(x4, "998", "3");
+		stamp(x5, "998", null);
+		evict();
+
+		List<Long> ids = list(x1, x2, x3, x4, x5);
+		assertEquals(list(x4, x2, x3, x5, x1),
+				FolderListing.get().sortedPage(ids, new FolderReads(bob), query(Sort.LOCATION, false)).docIds());
+		assertEquals(list(x1, x3, x5, x2, x4),
+				FolderListing.get().sortedPage(ids, new FolderReads(bob), query(Sort.LOCATION, true)).docIds());
 	}
 
 	@Test

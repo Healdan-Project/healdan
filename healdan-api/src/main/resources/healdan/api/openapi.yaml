@@ -856,10 +856,20 @@ paths:
         page. No count includes a document the caller can't read.
 
         The `folders`, `matters` and `clients` scopes look at the first 10,000
-        hits; their `total` is always `null`, and a page with fewer than
-        `limit` items is the last one. They take no filters, `sort` or
-        `facets`: any is `400`. Pages are filled from the hits that follow the
-        ones skipped.
+        hits. They take no filters or `facets`: any is `400`. Without `sort`,
+        they keep the search's own order, their `total` is always `null`, a
+        page with fewer than `limit` items is the last one, and pages are
+        filled from the hits that follow the ones skipped. Their `sort` is one
+        of the columns their lists show: `folders` takes `title` (the
+        folder's name, ignoring case, then as `matter`) or `matter` (the
+        client's number, then the matter's, each as a number; a Store, in no
+        matter, comes last either way), `matters` takes `matter` or `client`
+        (the client's name, ignoring case), and `clients` takes `client`. Any
+        other `sort` is `400`. Ties go by the folder's or matter's `id`, in
+        the sort's direction. Sorted, they read the first 10,000 hits and sort
+        the ones the caller can see: `total` is their count when the search
+        found every hit; when it stopped before the last, `total` is `null`
+        and `totalAtLeast` says how many it found.
 
         With `within`, the `folders` and `documents` scopes return only what
         is inside that folder, at any depth. A `#` lookup in the `documents`
@@ -2665,13 +2675,28 @@ components:
         What to sort the documents by: `title` (the file name, ignoring
         case), `docNumber` (as a number), `version` (the file version,
         `fileVersion`, as a list shows it: by its major, then its minor
-        number), `author` (by name) or `edited` (when its file last changed: filed, or a new version saved;
-        a change to its properties, a rename or a move doesn't count). Ties
-        go by the document's age, so pages never overlap, and documents with
-        no value to sort by come last either way. Anything else is `400`.
+        number), `author` (by name), `edited` (when its file last changed: filed, or a new version saved;
+        a change to its properties, a rename or a move doesn't count),
+        `matter` (the client's number, then the matter's, each as a number,
+        so 998.9 comes before 998.10), `client` (the client's name, ignoring
+        case), `location` (the folder's name, ignoring case, then as
+        `matter`), `filed` (`dateFiled`), `size`, `type` (the File Type
+        filter's names, A to Z: Email, Excel, OpenDocument, Other, PDF,
+        Picture, PowerPoint, Word; then the extension, ignoring case),
+        `class`, `subclass` (`docClass`, `docSubclass`, ignoring case),
+        `typist` (by name, as `author`), `from`, `to` (an email's, ignoring
+        case) or `sent` (when an email was sent). `matter`, `client` and
+        `location` take the client and matter numbers stamped on the
+        document. A document that isn't an email, by its type as the File
+        Type filter decides, has no From, To or Sent, whatever properties it
+        holds. Ties go by the document's age, so pages never overlap,
+        and documents with no value to sort by, or a blank one, come last
+        either way. Anything else is `400`. A search's `folders`, `matters`
+        and `clients` scopes take only the sorts its description names.
       schema:
         type: string
-        enum: [title, docNumber, version, author, edited]
+        enum: [title, docNumber, version, author, edited, matter, client, location, filed, size, type, class,
+          subclass, typist, from, to, sent]
     ListOrder:
       name: order
       in: query
@@ -3196,10 +3221,10 @@ components:
       properties:
         username:
           type: string
-          description: The username, which the `author` filter takes
+          description: The username; for an Author, what the `author` filter takes
         displayName:
           type: string
-          description: The Author's name, to show; the username when the Author is no longer a user
+          description: The person's name, to show; the username when the person is no longer a user
     EmailView:
       type: object
       description: |
@@ -3993,10 +4018,12 @@ components:
               type: integer
               minimum: 0
               description: |
-                For the `documents`, `emails` and `all` scopes, when the search
-                stopped before its last hit: how many it found that pass the
+                For the `documents`, `emails` and `all` scopes, and the others
+                with `sort`, when the search stopped before its last hit: how
+                many it found that the caller can see and that pass the
                 filters. There are more; `total` is then `null`. Left out when
-                `total` is the real count.
+                `total` is the real count, and in the `folders`, `matters` and
+                `clients` scopes without `sort`.
             facets:
               $ref: '#/components/schemas/Facets'
       unevaluatedProperties: false
