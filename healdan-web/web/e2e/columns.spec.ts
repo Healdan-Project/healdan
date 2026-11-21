@@ -315,8 +315,8 @@ test('sorts Recent › Documents by Title and back by Last Used', async ({ page 
   }).map((one) => one.name)
   const lastUsed = heading(page, 'Last Used')
   await expect(lastUsed).toHaveAttribute('aria-sort', 'descending')
-  // This run's documents are among the newest, in the order they were filed, last first
-  expect(own.slice(0, 4)).toEqual([NAMES.pdf, NAMES.bravo, NAMES.alpha, NAMES.charlie])
+  // This run's documents, in the order they were filed, last first, whatever else was used since
+  expect(own.filter((name) => Object.values(NAMES).includes(name))).toEqual([NAMES.pdf, NAMES.bravo, NAMES.alpha, NAMES.charlie])
   const drawn = await drawnNames(page)
   expect(drawn).toEqual(own.slice(0, drawn.length))
 
@@ -467,7 +467,6 @@ async function nextListing(page: Page, folderId: number, sort: string, order: 'a
 /** Whether the address sorts by `sort` in `order` */
 const sortedBy = (sort: string, order: 'asc' | 'desc') => (url: URL) => url.searchParams.get('sort') === sort && url.searchParams.get('order') === order
 
-// Last, as its filing makes its documents the newest in Recent Documents, which the tests above look at
 test('shows Class and sorts a folder by it', async ({ page }) => {
   const name = `Classes ${RUN}`
   const folder = (await call<{ id: number }>(api!.post('/api/v1/folders', { ...authorized(token), data: { parentId: home, name } }), `making ${name}`)).id

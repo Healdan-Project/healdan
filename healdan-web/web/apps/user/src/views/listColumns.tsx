@@ -140,7 +140,7 @@ export const documentColumns: Record<string, TableColumn<ListRow>> = {
   },
   client: { id: 'client', name: t('list.client'), allowsSorting: true, width: '1fr', cell: ({ item }) => item.type !== 'matter' && item.matter?.client.name },
   location: { id: 'location', name: t('list.location'), allowsSorting: true, width: '1fr', cell: ({ item }) => item.type === 'document' && <LocationCell document={item} /> },
-  author: { id: 'author', name: t('list.author'), allowsSorting: true, width: '1fr', cell: ({ item }) => item.type === 'document' && item.author?.displayName },
+  author: { id: 'author', name: t('list.author'), allowsSorting: true, width: '1fr', cell: ({ item }) => item.type === 'document' && <TextCell text={item.author?.displayName} /> },
   filed: { id: 'filed', name: t('list.filed'), allowsSorting: true, newestFirst: true, width: 116, cell: ({ item }) => item.type === 'document' && formatDate(item.dateFiled) },
   size: { id: 'size', name: t('list.size'), allowsSorting: true, align: 'end', width: 84, cell: ({ item }) => item.type === 'document' && formatSize(item.size) },
   type: { id: 'type', name: t('list.type'), allowsSorting: true, width: 112, cell: ({ item }) => item.type === 'document' && typeLabel(item.kind) },

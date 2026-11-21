@@ -6,7 +6,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, onTestFinished, vi } from 'vitest'
 import type { components } from '@healdan/api'
 import { expectNoAxeViolations } from '../test/axe'
-import { resizeByKeys, sliderOf } from '../test/columns'
+import { EVERY_COLUMN, FIRST_SORTS, resizeByKeys, sliderOf } from '../test/columns'
 import { comeBack, settle } from '../test/comeBack'
 import { client, document, folder, matter, problem, zone, type Routes } from '../test/fakeApi'
 import { detailsRoutes } from '../test/details'
@@ -106,36 +106,30 @@ describe('SearchView', () => {
     await waitFor(() => expect(api.callsTo('GET /v1/search').at(-1)?.query).toMatchObject({ sort: 'docNumber', order: 'desc' }))
   })
 
-  it('every document column sorts on a search, asking the server: Date Filed and Sent newest first, the others A to Z', async () => {
-    window.localStorage.setItem(
-      'healdan.columns.documents',
-      JSON.stringify({ v: 1, shown: ['title', 'docNumber', 'version', 'author', 'edited', 'matter', 'client', 'location', 'filed', 'size', 'type', 'class', 'subclass', 'typist', 'from', 'to', 'sent'], widths: {} }),
-    )
-    const { api, router } = await renderApp('/search?scope=documents&q=charter', routes())
-    await rows()
-    expect(headerNames()).toEqual(['Title', 'Doc #', 'Version', 'Author', 'Edit Date', 'Matter', 'Client', 'Location', 'Date Filed', 'Size', 'File Type', 'Class', 'Subclass', 'Typist', 'From', 'To', 'Sent'])
-    // By relevance, so none is the sort, and every one can be
-    expect(within(grid2()).getAllByRole('columnheader').map((one) => one.getAttribute('aria-sort'))).toEqual(Array(17).fill('none'))
-    const firsts = {
-      Matter: ['matter', 'asc'],
-      Client: ['client', 'asc'],
-      Location: ['location', 'asc'],
-      'Date Filed': ['filed', 'desc'],
-      Size: ['size', 'asc'],
-      'File Type': ['type', 'asc'],
-      Class: ['class', 'asc'],
-      Subclass: ['subclass', 'asc'],
-      Typist: ['typist', 'asc'],
-      From: ['from', 'asc'],
-      To: ['to', 'asc'],
-      Sent: ['sent', 'desc'],
+  describe('every document column sorts on a search, asking the server', () => {
+    /** Renders a search of documents with every document column shown */
+    async function everyColumn() {
+      window.localStorage.setItem('healdan.columns.documents', JSON.stringify({ v: 1, shown: EVERY_COLUMN, widths: {} }))
+      const rendered = await renderApp('/search?scope=documents&q=charter', routes())
+      await rows()
+      return rendered
     }
-    for (const [name, [sort, order]] of Object.entries(firsts)) {
+
+    it('by relevance at first, so none is the sort, and every one can be', async () => {
+      await everyColumn()
+      expect(headerNames()).toEqual(['Title', 'Doc #', 'Version', 'Author', 'Edit Date', 'Matter', 'Client', 'Location', 'Date Filed', 'Size', 'File Type', 'Class', 'Subclass', 'Typist', 'From', 'To', 'Sent'])
+      expect(within(grid2()).getAllByRole('columnheader').map((one) => one.getAttribute('aria-sort'))).toEqual(Array(17).fill('none'))
+    })
+
+    // One click each, so that no test waits out many: Date Filed and Sent newest first, the others A to Z
+    it.each(FIRST_SORTS)('%s, first by %s %s', async (name, sort, order) => {
+      const { api, router } = await everyColumn()
       fireEvent.click(header(name))
       await waitFor(() => expect(api.callsTo('GET /v1/search').at(-1)?.query).toEqual({ scope: 'documents', q: 'charter', sort, order, zone, offset: 0, limit: 100 }))
-      expect([new URLSearchParams(router.history.location.search).get('sort'), new URLSearchParams(router.history.location.search).get('order')]).toEqual([sort, order])
+      const address = new URLSearchParams(router.history.location.search)
+      expect([address.get('sort'), address.get('order')]).toEqual([sort, order])
       await waitFor(() => expect(header(name).getAttribute('aria-sort')).toBe(order === 'asc' ? 'ascending' : 'descending'))
-    }
+    })
   })
 
   it('sorts Edit Date newest first at its first click', async () => {

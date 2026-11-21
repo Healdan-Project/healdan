@@ -54,10 +54,7 @@ const KEYS: Record<string, (row: ListRow) => Key> = {
   author: (row) => { const d = documentOf(row); return d?.author ? [text(d.author.displayName)] : null },
   edited: (row) => { const d = documentOf(row); return d && timeKey(d.lastModified) },
   matter: ({ item }) => (item.type === 'matter' ? null : matterKey(item.matter)),
-  client: ({ item }) => {
-    const name = item.type === 'matter' ? item.client.name : item.matter?.client.name
-    return name == null ? null : [text(name)]
-  },
+  client: ({ item }) => textKey(item.type === 'matter' ? item.client.name : item.matter?.client.name),
   location: (row) => { const d = documentOf(row); return d && [text(d.folder.name), ...(matterKey(d.matter) ?? [null, null])] },
   filed: (row) => { const d = documentOf(row); return d && timeKey(d.dateFiled) },
   size: (row) => { const d = documentOf(row); return d && [d.size] },

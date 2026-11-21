@@ -18,6 +18,15 @@ function column(columns: TableColumn<ListRow>[], id: string) {
   return found
 }
 
+/**
+ * The least width a list's default columns take: React Aria gives every column at least 75 pixels, a fixed width below that
+ * or a share with no least width. This is only the sum; a11y.spec.ts checks the list doesn't scroll sideways beside Filters
+ * in a real browser at 1,280.
+ */
+function leastWidth(kind: DocumentListKind) {
+  return columnsFor(kind, DEFAULT_SHOWN[kind], true).reduce((sum, one) => sum + Math.max(75, typeof one.width === 'number' ? one.width : (one.minWidth ?? 0)), 0)
+}
+
 describe('the Matter column', () => {
   it('shows the number and the name, with the whole of it and the client as its tooltip and for a screen reader', () => {
     const { container } = render(<MatterCell matter={{ id: 12, display: '1002.1 – Commercial Lease', client: client({ id: 2, number: 1002, name: 'Brightwell' }) }} />)
@@ -47,10 +56,7 @@ describe('the default widths (spec 4.1)', () => {
   })
 
   it('fits beside the details or Filters at 1,280 pixels, where the list is 684 wide, without scrolling sideways', () => {
-    // React Aria gives every column at least 75 pixels: a fixed width below that, or a share with no least width. This is
-    // only the sum; a11y.spec.ts checks the list doesn't scroll sideways beside Filters in a real browser at 1,280
-    const least = columnsFor('documents', DEFAULT_SHOWN.documents, true).reduce((sum, one) => sum + Math.max(75, typeof one.width === 'number' ? one.width : (one.minWidth ?? 0)), 0)
-    expect(least).toBeLessThanOrEqual(684)
+    expect(leastWidth('documents')).toBeLessThanOrEqual(684)
   })
 
   it("gives Checked Out to Me's and the Folders scope's Matter the same share, Checked Out to Me's at least its old 130", () => {
@@ -123,15 +129,15 @@ describe('every document column (spec 4.7)', () => {
   it("lets Recent's default scroll sideways beside the details, as Checked Out to Me's does", () => {
     // The owner chose Last Used among Recent's defaults: its least widths pass 684, so beside the details the list scrolls
     // sideways (spec 4.3). Pinned so that a width change is a choice.
-    const least = columnsFor('recentDocuments', DEFAULT_SHOWN.recentDocuments, false).reduce((sum, one) => sum + Math.max(75, typeof one.width === 'number' ? one.width : (one.minWidth ?? 0)), 0)
-    expect(least).toBe(842)
+    expect(leastWidth('recentDocuments')).toBe(842)
   })
 
   it("fits the Emails search's From and Sent beside the details, and lets Recent Emails' scroll sideways as Recent Documents' does", () => {
-    const least = (kind: DocumentListKind) => columnsFor(kind, DEFAULT_SHOWN[kind], false).reduce((sum, one) => sum + Math.max(75, typeof one.width === 'number' ? one.width : (one.minWidth ?? 0)), 0)
-    // From shares the spare width, as Author did there, and Sent is a date's width, as Edit Date's was
-    expect(least('emails')).toBeLessThanOrEqual(684)
-    expect(least('recentEmails')).toBe(767)
+    // From shares the spare width, as Author did there, and Sent is a date's width, as Edit Date's was. Pinned, as Recent's
+    // are, so that a width change is a choice
+    expect(leastWidth('emails')).toBe(591)
+    expect(leastWidth('emails')).toBeLessThanOrEqual(684)
+    expect(leastWidth('recentEmails')).toBe(767)
   })
 
   it('shows nothing in a folder row for a document column, and its Matter and Last Used', () => {
@@ -157,7 +163,7 @@ describe('every document column (spec 4.7)', () => {
     expect(cellOf('recentDocuments', 'location', document({ matter: null })).firstElementChild?.getAttribute('title')).toBe('Documents')
   })
 
-  it("shows Class, Subclass, Typist and an email's From, To and Sent, each on one line with the whole of it as its tooltip", () => {
+  it("shows Author, Class, Subclass, Typist and an email's From, To and Sent, each on one line with the whole of it as its tooltip", () => {
     const row = document({
       kind: 'email',
       name: 'Re Charter.eml',
@@ -167,6 +173,7 @@ describe('every document column (spec 4.7)', () => {
       email: { from: 'Ann Smith <ann@example.com>', to: 'Bob Jones <bob@example.com>, carol@example.com', sent: '2026-03-04T10:00:00Z' },
     })
     const texts: [string, string][] = [
+      ['author', 'Ann'],
       ['class', 'Correspondence'],
       ['subclass', 'Incoming'],
       ['typist', 'Pat Moss'],
@@ -198,6 +205,16 @@ describe('every document column (spec 4.7)', () => {
     expect(text.getAttribute('title')).toBe(to)
     expect(text.textContent).toBe(to)
     // One line, which a Standard row's 34 pixels hold, cut short with an ellipsis
+    const style = getComputedStyle(text)
+    expect([style.whiteSpace, style.overflow, style.textOverflow]).toEqual(['nowrap', 'hidden', 'ellipsis'])
+  })
+
+  it('a Class of 4,000 characters ends in an ellipsis and its tooltip holds it all', () => {
+    const docClass = 'Correspondence with the Harbour Master '.repeat(110).slice(0, 4000)
+    const text = cellOf('documents', 'class', document({ docClass })).firstElementChild as HTMLElement
+    expect(docClass).toHaveLength(4000)
+    expect(text.getAttribute('title')).toBe(docClass)
+    expect(text.textContent).toBe(docClass)
     const style = getComputedStyle(text)
     expect([style.whiteSpace, style.overflow, style.textOverflow]).toEqual(['nowrap', 'hidden', 'ellipsis'])
   })
