@@ -123,9 +123,9 @@ tags:
         recorded as a showing. A problem never holds what a request typed as
         a secret, a recovery key or its last group.
       - Each change is recorded in the Storage area, straight after it
-        succeeds, as storage's changes aren't one transaction. A secret's
-        and an access key's changes are recorded as changed, with no value.
-        A change that changes nothing isn't recorded.
+        succeeds, as a storage change isn't one transaction with its record.
+        A secret's and an access key's changes are recorded as changed, with
+        no value. A change that changes nothing isn't recorded.
   - name: People
     description: |
       The People area (`AdminArea.PEOPLE`): the groups, for the forms that
@@ -1958,17 +1958,19 @@ paths:
         answers the Store (Admin app spec section 8.6). Its matters keep
         their folders and their names. The name has the whitespace at either
         end taken off; its own name changes nothing, after the checks up to
-        `422`.
+        `422` and the refusal of the three folders below, which comes first:
+        they're refused whatever the name, their own included.
 
         - `404 not-found` for anything but a live Store, but for the three
           folders `409 refused` names.
         - `422 validation` for the name, as `FolderName` says.
         - `409 refused` for LogicalDOC's Default workspace, the Templates
           Store and the root, which aren't renamed here, each with a sentence
-          that says so; for a name another live folder directly under the
-          root has, compared without regard to case, with the sentences of
-          `POST /v1/admin/stores` (changing only the case of its own name
-          works); and for what Healdan's rules refuse. Of two creates,
+          that says so, even when the name sent is the one it has; for a name
+          another live folder directly under the root has, compared without
+          regard to case, with the sentences of `POST /v1/admin/stores`
+          (changing only the case of its own name works); and for what
+          Healdan's rules refuse. Of two creates,
           renames or restores giving one name at the same moment, the second
           is refused as a name taken.
 
@@ -2058,14 +2060,15 @@ paths:
         before the Store was is a Trash item of its own, and stays there.
         Takes no body.
 
-        - `404 not-found` when `id` names no Store in the Trash, a live Store
-          included.
-        - `409 refused` when another live folder directly under the root now
-          has its name, compared without regard to case, with the sentences
-          of `POST /v1/admin/stores`, so that folder is renamed first; when
-          another restore, or the nightly destroy, took it out of the Trash
-          meanwhile; and for what Healdan's rules refuse, such as a group
-          that could read one of its matters but can't read the Store (P2).
+        - `404 not-found` when `id` names no Store, live or in the Trash.
+        - `409 refused` for a live Store, with a sentence that says it isn't
+          in the Trash, as after another restore; when another live folder
+          directly under the root now has its name, compared without regard
+          to case, with the sentences of `POST /v1/admin/stores`, so that
+          folder is renamed first; when the nightly destroy, or another
+          restore, takes it out of the Trash as this one runs; and for what
+          Healdan's rules refuse, such as a group that could read one of its
+          matters but can't read the Store (P2).
           Of two creates, renames or restores giving one name at the same
           moment, the second is refused as a name taken.
 
@@ -2346,14 +2349,15 @@ paths:
         goes back to waiting, its tries counted from nought again, and the
         mover is woken, which moves them with the others. The cause, such as
         the S3 user's permissions or a full disk, is put right first. Takes
-        no body; answers `204`.
+        no body; answers `204`. With none stuck, it changes nothing.
 
         - `503 storage-unavailable` on a server without Healdan's storage
           module.
         - `404 not-found` for anything but a live Store.
         - `409 refused` while storage backends are off.
 
-        Recorded as `storage.stuck-retried`, naming the Store.
+        Recorded as `storage.stuck-retried`, naming the Store; with none
+        stuck, it changes nothing and isn't recorded.
       tags: [Storage]
       parameters:
         - $ref: '#/components/parameters/StorePath'
@@ -2431,9 +2435,10 @@ paths:
           module.
         - `422 validation` for what the kind needs, missing or blank
           (`required`): `kind` and `name`; a folder's `path`; an S3 bucket's
-          `endpoint`, `region`, `bucket`, `accessKey` and `secret`. And for a
-          member of the other kind, sent with a value (`invalid`): S3's for a
-          folder, or `path` for S3.
+          `endpoint`, `region`, `bucket`, `accessKey` and `secret`. For a
+          `kind` other than `local` and `s3` (`invalid`). And for a member of
+          the other kind, sent with a value (`invalid`): S3's for a folder,
+          or `path` for S3; null counts as left out.
         - `409 secret-key-missing`, with `sealed`, for an S3 bucket while
           Healdan's secret key file is missing and values are sealed with it,
           unless `newKey` is true; nothing is written.
@@ -2511,8 +2516,8 @@ paths:
         - The settings of the other kind, S3's for a folder or `path` for S3,
           are left aside.
 
-        A draft never answers `422`: what's missing is among the problems.
-        It records nothing.
+        A draft never answers `422`: what's missing or wrong, an unknown
+        `kind` included, is among the problems. It records nothing.
 
         - `503 storage-unavailable` on a server without Healdan's storage
           module.
@@ -2606,9 +2611,10 @@ paths:
           and for any while storage backends are off.
         - `422 validation` for `kind` and `encrypted` (`not-editable`); for
           Original, every member but `name` (`not-editable`); for a member of
-          the other kind, S3's on a folder or `path` on S3 (`not-editable`);
-          and for the name, or a setting the kind needs, sent as null or
-          blank (`required`).
+          the other kind, S3's on a folder or `path` on S3 (`not-editable`),
+          each only when sent with a value, as the add refuses them: null
+          counts as left out. And for the name, or a setting the backend's
+          kind needs, sent as null or blank (`required`).
         - `409 secret-key-missing`, with `sealed`, for a new `secret` while
           Healdan's secret key file is missing and values are sealed with it,
           unless `newKey` is true; nothing is saved.
@@ -3050,13 +3056,14 @@ paths:
         **Retry** for the files with no Store, as a Store's
         (`POST /v1/admin/stores/{id}/stuck-files/retry`): each goes back to
         waiting, its tries counted from nought again, and the mover is woken.
-        Takes no body; answers `204`.
+        Takes no body; answers `204`. With none stuck, it changes nothing.
 
         - `503 storage-unavailable` on a server without Healdan's storage
           module.
         - `409 refused` while storage backends are off.
 
-        Recorded as `storage.stuck-retried`, naming no Store.
+        Recorded as `storage.stuck-retried`, naming no Store; with none
+        stuck, it changes nothing and isn't recorded.
       tags: [Storage]
       responses:
         '204':
@@ -3255,10 +3262,10 @@ components:
           minimum: 1
           description: |
             For `secret-key-missing`: how many stored values are sealed with
-            Healdan's missing secret key file, which a new key would leave to
-            be entered again (sign-in providers' client secrets and storage
-            backends' S3 secrets), and helpers signed in through a provider to
-            sign in again
+            Healdan's missing secret key file, sign-in providers' client
+            secrets and storage backends' S3 secrets among them. A new key
+            would leave each to be entered again, and helpers signed in
+            through a provider to sign in again
     FieldError:
       type: object
       additionalProperties: false
@@ -5030,7 +5037,10 @@ components:
           examples: [/mnt/archive]
         endpoint:
           type: [string, 'null']
-          description: S3's endpoint, its scheme, host and port only; null for a folder
+          description: |
+            S3's endpoint, its scheme, host and port only; null for a folder,
+            and for an S3 endpoint stored that can't be read as an address
+            with a host
           examples: ['https://s3.eu-west-1.wasabisys.com']
         region:
           type: [string, 'null']
@@ -5136,6 +5146,9 @@ components:
       properties:
         kind:
           type: string
+          description: |
+            `local`, a folder, or `s3`, a bucket at an S3 service; any other
+            value is `422 validation` (`invalid`), not `400`
           enum: [local, s3]
         name:
           type: string
@@ -5193,6 +5206,7 @@ components:
           description: The backend being edited; null or left out for one being added
         kind:
           type: [string, 'null']
+          description: As `NewBackend.kind`; another value, or none, is one of the test's problems
           enum: [local, s3, null]
         name:
           type: [string, 'null']
@@ -5319,8 +5333,8 @@ components:
       properties:
         event:
           type: string
-          description: '`key-shown`, shown to an administrator; `key-entered`, typed in to put its key file back'
-          enum: [key-shown, key-entered]
+          description: '`shown`, shown to an administrator; `entered`, typed in to put its key file back'
+          enum: [shown, entered]
         at:
           type: string
           format: date-time
