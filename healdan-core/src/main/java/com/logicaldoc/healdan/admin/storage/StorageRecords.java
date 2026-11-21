@@ -80,12 +80,13 @@ public final class StorageRecords {
 	 * @param backendId its backend; Original if it has no other
 	 * @param backendName that backend's name
 	 * @param waiting how many of its files wait for its backend
+	 * @param waitingBytes their size in bytes
 	 * @param stuck how many of its files the mover gave up on
 	 * @param files how many files it has
 	 * @param bytes their total size in bytes
 	 */
 	public record StoreBackendInfo(long storeId, String storeName, long backendId, String backendName, long waiting,
-			long stuck, long files, long bytes) {
+			long waitingBytes, long stuck, long files, long bytes) {
 	}
 
 	/**
@@ -126,10 +127,11 @@ public final class StorageRecords {
 	public record BackendDraft(String kind, String name, String path, String endpoint, String region, String bucket,
 			String prefix, boolean pathStyle, String accessKey, Boolean encrypted) {
 
-		/** @return its fields, but the access key's value */
+		/** @return its fields, but the access key's value and the endpoint as typed, which could hold credentials */
 		@Override
 		public String toString() {
-			return "BackendDraft[kind=" + kind + ", name=" + name + ", path=" + path + ", endpoint=" + endpoint
+			return "BackendDraft[kind=" + kind + ", name=" + name + ", path=" + path + ", endpoint="
+					+ (endpoint != null ? "(given)" : null)
 					+ ", region=" + region + ", bucket=" + bucket + ", prefix=" + prefix + ", pathStyle=" + pathStyle
 					+ ", accessKey=" + (accessKey != null ? "(given)" : null) + ", encrypted=" + encrypted + "]";
 		}

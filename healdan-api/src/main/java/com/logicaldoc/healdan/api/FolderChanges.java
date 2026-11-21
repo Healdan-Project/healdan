@@ -28,6 +28,7 @@ import com.logicaldoc.core.security.Permission;
 import com.logicaldoc.core.security.authorization.PermissionException;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.healdan.HealdanRuleException;
+import com.logicaldoc.healdan.admin.stores.StoreService;
 import com.logicaldoc.healdan.admin.workspace.WorkspaceAdmin;
 import com.logicaldoc.healdan.api.model.FolderView;
 import com.logicaldoc.healdan.api.model.HeldDocument;
@@ -65,9 +66,11 @@ import com.logicaldoc.util.spring.Context;
  * this class's own refusals answered as {@code 409 refused}, with the same
  * sentence and no {@code holds} (Admin app plan, P2-R13); a workspace's
  * folders and templates through {@link #deleteWorkspaceFolder} and
- * {@link #deleteTemplate}, likewise, each refusing a folder its route doesn't
- * delete, and the Admin app's renames and moves of them hold this class's
- * locks with {@link #withFolderLocks}.
+ * {@link #deleteTemplate}, and a Store with its matters through
+ * {@link #deleteStore}, likewise, each refusing a folder its route doesn't
+ * delete, and the Admin app's renames and moves of them, and a Store's
+ * create, rename and restore, hold this class's locks with
+ * {@link #withFolderLocks}.
  */
 public final class FolderChanges {
 
@@ -225,9 +228,39 @@ public final class FolderChanges {
 	}
 
 	/**
-	 * {@link #deleteMatter}, {@link #deleteWorkspaceFolder} and
-	 * {@link #deleteTemplate} once they know the folder: their checks, then
-	 * the delete
+	 * Moves a Store, every matter in it and everything live in them, to the
+	 * caller's Trash as one item, as {@link #deleteMatter} does a matter's own
+	 * folder, for the Admin app's Store route. The matters' rows stay, so their
+	 * numbers stay taken. Checks, in order: LogicalDOC's Default workspace, the
+	 * Templates Store and the root, which aren't Stores ({@code 409 refused},
+	 * each with its sentence); any other folder that isn't a live Store
+	 * ({@code 404}); something inside without Delete; a document inside
+	 * checked out, by anyone, the caller too; an immutable document inside.
+	 * Each of those but the {@code 404} is {@code 409 refused}, with the
+	 * sentence {@link #delete} gives, as is a veto of Healdan's rules.
+	 *
+	 * @param id the Store
+	 * @param caller the signed-in caller, an administrator
+	 * @return the Trash item the delete made
+	 */
+	public TrashItem deleteStore(long id, Caller caller) {
+		try {
+			StoreService stores = StoreService.get();
+			String fixed = stores.fixedFolder(id, "deleted");
+			if (fixed != null)
+				throw ApiProblem.conflict("refused", fixed);
+			if (stores.store(id) == null)
+				throw ApiProblem.notFound("There's no Store %d.".formatted(id));
+			return deleteForAdmin(id, caller);
+		} catch (PersistenceException e) {
+			throw new IllegalStateException("Can't delete Store #" + id, e);
+		}
+	}
+
+	/**
+	 * {@link #deleteMatter}, {@link #deleteWorkspaceFolder},
+	 * {@link #deleteTemplate} and {@link #deleteStore} once they know the
+	 * folder: their checks, then the delete
 	 */
 	private static TrashItem deleteForAdmin(long id, Caller caller) throws PersistenceException {
 		User user = caller.user();

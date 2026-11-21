@@ -33,6 +33,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.folder.Folder;
+import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.core.security.Tenant;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.gui.frontend.client.healdan.beans.GUIStorageBackend;
@@ -53,6 +54,7 @@ import com.logicaldoc.healdan.admin.storage.StorageRecords.StorageSettingsInfo;
 import com.logicaldoc.healdan.admin.storage.StorageRecords.StoreBackendInfo;
 import com.logicaldoc.healdan.admin.storage.StorageRecords.StuckFile;
 import com.logicaldoc.healdan.admin.storage.StorageRecords.SwitchPreview;
+import com.logicaldoc.healdan.setting.HealdanSettings;
 import com.logicaldoc.healdan.signin.SecretBox;
 import com.logicaldoc.healdan.storage.AbstractStorageTestCase;
 import com.logicaldoc.healdan.storage.BackendHealth;
@@ -206,6 +208,7 @@ public class StorageAdministrationImplTest extends AbstractStorageTestCase {
 		assertEquals(folder.backendId(), store.backendId());
 		assertEquals("folder store", store.backendName());
 		assertEquals(3, store.waiting());
+		assertEquals(7 + 11 + 13, store.waitingBytes());
 		assertEquals(1, store.stuck());
 		assertEquals(onBackend(folder.backendId())[0] + 3, store.files());
 		assertEquals(onBackend(folder.backendId())[1] + 7 + 11 + 13, store.bytes());
@@ -255,6 +258,19 @@ public class StorageAdministrationImplTest extends AbstractStorageTestCase {
 		gui.setEndpoint(null);
 		gui.setPrefix(null);
 		assertEquals("", StorageAdministrationImpl.where(gui));
+	}
+
+	/** A draft's text says only whether an endpoint was typed, as one typed could hold a user name and password */
+	@Test
+	public void testADraftsTextLeavesTheEndpointOut() {
+		String endpoint = "https://" + USER_INFO + "@s3.example.test:9000";
+		BackendDraft draft = new BackendDraft("s3", "Odd", null, endpoint, "test-1", BUCKET, "odd/", true, "AKODD",
+				null);
+		assertFalse(draft.toString(), draft.toString().contains(USER_INFO));
+		assertFalse(draft.toString(), draft.toString().contains("s3.example.test"));
+		assertTrue(draft.toString(), draft.toString().contains("endpoint=(given)"));
+		assertTrue(new BackendDraft("local", "Folder", "/srv/x", null, null, null, null, false, null, null).toString()
+				.contains("endpoint=null"));
 	}
 
 	/** P3-R6: the port's problem says what the Storage tab's says, with the count */
@@ -324,8 +340,14 @@ public class StorageAdministrationImplTest extends AbstractStorageTestCase {
 		Folder store = sf.fx.store("Archive Store");
 		port.setStoreBackend(store.getId(), id, boss);
 		assertEquals(List.of("Archive Store"), port.backend(id).orElseThrow().stores());
+		assertFalse(port.backend(StorageBackend.ORIGINAL).orElseThrow().stores().contains("Archive Store"));
 		port.setStoreBackend(store.getId(), StorageBackend.ORIGINAL, boss);
 		assertEquals(List.of(), port.backend(id).orElseThrow().stores());
+		// Original names every Store with no other backend, but never the Templates Store, which holds no files
+		List<String> onOriginal = port.backend(StorageBackend.ORIGINAL).orElseThrow().stores();
+		assertTrue(onOriginal.toString(), onOriginal.contains("Archive Store"));
+		String templates = FolderDAO.get().findById(HealdanSettings.get().templatesStoreId()).getName();
+		assertFalse(onOriginal.toString(), onOriginal.contains(templates));
 		assertEquals(3, events().size());
 
 		// A rename: the name alone, before and after
@@ -578,8 +600,16 @@ public class StorageAdministrationImplTest extends AbstractStorageTestCase {
 				assertEquals(recorded, events().size());
 				assertFalse(Files.exists(keyFile));
 
-				// The administrator makes a new key
-				BackendDetail saved = port.save(id, renamed, "second-secret", true, boss);
+				// The administrator makes a new key: the old sealed secret, which it can't open, is counted as changed
+				// without trying, so nothing warns of a value that can't be opened, only of the new key
+				BackendDetail saved;
+				try (LogCapture boxLog = LogCapture.of(SecretBox.class)) {
+					saved = port.save(id, renamed, "second-secret", true, boss);
+					assertTrue(boxLog.lines().toString(),
+							boxLog.lines().stream().noneMatch(line -> line.contains("A sealed secret can't be opened")));
+					assertTrue(boxLog.lines().toString(),
+							boxLog.lines().stream().anyMatch(line -> line.contains("Made a new secret key file")));
+				}
 				assertTrue(saved.hasSecret());
 				assertEquals("Renamed", saved.name());
 				assertTrue(Files.exists(keyFile));
@@ -683,12 +713,13 @@ public class StorageAdministrationImplTest extends AbstractStorageTestCase {
 		port.saveSettings(new StorageSettingsInfo(10, 6, 2), boss);
 
 		// Out of range, each refused before any is written
-		refused("no holding period", "365", () -> port.saveSettings(new StorageSettingsInfo(0, 6, 2), boss));
-		refused("too long a holding period", "365",
+		refused("no holding period", String.valueOf(limits.maxHoldDays()),
+				() -> port.saveSettings(new StorageSettingsInfo(0, 6, 2), boss));
+		refused("too long a holding period", String.valueOf(limits.maxHoldDays()),
 				() -> port.saveSettings(new StorageSettingsInfo(limits.maxHoldDays() + 1, 6, 2), boss));
 		refused("too large a cache", String.valueOf(limits.maxCacheGb()),
 				() -> port.saveSettings(new StorageSettingsInfo(10, limits.maxCacheGb() + 1, 2), boss));
-		refused("too many transfers", "16",
+		refused("too many transfers", String.valueOf(limits.maxTransfers()),
 				() -> port.saveSettings(new StorageSettingsInfo(10, 6, limits.maxTransfers() + 1), boss));
 		assertEquals(new StorageSettingsInfo(10, 6, 2), port.overview().settings());
 
@@ -865,6 +896,7 @@ public class StorageAdministrationImplTest extends AbstractStorageTestCase {
 		assertEquals(at, gui.getBackendId(), info.backendId());
 		assertEquals(at, gui.getBackendName(), info.backendName());
 		assertEquals(at, gui.getWaiting(), info.waiting());
+		assertEquals(at, gui.getWaitingSize(), info.waitingBytes());
 		assertEquals(at, gui.getStuck(), info.stuck());
 		assertEquals(at, gui.getFiles(), info.files());
 		assertEquals(at, gui.getSize(), info.bytes());

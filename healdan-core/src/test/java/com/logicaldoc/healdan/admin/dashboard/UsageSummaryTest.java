@@ -243,8 +243,8 @@ public class UsageSummaryTest extends AbstractHealdanTestCase {
 				List.of(new BackendInfo(1, "Original", "local", "/srv/store", false, 0, 0, BackendInfo.OK, null),
 						new BackendInfo(7, "Wasabi EU", "s3", "https://s3.example.com/firm/", true, 0, 0,
 								BackendInfo.OK, null)),
-				List.of(new StoreBackendInfo(firm.clientWork.getId(), "Client Work", 7, "Wasabi EU", 0, 0, 5, 999),
-						new StoreBackendInfo(firm.firm.getId(), "Firm", 1, "Original", 0, 0, 2, 99)),
+				List.of(new StoreBackendInfo(firm.clientWork.getId(), "Client Work", 7, "Wasabi EU", 0, 0, 0, 5, 999),
+						new StoreBackendInfo(firm.firm.getId(), "Firm", 1, "Original", 0, 0, 0, 2, 99)),
 				new StorageSettingsInfo(30, 10, 4), 0, 0, 0);
 		summary.ports = () -> List.of(OverviewPort.of(() -> overview));
 

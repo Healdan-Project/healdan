@@ -49,6 +49,7 @@ import com.logicaldoc.healdan.admin.storage.StorageRecords.StorageSettingsInfo;
 import com.logicaldoc.healdan.admin.storage.StorageRecords.StoreBackendInfo;
 import com.logicaldoc.healdan.admin.storage.StorageRecords.StuckFile;
 import com.logicaldoc.healdan.admin.storage.StorageRecords.SwitchPreview;
+import com.logicaldoc.healdan.setting.HealdanSettings;
 import com.logicaldoc.healdan.signin.SecretBox;
 import com.logicaldoc.healdan.storage.Staging;
 import com.logicaldoc.healdan.storage.StorageBackend;
@@ -133,7 +134,8 @@ public class StorageAdministrationImpl implements StorageAdministration {
 		List<StoreBackendInfo> stores = new ArrayList<>();
 		for (GUIStoreBackend store : gui.getStores())
 			stores.add(new StoreBackendInfo(store.getStoreId(), store.getName(), store.getBackendId(),
-					store.getBackendName(), store.getWaiting(), store.getStuck(), store.getFiles(), store.getSize()));
+					store.getBackendName(), store.getWaiting(), store.getWaitingSize(), store.getStuck(),
+					store.getFiles(), store.getSize()));
 
 		return new StorageOverview(true, backends, stores, settings, gui.getOtherWaiting(), gui.getOtherWaitingSize(),
 				gui.getOtherStuck());
@@ -145,11 +147,15 @@ public class StorageAdministrationImpl implements StorageAdministration {
 		// As the overview: nothing to show while CE keeps its files in its own store
 		if (!gui.isOn())
 			return Optional.empty();
+		// The tab lists the Templates Store among the workspaces, on Original; it holds templates, not files
+		Long templates = HealdanSettings.get().templatesStoreId();
 		for (GUIStorageBackend backend : gui.getBackends())
 			if (backend.getId() == id)
-				return Optional.of(detail(backend, Arrays.stream(gui.getStores())
-						.filter(store -> store.getBackendId() == id).map(GUIStoreBackend::getName)
-						.sorted(String.CASE_INSENSITIVE_ORDER).toList()));
+				return Optional.of(detail(backend,
+						Arrays.stream(gui.getStores())
+								.filter(store -> store.getBackendId() == id
+										&& !Long.valueOf(store.getStoreId()).equals(templates))
+								.map(GUIStoreBackend::getName).sorted(String.CASE_INSENSITIVE_ORDER).toList()));
 		return Optional.empty();
 	}
 
@@ -221,7 +227,7 @@ public class StorageAdministrationImpl implements StorageAdministration {
 			StorageBackend stored = backends.findById(id);
 			// Removed straight after its save, the answer says what was saved
 			Settings after = stored != null ? Settings.of(stored) : Settings.of(saved);
-			Map<String, Change> changes = before.changes(after, secretChanged(before, after, secret));
+			Map<String, Change> changes = before.changes(after, secretChanged(before, after, secret, newKey));
 			if (!changes.isEmpty())
 				events.recordAfter(
 						new AdminEvent(AdminArea.STORAGE, "backend.changed", BACKEND, id, saved.getName(), changes),
@@ -319,9 +325,10 @@ public class StorageAdministrationImpl implements StorageAdministration {
 	/**
 	 * @return whether a save changed the S3 secret: its sealed value changed, and the secret it opens to isn't the one
 	 *         before. Each seal differs, so the same secret typed again is sealed anew without changing; one that
-	 *         doesn't open, as after a new secret key, counts as changed
+	 *         doesn't open, as after a new secret key, counts as changed. With a new secret key, the old sealed value
+	 *         can't be opened, so a changed one counts as changed without trying
 	 */
-	private boolean secretChanged(Settings before, Settings after, String typed) {
+	private boolean secretChanged(Settings before, Settings after, String typed, boolean newKey) {
 		if (!after.isS3())
 			return false;
 		// From the save's answer, which holds no sealed value: whatever was typed
@@ -329,6 +336,8 @@ public class StorageAdministrationImpl implements StorageAdministration {
 			return StringUtils.isNotBlank(typed);
 		if (Objects.equals(before.sealed(), after.sealed()))
 			return false;
+		if (newKey)
+			return true;
 		String was = box.open(before.sealed());
 		String now = box.open(after.sealed());
 		return was == null || now == null || !was.equals(now);
