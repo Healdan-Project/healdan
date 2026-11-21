@@ -19,9 +19,18 @@
   color: var(--hd-text);
 }
 
+/* With resizing, React Aria's container sits between the frame and the list, and gives the list the frame's room. */
+.resizable {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
 /* With no row to focus, as while it loads or when it's empty, the list takes the focus itself. Its ring is drawn over
    it, as the header, which the virtualiser stacks above the list, would hide the ring's top. */
-.frame:has(> .table[data-focus-visible])::after {
+.frame:has(> .table[data-focus-visible])::after,
+.frame:has(> .resizable > .table[data-focus-visible])::after {
   position: absolute;
   inset: 0;
   z-index: 10;
@@ -31,6 +40,7 @@
 }
 
 .column {
+  position: relative;
   display: flex;
   align-items: center;
   box-sizing: border-box;
@@ -51,10 +61,13 @@
   color: var(--hd-text);
 }
 
-.column[data-hovered][data-allows-sorting] {
+/* A heading that sorts brightens while pointed at, but not while the pointer is on its edge, where a click doesn't sort
+   (the edge lies over the next heading's first 12 pixels too, so that one doesn't brighten either) */
+.column[data-hovered][data-allows-sorting]:not(:has(> .resizer[data-hovered])) {
   color: var(--hd-text);
 }
 
+/* A heading's name, which has the heading's keyboard focus on a list whose columns resize: the heading draws the ring */
 .heading {
   display: inline-flex;
   align-items: center;
@@ -62,6 +75,79 @@
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  outline: none;
+}
+
+/* A heading's edge, which resizes its column: a target 24 pixels wide (WCAG 2.5.8) centred on the edge, as the panes'
+   dividers are, so half of it lies over the next heading, which React Aria stacks under it. The last heading's edge is the
+   list's, past which the header draws nothing, so its target lies inside it. The pointer becomes a resize arrow over it,
+   and stays one while it drags (React Aria lays a cover with the edge's cursor over the page). */
+.resizer {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: -12px;
+  z-index: 1;
+  box-sizing: border-box;
+  width: 24px;
+  outline: none;
+  cursor: col-resize;
+}
+
+.resizer[data-last] {
+  inset-inline-end: 0;
+}
+
+/* At its least width a column only widens */
+.resizer[data-resizable-direction='left'] {
+  cursor: e-resize;
+}
+
+/* The line on the edge, the accent's, while the edge is pointed at and while a resize lasts */
+.resizer::before {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 11px;
+  width: 2px;
+  background: transparent;
+  content: '';
+}
+
+.resizer[data-last]::before {
+  inset-inline: auto 0;
+}
+
+.resizer[data-hovered]::before,
+.resizer[data-resizing]::before {
+  background: var(--hd-accent-fill);
+}
+
+/* A moment's wait, so a pointer passing over the headings doesn't flash their lines */
+.resizer[data-hovered]:not([data-resizing])::before {
+  transition: background-color 0s linear 150ms;
+}
+
+/* Resizing by the keyboard, the focus is on the edge's slider, which React Aria hides and which is there only while the
+   resize lasts: the ring is drawn round the edge, inset, as a heading's is */
+.resizer[data-focus-visible] {
+  box-shadow: var(--hd-focus-inset);
+}
+
+/* A heading dragged along the heading row: the line where it would go, the accent's, on the edge after the heading it would
+   follow, as the resize line is (React Aria stacks each heading over the next). The header draws nothing past the last
+   heading, so after it the line lies inside it. */
+.column[data-drop-line]::after {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: -1px;
+  z-index: 1;
+  width: 2px;
+  background: var(--hd-accent-fill);
+  content: '';
+  pointer-events: none;
+}
+
+.column[data-drop-line='end']::after {
+  inset-inline-end: 0;
 }
 
 .end {
@@ -157,10 +243,14 @@
 }
 
 /* Rows touch each other and the edges of the box they scroll in, where an outline set off outside would be cut off, so
-   their ring is the inset one (tokens.css). */
+   their ring is the inset one (tokens.css). A heading whose name has its focus draws its own. */
 .row[data-focus-visible],
 .cell[data-focus-visible],
 .column[data-focus-visible] {
+  box-shadow: var(--hd-focus-inset);
+}
+
+.column:has(> .heading[data-focus-visible]) {
   box-shadow: var(--hd-focus-inset);
 }
 
@@ -179,11 +269,12 @@
 }
 
 /* While the rows shown are about to change (a new order, new filters), a strip pulses along the top as well as the list being
-   marked busy. The rows keep their colours: a person can still read and act on them, and dimming text breaks AA contrast. */
+   marked busy. The rows keep their colours: a person can still read and act on them, and dimming text breaks AA contrast.
+   It's drawn over the Columns button too, which lies over the heading row's end. */
 .frame[aria-busy='true']::before {
   content: '';
   position: absolute;
-  z-index: 1;
+  z-index: 3;
   inset-block-start: 0;
   inset-inline: 0;
   height: 2px;
@@ -205,4 +296,65 @@
   .frame[aria-busy='true']::before {
     animation: none;
   }
+}
+
+/* A document list's Columns button, at the heading row's end: on a square the row's height, on the headings' surface, over
+   the row's end, where it stays as the list scrolls sideways. It's in no heading, nor in the list. useColumnsPanel keeps it
+   before a scrollbar that takes room. */
+.columnsButton {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-end: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: var(--row-height);
+  height: var(--row-height);
+  border-bottom: 1px solid var(--hd-line);
+  background: var(--hd-window);
+}
+
+/* The button itself: the toolbar's icon button (More's), Button's own face with its icon alone, square to fit the row */
+.columnsButton > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 26px;
+  height: 26px;
+  padding: 0 var(--hd-space-2);
+}
+
+/* While its panel is open it shows pressed, as a pressed button does (Button.module.css) */
+.columnsButton > button[aria-expanded='true'] {
+  border-color: var(--hd-pressed-edge);
+  background: var(--hd-pressed);
+  color: var(--hd-text);
+}
+
+/* While the last heading's end reaches the button (useColumnsPanel says so on the frame), the last column keeps clear of it:
+   the heading's name ends before it, and a column of numbers keeps its cells in line with its heading. Its edge, and the drop
+   line after it, are drawn where the button begins. A last heading that ends before the button has them at its own end. */
+.frame[data-last-under-button] .column.beforeButton,
+.frame[data-last-under-button] .cell.end.beforeButton {
+  padding-inline-end: var(--row-height);
+}
+
+.frame[data-last-under-button] .beforeButton > .resizer[data-last] {
+  inset-inline-end: var(--row-height);
+}
+
+.frame[data-last-under-button] .column.beforeButton[data-drop-line='end']::after {
+  inset-inline-end: var(--row-height);
+}
+
+/* The panel draws its own padding and width; its popover scrolls in a window too short for it */
+.panelPopover {
+  overflow: auto;
+}
+
+.panelDialog {
+  outline: none;
 }

@@ -188,7 +188,7 @@ public final class ApiViews {
 				new FolderRef(folderId, d.getFolder().getName(), folderKind), matter,
 				author == null ? null : new AuthorRef(author.username(), author.displayName()), d.getCreation(),
 				// When the file last changed (filed, or a new version saved), not CE's last-modified time, which the Indexer moves
-				d.getDate() != null ? d.getDate() : d.getCreation(), hold, canEdit, canOpen);
+				d.getDate() != null ? d.getDate() : d.getCreation(), hold, canEdit, canOpen, null);
 	}
 
 	/**
@@ -386,7 +386,7 @@ public final class ApiViews {
 				storeRef(position.storeId()), List.copyOf(path), canFile,
 				may(Permission.RENAME, kind, topLevel, allowed, admin),
 				may(Permission.MOVE, kind, topLevel, allowed, admin),
-				may(Permission.DELETE, kind, topLevel, allowed, admin)));
+				may(Permission.DELETE, kind, topLevel, allowed, admin), null));
 	}
 
 	/**
@@ -414,7 +414,7 @@ public final class ApiViews {
 		return new FolderView("folder", f.getId(), f.getName(), kind, parent.matter(), parent.store(),
 				List.copyOf(path), canFile, may(Permission.RENAME, kind, topLevel, allowed, admin),
 				may(Permission.MOVE, kind, topLevel, allowed, admin),
-				may(Permission.DELETE, kind, topLevel, allowed, admin));
+				may(Permission.DELETE, kind, topLevel, allowed, admin), null);
 	}
 
 	/**

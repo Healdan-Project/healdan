@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import { formatDate } from '@healdan/ui'
@@ -50,18 +50,87 @@ describe('Checked Out to Me', () => {
     await waitFor(() => expect(asked()).toBe(shown + 1))
   })
 
-  it("lists your check-outs in the server's order", async () => {
+  it('lists your check-outs, with the computer and its app', async () => {
     await renderApp('/checked-out', two)
     expect(await within(main()).findByRole('heading', { level: 1, name: 'Checked Out to Me' })).toBeTruthy()
     const found = await grid()
     const headers = within(found).getAllByRole('columnheader')
     expect(headers.map((h) => h.textContent)).toEqual(['Title', 'Doc #', 'Version', 'Matter', 'Computer', 'Checked Out', 'Edit Date'])
-    expect(headers.every((h) => h.getAttribute('aria-sort') === null)).toBe(true)
     const list = await rows()
     const computer = (row: HTMLElement) => within(row).getAllByRole('gridcell')[3]!
     expect(within(computer(list[0]!)).getByText('MacBook', { exact: true })).toBeTruthy()
     expect(within(computer(list[0]!)).getByText('Excel', { exact: true })).toBeTruthy()
     expect(within(computer(list[1]!)).getByText('Web Page', { exact: true })).toBeTruthy()
+  })
+
+  it('starts sorted by Checked Out, newest first, and sorts by any column', async () => {
+    // The server's order is the latest check-out first
+    const older = document({
+      docNumber: 10200,
+      name: 'agenda.docx',
+      lastModified: '2026-11-17T08:00:00Z',
+      hold: { kind: 'checkout', by: { id: 1, name: 'Priya Nair' }, since: '2026-11-10T09:00:00Z', device: { id: 'pc-1', name: 'Healdan Helper on Desk PC', app: 'Word' }, heldOn: { name: 'Healdan Helper on Desk PC', app: 'Word' } },
+    })
+    const { api, router } = await renderApp('/checked-out', { 'GET /v1/me/checkouts': page([onMac, inBrowser, older]) })
+    const names = async () => (await rows()).map((row) => within(row).getByRole('rowheader').textContent)
+    expect(await names()).toEqual(['Budget.xlsx', 'Letter.pdf', 'agenda.docx'])
+    const header = (name: string) => within(within(main()).getByRole('grid')).getByRole('columnheader', { name: new RegExp(`^${name}`) })
+    const sorts = () => Object.fromEntries(within(within(main()).getByRole('grid')).getAllByRole('columnheader').map((h) => [h.textContent, h.getAttribute('aria-sort')]))
+    expect(sorts()).toEqual({ Title: 'none', 'Doc #': 'none', Version: 'none', Matter: 'none', Computer: 'none', 'Checked Out': 'descending', 'Edit Date': 'none' })
+    expect(router.history.location.search).toBe('')
+
+    fireEvent.click(header('Doc #'))
+    await waitFor(() => expect(router.history.location.search).toBe('?sort=docNumber&order=asc'))
+    expect(await names()).toEqual(['agenda.docx', 'Letter.pdf', 'Budget.xlsx'])
+    // The computer's name, ignoring case
+    fireEvent.click(header('Computer'))
+    await waitFor(() => expect(router.history.location.search).toBe('?sort=computer&order=asc'))
+    expect(await names()).toEqual(['agenda.docx', 'Budget.xlsx', 'Letter.pdf'])
+    fireEvent.click(header('Title'))
+    await waitFor(() => expect(router.history.location.search).toBe('?sort=title&order=asc'))
+    expect(await names()).toEqual(['agenda.docx', 'Budget.xlsx', 'Letter.pdf'])
+    // A date's first click is newest first
+    fireEvent.click(header('Edit Date'))
+    await waitFor(() => expect(router.history.location.search).toBe('?sort=edited&order=desc'))
+    expect(await names()).toEqual(['agenda.docx', 'Budget.xlsx', 'Letter.pdf'])
+    // Back to its own order, which needs nothing in the address
+    fireEvent.click(header('Checked Out'))
+    await waitFor(() => expect(router.history.location.search).toBe(''))
+    expect(await names()).toEqual(['Budget.xlsx', 'Letter.pdf', 'agenda.docx'])
+    expect(api.callsTo('GET /v1/me/checkouts')).toHaveLength(1)
+  })
+
+  it('keeps a sort from the address, and ignores one it has no column for', async () => {
+    const { view } = await renderApp('/checked-out?sort=docNumber&order=desc', two)
+    const names = async () => (await rows()).map((row) => within(row).getByRole('rowheader').textContent)
+    expect(await names()).toEqual(['Budget.xlsx', 'Letter.pdf'])
+    expect(within(main()).getByRole('columnheader', { name: /^Doc #/ }).getAttribute('aria-sort')).toBe('descending')
+    view.unmount()
+    // Last Used is Recent's
+    const other = await renderApp('/checked-out?sort=lastUsed&order=asc', two)
+    expect(await names()).toEqual(['Budget.xlsx', 'Letter.pdf'])
+    expect(within(main()).getByRole('columnheader', { name: /^Checked Out/ }).getAttribute('aria-sort')).toBe('descending')
+    other.view.unmount()
+  })
+
+  it('takes a column\'s first sort for an address with no order: a date newest first, as a click does', async () => {
+    const dated = await renderApp('/checked-out?sort=checkedOut', two)
+    const names = async () => (await rows()).map((row) => within(row).getByRole('rowheader').textContent)
+    expect(await names()).toEqual(['Budget.xlsx', 'Letter.pdf'])
+    expect(within(main()).getByRole('columnheader', { name: /^Checked Out/ }).getAttribute('aria-sort')).toBe('descending')
+    dated.view.unmount()
+    await renderApp('/checked-out?sort=docNumber', two)
+    expect(await names()).toEqual(['Letter.pdf', 'Budget.xlsx'])
+    expect(within(main()).getByRole('columnheader', { name: /^Doc #/ }).getAttribute('aria-sort')).toBe('ascending')
+  })
+
+  it('chooses its columns, for Checked Out to Me', async () => {
+    await renderApp('/checked-out', two)
+    await rows()
+    await userEvent.click(within(main()).getByRole('button', { name: 'Columns' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Columns', description: 'For Checked Out to Me' })
+    expect(within(dialog).getByRole('checkbox', { name: 'Computer' })).toBeTruthy()
+    expect(within(dialog).queryByRole('checkbox', { name: 'Last Used' })).toBeNull()
   })
 
   it('shows the computer and its app on one line', async () => {

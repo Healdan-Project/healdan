@@ -35,7 +35,8 @@ import { ReadingPane } from '../preview/ReadingPane'
 import { documentsOf, usePreviewKey } from '../preview/usePreviewKey'
 import { NotFound } from './NotFound'
 import { Toolbar, type ListCount } from './Toolbar'
-import { listColumns, narrowed, rowOf } from './listColumns'
+import { rowOf } from './listColumns'
+import { useDocumentListColumns } from './useListColumns'
 import { useRowSelection } from './useRowSelection'
 import { childKey, isSortColumn, useListing, type ListingOrder, type SortColumn } from './useListing'
 import styles from './views.module.css'
@@ -94,8 +95,10 @@ export function FolderView({ folderId, sort, order }: FolderViewProps) {
   const documents = useMemo(() => documentsOf(listing.rows), [listing.rows])
   const preview = usePreviewKey(changeSelection)
   const openDocument = useOpenKey(documents, changeSelection)
-  // The reading pane makes the list narrow: it keeps the columns that fit
-  const columns = useRegionKind({ preview: !store, details: selected !== undefined }) === 'preview' ? narrowed(listColumns) : listColumns
+  // A folder's layout, or beside the reading pane the one every list there has (spec 4.8). The server sorts the list, so only
+  // by the columns it sorts by yet
+  const beside = useRegionKind({ preview: !store, details: selected !== undefined }) === 'preview'
+  const { columns, resizing, choice, onResetColumns } = useDocumentListColumns('folder', { beside, serverSorted: true })
   const authors = useAuthorNames(listing.rows, facets.data)
   const { clients, matters } = useMatterNames(listing.rows, facets.data)
 
@@ -185,6 +188,9 @@ export function FolderView({ folderId, sort, order }: FolderViewProps) {
               rows={rows}
               sort={shown}
               onSort={sortBy}
+              resizing={resizing}
+              choice={choice}
+              onResetColumns={onResetColumns}
               selectionMode="multiple"
               selection={selection}
               onSelectionChange={changeSelection}

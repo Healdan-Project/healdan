@@ -3,7 +3,10 @@
 
 package com.logicaldoc.healdan.api.model;
 
+import java.util.Date;
 import java.util.List;
+
+import com.fasterxml.jackson.annotation.JsonInclude;
 
 /**
  * A folder inside a Store, as the API shows it (spec section 6.2)
@@ -23,7 +26,18 @@ import java.util.List;
  *        where it goes, and what it holds, aren't counted
  * @param canDelete whether the folder itself lets the caller delete it, on
  *        the same terms; what it holds isn't counted
+ * @param lastUsed when the caller last changed a document in it; only in
+ *        Recent's list, and left out of every other answer
  */
 public record FolderView(String type, long id, String name, String kind, MatterRef matter, StoreRef store,
-		List<FolderRef> path, boolean canFile, boolean canRename, boolean canMove, boolean canDelete) {
+		List<FolderRef> path, boolean canFile, boolean canRename, boolean canMove, boolean canDelete,
+		@JsonInclude(JsonInclude.Include.NON_NULL) Date lastUsed) {
+
+	/**
+	 * @param used when the caller last used the folder
+	 * @return this view with {@code lastUsed} set
+	 */
+	public FolderView withLastUsed(Date used) {
+		return new FolderView(type, id, name, kind, matter, store, path, canFile, canRename, canMove, canDelete, used);
+	}
 }

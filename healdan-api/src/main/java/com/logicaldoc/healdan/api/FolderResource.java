@@ -110,7 +110,7 @@ public class FolderResource {
 			for (RecentFolder recent : RecentFolders.get().list(caller.getId())) {
 				Folder folder = FolderDAO.get().findById(recent.folderId());
 				if (folder != null)
-					ApiViews.folder(folder, caller).ifPresent(views::add);
+					ApiViews.folder(folder, caller).ifPresent(view -> views.add(view.withLastUsed(recent.lastChange())));
 			}
 			return Page.whole(views);
 		} catch (PersistenceException e) {

@@ -29,7 +29,12 @@ export function isRecentKind(value: unknown): value is RecentKind {
   return recentKinds.some((kind) => kind === value)
 }
 
+/** The scopes that search documents, which take filters and sorting */
+export type DocumentScope = 'documents' | 'emails' | 'all'
+/** The scopes that search folders, matters or clients */
+export type OtherScope = Exclude<SearchScope, DocumentScope>
+
 /** The scopes that search documents, which take filters and sorting. */
-export function searchesDocuments(scope: SearchScope): boolean {
+export function searchesDocuments(scope: SearchScope): scope is DocumentScope {
   return scope === 'documents' || scope === 'emails' || scope === 'all'
 }

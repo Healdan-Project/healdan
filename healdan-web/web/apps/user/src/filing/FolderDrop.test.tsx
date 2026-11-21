@@ -3,6 +3,7 @@
 
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { COLUMN_TYPE } from '@healdan/ui'
 import { describe, expect, it } from 'vitest'
 import { detailsRoutes } from '../test/details'
 import { children, folder, problem } from '../test/fakeApi'
@@ -127,6 +128,24 @@ describe('Dropping files on a folder', () => {
     expect(fireEvent.dragOver(target, { dataTransfer: data([], ['text/uri-list', 'text/plain']) })).toBe(false)
     expect(fireEvent.dragOver(target, { dataTransfer: data([], [ROWS_TYPE, 'text/plain']) })).toBe(true)
     expect(fireEvent.dragOver(target, { dataTransfer: data([], ['text/html']) })).toBe(true)
+    // Nor a list heading's drag, which moves a column of the list
+    expect(fireEvent.dragOver(target, { dataTransfer: data([], [COLUMN_TYPE]) })).toBe(true)
+  })
+
+  it('files nothing dropped while the Columns panel is open, whose layer covers the window: the page refuses it', async () => {
+    const { all } = routes()
+    const { api } = await renderApp('/folders/7', all)
+    await grid()
+    await userEvent.click(within(main()).getByRole('button', { name: 'Columns' }))
+    await screen.findByRole('dialog', { name: 'Columns' })
+    const layer = document.querySelector<HTMLElement>('[data-testid="underlay"]')!
+    const files = data([file('Report.pdf')])
+    fireEvent.dragEnter(layer, { dataTransfer: files })
+    fireEvent.dragOver(layer, { dataTransfer: files })
+    expect(document.querySelector('[data-dropping]')).toBeNull()
+    fireEvent.drop(layer, { dataTransfer: files })
+    expect(await screen.findByText("Drop files on a folder's list, or on a folder in the tree.")).toBeTruthy()
+    expect(posts(api)).toHaveLength(0)
   })
 })
 
@@ -159,6 +178,18 @@ describe('Dropping on a folder in the tree', () => {
     expect(box.querySelector('[data-drop-target="true"]')).toBeTruthy()
     fireEvent.dragLeave(target, { relatedTarget: globalThis.document.body })
     expect(box.querySelector('[data-drop-target]')).toBeNull()
+  })
+
+  it('takes no list heading\'s drag, which moves a column of the list: no light, no drop, nothing filed or moved', async () => {
+    const { box, sent } = await open()
+    const target = await label(box, /Correspondence/)
+    const heading = data([], [COLUMN_TYPE])
+    fireEvent.dragEnter(target, { dataTransfer: heading })
+    expect(fireEvent.dragOver(target, { dataTransfer: heading })).toBe(true)
+    expect(box.querySelector('[data-drop-target]')).toBeNull()
+    expect(fireEvent.drop(target, { dataTransfer: heading })).toBe(true)
+    expect(screen.queryByText(/Drag the email to Finder/)).toBeNull()
+    expect(sent).toHaveLength(0)
   })
 
   it('refuses a matter\'s top level and a search folder, as the list does', async () => {
