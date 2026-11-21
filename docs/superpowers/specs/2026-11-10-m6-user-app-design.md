@@ -96,7 +96,7 @@ The test for each feature was whether the owner would reach for it on an ordinar
 | | Making or editing a search folder's rule | new | later |
 | | CE's saved searches and tags | – | never (M1 turned saved searches off; search folders cover them) |
 | **Looking** | The document list: Title, Doc #, Version, Author and Edit Date, sorted by any column | exists | yes (roadmap) |
-| | Choosing and reordering columns | new | later: designed on 2026-11-19 with resizing, and sorting on every list ([list columns spec](2026-11-19-list-columns-design.md)); built in the browser on 2026-11-20, the spec's second pull request, with its new columns' server sorts to follow in its third |
+| | Choosing and reordering columns | new | later: designed on 2026-11-19 with resizing, and sorting on every list ([list columns spec](2026-11-19-list-columns-design.md)); built in the browser on 2026-11-20, the spec's second pull request, and the rest on 2026-11-21, its third: six new columns (Class, Subclass, Typist, From, To and Sent), a sort on the server for every column of a folder, a search and the Trash, and the email lists starting with From and Sent |
 | | The breadcrumb, with the matter as `client.matter – name` | exists | yes (roadmap) |
 | | The details panel: properties and versions | exists | yes |
 | | A document's history | new | later |
@@ -564,7 +564,7 @@ Later phases, each designed when its turn comes, move features off the old UI (o
 - sharing: shared links, emailing from the server, zip export;
 - your profile and password;
 - making and editing search folders;
-- choosing and reordering columns: designed on 2026-11-19, with resizing them and sorting every list by any column ([list columns spec](2026-11-19-list-columns-design.md)), and built in the browser on 2026-11-20 (the spec's second pull request: resizing, the heading menu, the Columns panel, moving by drag, a layout per kind of list, and the one-page lists sorted in the browser); the new columns' sorts on the server are its third;
+- ~~choosing and reordering columns~~: designed on 2026-11-19, with resizing them and sorting every list by any column ([list columns spec](2026-11-19-list-columns-design.md)), and built in the browser on 2026-11-20 (the spec's second pull request: resizing, the heading menu, the Columns panel, moving by drag, a layout per kind of list, and the one-page lists sorted in the browser) and on 2026-11-21 (its third: Class, Subclass, Typist, From, To and Sent as columns, a sort on the server for every column of a folder and a search, the Folders, Matters and Clients scopes and the Trash, and the email lists starting with From and Sent);
 - setting properties on many documents;
 - ~~moving and deleting folders~~: built with the Trash, above (renaming them came forward on 2026-11-14, the [folder rename spec](2026-11-14-folder-rename-design.md));
 - copying and locking documents;

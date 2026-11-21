@@ -302,7 +302,10 @@ The layouts are `views/columnLayouts.ts`, one per kind of list, kept in this bro
 `healdan.columns.<kind>` through `@healdan/shell`'s `readJson` and `keepJson`, each in `try`. The document kinds are
 `folder`, `documents`, `all`, `emails`, `recentDocuments`, `recentEmails`, `checkedOut` and `beside`, the layout every
 document list takes while the reading pane is docked; the others (`folders`, `matters`, `clients`, `recentFolders`,
-`recentClients`, `trashMine`, `trashEveryone`, `trashRemoved`) keep widths only. The value is
+`recentClients`, `trashMine`, `trashEveryone`, `trashRemoved`) keep widths only. A document kind's default columns are
+its `DEFAULT_SHOWN` (`emails`' are Title, Doc #, Matter, From and Sent, and `recentEmails`' the same then Last Used),
+and the columns it offers `offeredFor(kind)` in `views/listColumns.tsx`: every document column, in `OFFERED_ORDER`,
+then Last Used for Recent's two kinds, or Computer and Checked Out for `checkedOut`. The value is
 `{"v":1,"shown"?:[…],"widths":{…}}`: `shown` (column ids in order) is written only once someone has chosen columns, so a
 layout of widths alone still gets the kind's defaults, a later release's included. A value that isn't that shape, or of
 another version, reads as no layout; ids the kind doesn't offer are dropped, and Title goes first. `useColumnLayout(kind,
@@ -311,9 +314,16 @@ change ends, not during a drag. The sort isn't kept: it's in the address.
 
 A list the server sends whole (Recent, Checked Out to Me) sorts in the browser, by the server's rules, with `compareRows`
 and `sortRows` in `views/compareRows.ts` (titles by file name ignoring case, doc #s as numbers, versions by major then
-minor, rows with no value last either way, ties in the list's own order). A paged list (a folder, a search, the Trash)
-sorts on the server, and a column the server doesn't sort yet (`SERVER_SORTS` in `views/listColumns.tsx`) doesn't offer
-sorting there.
+minor, Matter by client number then matter number, other text ignoring case, Author and Typist by the name shown, rows
+with no value last either way, ties in the list's own order). A paged list (a folder, a search, the Trash) sorts on the
+server, by every column it has: a folder and a document search by any document column, each column's id being the
+API's `sort` (`sortColumns` in `views/useListing.ts`, which `SERVER_SORTS` in `views/listColumns.tsx` holds), and the
+Trash by each of its columns (`trashSorts` in `actions/trash.ts`). Last Used, Computer and Checked Out are only the
+one-page lists', which the browser sorts.
+
+Class, Subclass, Typist, From, To and Sent are blank on a folder's row, as Doc # is, and From, To and Sent on a
+document whose `email` is `null`. The first five are drawn on one line (`TextCell` in `views/listColumns.tsx`), which
+ends in an ellipsis, with the whole text as the cell's `title`, so a long To can be read by pointing at it.
 
 A view takes its columns from `views/useListColumns.tsx`. `useDocumentListColumns(kind, { beside, serverSorted })` gives
 a list of documents its `columns` and the Table's `resizing`, `choice` (with the `ColumnsPanel`) and `onResetColumns`,
@@ -327,11 +337,15 @@ address)` reads it and writes it with `replace`, leaving the address without one
 again, and the routes' `validateSearch` keep only a column one of the route's lists has (`sortSearch`; `/recent/$kind`
 takes any of `RECENT_SORTS`, and a list ignores a sort by a column it doesn't have).
 
-A folder (`folder`, a search folder too) and a search keep their sort in the address too, a column the server sorts by
-(`isSortColumn`), and take their columns with `serverSorted: true`. Each document scope of a search is a kind of its own
-(`documents`, `all`, `emails`), and its Folders, Matters and Clients scopes take `hitColumns(scope)` through
-`useListWidths`, unsorted. A sorted document search passes the Table `relevance`, whose **Sort by Relevance** replaces
-the address with one without `sort` and `order`.
+A folder (`folder`, a search folder too) and a search keep their sort in the address too, and take their columns with
+`serverSorted: true`. A folder's route keeps a column the server sorts by (`isSortColumn`), and the search's route only
+a sort its scope takes (`isScopeSort` in `search/scopes.ts`, from `scopeSorts(scope)`: every document column for a
+document scope; `title` and `matter` for Folders, `matter` and `client` for Matters, and `client` for Clients), as the
+API refuses any other with `400`. Each document scope of a search is a kind of its own (`documents`, `all`, `emails`),
+and its Folders, Matters and Clients scopes take `hitColumns(scope)` through `useListWidths`, each column sorting when
+its id is one of `scopeSorts(scope)` (the Matters and Clients scopes' first column is `matter`, the sort's name). Those
+three start in the search's own order and have no **Sort by Relevance**. A sorted document search passes the Table
+`relevance`, whose **Sort by Relevance** replaces the address with one without `sort` and `order`.
 
 ## Keeping the Page Up to Date
 
@@ -619,7 +633,9 @@ each keyed `t<id>` and selectable; the selection isn't a document, so it isn't i
 `selected` shows `TrashDetails` for one item as a selected document's details are shown. `?view=` is `everyone` or
 `removed` only for an administrator (`useMe`): anyone else is asked for, and shown, Mine whatever the address says, and
 the switch, `@healdan/ui`'s `ToggleButtons` (React Aria's toggle button group, labelled **Show**), is drawn for
-administrators alone. Name, Deleted and Removed sort; `?sort=` and `?order=` are in the address.
+administrators alone. Every column sorts on the server, by its id (`trashSorts` in `actions/trash.ts`): a time
+(Deleted, Removed, Destroyed) newest first at its first click, the others A to Z, and a `?sort=` without `?order=` the
+same first way, as the server's default is. `?sort=` and `?order=` are in the address.
 
 - **Restore** (`actions/trash.ts`'s `restoreItems`) is a call for each item, one after another. Each one restored toasts
   where it went, with **Open** (`toastWithAction`); one answered `409 place-gone` opens `MovePicker` with the title
@@ -673,7 +689,8 @@ spaces; in the Matters scope a `998.1` asks `GET /search?scope=matters` for that
 `views/SearchView.tsx` is `/app/search`: the scope, words, filters (`useFilters`), `sort`, `order` and `sel` are all in the
 address. `search/useSearchResults.ts` is the infinite query over `GET /search` (100 a page) and the twin of
 `useFacets` for the panel's counts (`facets=type,author,class,client,matter`, `limit=1`); only the Documents, Emails and
-Docs & Emails scopes send filters or a sort, as the API refuses them for the others. A page is the last when the
+Docs & Emails scopes send filters, as the API refuses them for the others. Every scope sends a sort, its own
+(`scopeSorts`), and `paramsOf` leaves out one the scope doesn't take, whoever asked. A page is the last when the
 answer's `total` is reached, or, when it's `null`, when it's shorter than the 100 asked. `totalAtLeast` is the count's
 "More than". `FiltersPanel` shows no made-up `0` for a ticked value no option offers when the counts are `partial`.
 `views/RecentView.tsx` is the start page and `/recent/<kind>`, a Table each, with `useRowSelection` (the selection of

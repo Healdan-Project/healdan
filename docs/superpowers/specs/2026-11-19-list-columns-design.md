@@ -254,7 +254,8 @@ client.
 | `checkedOut` | Checked Out to Me | Title, Doc #, Version, Matter, Computer, Checked Out, Edit Date |
 | `beside` | any document list while the reading pane is docked | Title, Doc #, Edit Date |
 
-  Until PR 3 (§6), From and Sent don't exist, and the email kinds start as `documents` does, without Version.
+  Until PR 3 (§6), From and Sent don't exist, and the email kinds start as `documents` does, without Version. (PR 3
+  added From and Sent on 2026-11-21, and the email kinds have started as the table says since.)
 - **Beside the reading pane** (owner: option B), every document list uses the one `beside` layout, chosen with the same
   menu and panel. A column it names that the list under it doesn't offer (Last Used outside Recent, Computer outside
   Checked Out) is skipped there. M6 §6.4's fixed three columns become its default.

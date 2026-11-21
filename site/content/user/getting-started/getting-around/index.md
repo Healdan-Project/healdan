@@ -86,37 +86,54 @@ Matter](../../working-with-matters/stores-and-matter-workspaces/#opening-a-matte
 
 ## The List's Columns
 
-Every list has columns you can resize, and most lists sort by their columns (a few don't: see below). The lists of
-documents also let you choose which columns show, and in what order.
+Every list has columns you can resize and, with two exceptions below, sort by. The lists of documents also let you
+choose which columns show, and in what order.
 
 - **Resize a column** by dragging the right edge of its heading, and double-click the edge to put the column's width
   back. From the keyboard, open the heading's menu and choose **Resize Column**, then press Left or Right, and Enter,
   Esc or Tab when you're done. When the columns are wider than the list, the list scrolls sideways.
 - **Sort** by clicking a heading, or pressing Enter or Space on it, and again for the other way. A date column, such
-  as **Edit Date**, sorts newest first at its first click. **Recent Documents**, **Recent Emails** and **Recent
-  Folders** start sorted by **Last Used**, newest first, and **Checked Out to Me** by **Checked Out**.
-- **What doesn't sort:** a folder or a search doesn't sort by **Matter**, **Client**, **Location**, **Date Filed**,
-  **Size** or **File Type**, the Trash sorts only by **Name**, **Deleted** and **Removed**, and a search's **Folders**,
-  **Matters** and **Clients** scopes don't sort. The page a doc # opens lists one document, so it has nothing to sort.
+  as **Edit Date** or **Sent**, sorts newest first at its first click. **Recent Documents**, **Recent Emails** and
+  **Recent Folders** start sorted by **Last Used**, newest first, and **Checked Out to Me** by **Checked Out**.
+- **What sorts:** every column of every list, the Trash's included, but for two. A search's **Clients** scope sorts by
+  **Client** alone, not by **Matter**, and the page a doc # opens lists one document, so it has nothing to sort. The
+  **Folders** scope sorts by **Title** and **Matter**, and the **Matters** scope by **Matter** and **Client**.
+  **Matter** sorts by number, so 998.9 comes before 998.10.
 - **The heading's menu** opens on a right-click, or on Shift-F10 or the menu key while a heading has the keyboard's
   focus (the arrow keys reach the headings from the rows). It has **Sort Ascending** and **Sort Descending**, **Sort by
   Relevance** on a sorted search, **Resize Column**, **Move Left** and **Move Right**, **Hide** with the column's name
   (such as **Hide Matter**), **Choose Columns…** and **Reset Columns**. **Title** can't move or hide.
 - **Choose the columns** with the **Columns** button at the end of the headings, or **Choose Columns…** in a heading's
   menu. The panel's **Shown** section lists the columns in their order, with **Title** marked **Always Shown**, and
-  **More Columns** lists the rest, such as **Client**, **Location**, **Date Filed**, **Size** and **File Type**. Tick a
-  column to show it at the end, and untick one to hide it. **Move Up** and **Move Down** move the column with the
-  focus, or drag it. **Reset to Default** puts the list's usual columns back. Changes apply at once, and Esc closes the
-  panel.
+  **More Columns** lists the rest the list offers (see below). Tick a column to show it at the end, and untick one to
+  hide it. **Move Up** and **Move Down** move the column with the focus, or drag it. **Reset to Default** puts the
+  list's usual columns back. Changes apply at once, and Esc closes the panel.
 - **Move a column** by dragging its heading along the headings, or with **Move Left** and **Move Right**. Nothing goes
   before **Title**.
 - **Reset Columns** in a heading's menu puts back the list's default columns, order and widths.
 
+Besides **Title**, **Doc #**, **Version**, **Author** and **Edit Date**, every list of documents offers:
+
+- **Matter**, by number and name, and **Client**;
+- **Location**, the folder the document is in;
+- **Date Filed** and **Size**, and **File Type**, named as the File Type filter names it, such as Word or PDF;
+- **Class** and **Subclass**, as they're stored, and **Typist**, by the person's name, as **Author** shows it;
+- **From** and **To**, an email's sender and recipients as they're stored, and **Sent**, the date it was sent.
+
+**Recent Documents** and **Recent Emails** add **Last Used**, and **Checked Out to Me** adds **Computer** and **Checked
+Out**. **Class**, **Subclass**, **Typist**, **From**, **To** and **Sent** are blank on a folder's row, and **From**,
+**To** and **Sent** on a document that isn't an email. A **Class**, **Subclass**, **Typist**, **From** or **To** too long
+for its column, such as a **To** with many recipients, ends in an ellipsis: point at it to read it all.
+
 Each kind of list keeps its own columns: a folder's, a **Documents**, **Emails** or **Docs & Emails** search's, Recent
 Documents', Recent Emails' and Checked Out to Me's are chosen apart, and the page a doc # opens has a **Documents**
-search's. The other lists keep the widths you give their columns, each kind its own. The list beside the reading pane,
-which keeps **Title**, **Doc #** and **Edit Date** at first, has a layout of its own too, whichever list it's showing;
-a column you choose there that a list doesn't have, such as **Last Used** beside a folder, is left out of that list.
+search's. The **Emails** search and **Recent Emails** start with **Title**, **Doc #**, **Matter**, **From** and
+**Sent**, and **Recent Emails** then **Last Used**. Once you've chosen a list's columns, it keeps your choice, and a
+column Healdan adds later waits under **More Columns** for you to tick it; a list whose columns you've only resized
+still takes its kind's default columns, a new default included. The other lists keep the widths you give their
+columns, each kind its own. The list beside the reading pane, which keeps **Title**, **Doc #** and **Edit Date** at
+first, has a layout of its own too, whichever list it's showing; a column you choose there that a list doesn't have,
+such as **Last Used** beside a folder, is left out of that list.
 They're kept in this browser, so another browser or computer starts from the defaults, and so does this one if you
 clear the browser's data.
 

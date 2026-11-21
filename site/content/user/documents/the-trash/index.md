@@ -52,7 +52,10 @@ deletions are in their own Trash.
 - **A deleted folder is one row,** with how many items it holds, such as "14 items", beside its name. What's inside it
   isn't a row of its own.
 - **The columns** are **Name**, **Doc #**, **Deleted From** and **Deleted**. **Deleted From** gives the matter number
-  and the folder path. Choose the **Name** or **Deleted** header to sort by it.
+  and the folder path. Click any column's header to sort by it, and again for the other way: a date, such as
+  **Deleted**, sorts newest first at its first click, the others A to Z or smallest first. **Deleted From** sorts by
+  the path as it was when the item was deleted, so an item whose folder was renamed or moved since sorts by its old
+  path.
 - **The count** at the top of the list says how many items you have.
 - **Select an item** and its details open at the right: its kind, its size or, for a folder, what it **Holds**, such
   as "3 folders, 11 documents", **Deleted From** in full, and **Deleted**, with **Restore** and **Remove…**.
@@ -95,9 +98,11 @@ Nothing in the app destroys anything. After the days an administrator sets, a ni
 
 An administrator sees **Mine**, **Everyone's** and **Removed** beside the heading. **Everyone's** adds who deleted each
 item, and restores anyone's. **Removed** lists what people took out of their Trash, with who removed it and when, and
-how long is left before it's destroyed, and has **Restore** only. With nothing in them, **Everyone's** says "Nothing in
-the Trash." and **Removed** "Nothing removed." See [The Trash and Removed Items](../../../admin/the-trash-and-removed-items/)
-in the Admin Guide.
+how long is left before it's destroyed, and has **Restore** only. Their columns sort as **Mine**'s do: **Deleted By**
+and **Removed By** by the names recorded at the time, and **Destroyed** as **Removed**, since an item is destroyed a
+set number of days after it's removed. With nothing in them, **Everyone's** says "Nothing in the Trash." and
+**Removed** "Nothing removed." See [The Trash and Removed Items](../../../admin/the-trash-and-removed-items/) in the
+Admin Guide.
 
 ## In the Classic Interface
 
