@@ -35,9 +35,9 @@ describe('Find a client, matter or person', () => {
     expect(section('Matters')).toEqual(['1001.1 – Charter DisputeSaltmarsh Shipping Ltd'])
     expect(section('People')).toEqual(['Priya Nairpriya', 'Sally Oldhamsally.old · Disabled'])
     await expectNoAxeViolations(screen.getByRole('banner'))
-    // The list is drawn in React Aria's overlay layer at the end of <body>, outside the page's landmarks by design, so the
-    // landmark rule can't hold for it (as @healdan/ui's ComboBox test says)
-    const result = await axe.run(document.body, { rules: { 'color-contrast': { enabled: false }, region: { enabled: false } } })
+    // The list is drawn right after the box, inside the find's search landmark (@healdan/ui's ComboBox), so the whole page
+    // holds every landmark rule while it's open; jsdom can't work out colours, which the browser specs check
+    const result = await axe.run(document.body, { rules: { 'color-contrast': { enabled: false } } })
     expect(result.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.html).join(' | ')}`)).toEqual([])
   })
 
@@ -68,32 +68,34 @@ describe('Find a client, matter or person', () => {
     expect((api.callsTo('GET /v1/admin/find')[1]?.query?.q as string).length).toBe(100)
   })
 
-  it('opens what is picked with the arrow keys and Enter, where it is managed, and empties the box', async () => {
-    await renderApp('/', routes)
+  it("opens what is picked with the arrow keys and Enter, a matter at its page here, inside the app, and empties the box", async () => {
+    const { router } = await renderApp('/', routes)
     const user = userEvent.setup()
     await user.type(box(), 'sal')
     await screen.findByRole('option', { name: /Sally Oldham/ })
     await user.keyboard('{ArrowDown}{ArrowDown}{Enter}')
-    await waitFor(() => expect(goTo).toHaveBeenCalledWith(destinationOf({ kind: 'matter', matter: found.matters[0]! })))
-    expect(goTo).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(router.state.location.pathname).toBe('/matters/11'))
+    expect(goTo).not.toHaveBeenCalled()
     expect((box() as HTMLInputElement).value).toBe('')
   })
 
-  it('opens what is clicked', async () => {
-    await renderApp('/', routes)
+  it('opens a person who is clicked in the Classic Interface, where people are managed until their screens ship', async () => {
+    const { router } = await renderApp('/', routes)
     const user = userEvent.setup()
     await user.type(box(), 'sal')
     await user.click(await screen.findByRole('option', { name: /Priya Nair/ }))
-    await waitFor(() => expect(goTo).toHaveBeenCalledWith(destinationOf({ kind: 'person', person: found.people[0]! })))
+    await waitFor(() => expect(goTo).toHaveBeenCalledWith('/frontend.jsp'))
+    expect(router.state.location.pathname).toBe('/')
   })
 
-  it('opens the first thing found on Enter when the arrow keys have picked none', async () => {
-    await renderApp('/', routes)
+  it("opens the first thing found on Enter when the arrow keys have picked none: here the client, at its page", async () => {
+    const { router } = await renderApp('/', routes)
     const user = userEvent.setup()
     await user.type(box(), 'sal')
     await screen.findByRole('option', { name: /Priya Nair/ })
     await user.keyboard('{Enter}')
-    await waitFor(() => expect(goTo).toHaveBeenCalledWith(destinationOf({ kind: 'client', client: found.clients[0]! })))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/clients/1'))
+    expect(goTo).not.toHaveBeenCalled()
   })
 
   it('opens nothing on Enter before anything is found', async () => {
@@ -122,12 +124,13 @@ describe('Find a client, matter or person', () => {
   })
 })
 
-// Clients, Matters and Users have no screen of their own yet (spec 14), so each opens the Classic Interface. A matter
-// isn't opened in the User app: the find gives its id, and the User app's addresses need its folder's.
+// Phase 2 shipped the Clients and Matters screens, so a client and a matter open at their pages here; Users ship in Phase 4,
+// so a person still opens the Classic Interface. A matter isn't opened in the User app: the find gives its id, and the User
+// app's addresses need its folder's.
 describe('Where a find opens each kind', () => {
-  it('is the Classic Interface, until each kind\'s screen ships', () => {
-    expect(destinationOf({ kind: 'client', client: found.clients[0]! })).toBe('/frontend.jsp')
-    expect(destinationOf({ kind: 'matter', matter: found.matters[0]! })).toBe('/frontend.jsp')
+  it("is a client's or a matter's page here, by its id, and the Classic Interface for a person until Users ships", () => {
+    expect(destinationOf({ kind: 'client', client: found.clients[0]! })).toBe('/admin/clients/1')
+    expect(destinationOf({ kind: 'matter', matter: found.matters[0]! })).toBe('/admin/matters/11')
     expect(destinationOf({ kind: 'person', person: found.people[0]! })).toBe('/frontend.jsp')
   })
 })

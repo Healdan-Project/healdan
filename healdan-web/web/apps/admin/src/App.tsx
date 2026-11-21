@@ -4,9 +4,10 @@
 import { QueryClientProvider, type QueryClient } from '@tanstack/react-query'
 import { RouterProvider } from '@tanstack/react-router'
 import type { Api } from '@healdan/api'
-import { ServicesProvider, type SignedOutState } from '@healdan/shell'
+import { MessagesProvider, ServicesProvider, type SignedOutState } from '@healdan/shell'
 import { ToastRegion } from '@healdan/ui'
 import { AccessProvider, type AccessState } from './access'
+import { problemLookup } from './strings'
 import type { createAdminRouter } from './router'
 
 export interface AppProps {
@@ -28,8 +29,10 @@ export function App({ api, access, queryClient, signedOut, router }: AppProps) {
     <ServicesProvider api={api} signedOut={signedOut}>
       <AccessProvider access={access}>
         <QueryClientProvider client={queryClient}>
-          <RouterProvider router={router} />
-          <ToastRegion />
+          <MessagesProvider lookup={problemLookup}>
+            <RouterProvider router={router} />
+            <ToastRegion />
+          </MessagesProvider>
         </QueryClientProvider>
       </AccessProvider>
     </ServicesProvider>

@@ -23,6 +23,7 @@ import java.util.stream.Collectors;
 
 import org.junit.Before;
 import org.junit.Test;
+import org.springframework.dao.DataAccessException;
 import org.springframework.transaction.IllegalTransactionStateException;
 
 import com.logicaldoc.core.document.Document;
@@ -45,6 +46,7 @@ import com.logicaldoc.healdan.profile.LocalValueDAO;
 import com.logicaldoc.healdan.rules.AbstractRulesTestCase;
 import com.logicaldoc.healdan.searchfolder.SearchFolderRule;
 import com.logicaldoc.healdan.searchfolder.SearchFolderRuleDAO;
+import com.logicaldoc.healdan.support.AdminRecord;
 
 /**
  * Spec \u00a75.3: an admin creates a matter from a workspace template, and edits,
@@ -459,7 +461,7 @@ public class MatterServiceTest extends AbstractRulesTestCase {
 
 	@Test
 	public void testCreateAndEditAreRecorded() throws Exception {
-		int layout = ClientServiceTest.events().size();
+		int layout = AdminRecord.events().size();
 
 		Matter created = create(2, "Smith v Jones", alice, demo, "First description");
 
@@ -470,10 +472,10 @@ public class MatterServiceTest extends AbstractRulesTestCase {
 						+ "\"description\":{\"before\":null,\"after\":\"First description\"},"
 						+ "\"name\":{\"before\":null,\"after\":\"Smith v Jones\"},"
 						+ "\"number\":{\"before\":null,\"after\":\"2\"},"
-						+ "\"owner\":{\"before\":null,\"after\":\"alice alice\"},"
+						+ "\"owner\":{\"before\":null,\"after\":\"alice alice (alice)\"},"
 						+ "\"store\":{\"before\":null,\"after\":\"Main\"},"
 						+ "\"template\":{\"before\":null,\"after\":\"Demo\"}}")),
-				eventsSince(layout));
+				AdminRecord.eventsSince(layout));
 
 		// Only the fields an edit changed, each with its old and new value; an owner by name
 		service.update(created.getId(), " Smith v Brown ", "First description", alice.getId(), admin);
@@ -498,8 +500,53 @@ public class MatterServiceTest extends AbstractRulesTestCase {
 				event.formatted(admin.getId(), "192.0.2.30", "updated", "Smith v Brown",
 						"{\"description\":{\"before\":\"First description\",\"after\":null}}"),
 				event.formatted(admin.getId(), null, "updated", "Smith v Brown",
-						"{\"owner\":{\"before\":\"alice alice\",\"after\":\"bob bob\"}}")),
-				eventsSince(layout + 1));
+						"{\"owner\":{\"before\":\"alice alice (alice)\",\"after\":\"bob bob (bob)\"}}")),
+				AdminRecord.eventsSince(layout + 1));
+	}
+
+	@Test
+	public void testAnOwnerWithBlankNamesIsRecordedByTheirUsername() throws Exception {
+		User dave = fx.user("dave", lawyers.getName());
+		jdbc.update("update ld_user set ld_firstname = ?, ld_name = ? where ld_id = ?", " ", "", dave.getId());
+		UserDAO.get().evict(User.class, dave.getId());
+		int layout = AdminRecord.events().size();
+
+		Matter created = create(2, "Demo", dave, demo);
+		service.update(created.getId(), "Demo", null, bob.getId(), admin);
+
+		// The name as the Admin app gives a person's, the username when both names are blank, and so not twice
+		List<String> recorded = AdminRecord.eventsSince(layout);
+		assertEquals(2, recorded.size());
+		assertTrue(recorded.get(0), recorded.get(0).contains("\"owner\":{\"before\":null,\"after\":\"dave\"}"));
+		assertTrue(recorded.get(1),
+				recorded.get(1).endsWith(" {\"owner\":{\"before\":\"dave\",\"after\":\"bob bob (bob)\"}}"));
+	}
+
+	@Test
+	public void testCreateAndEditRollBackWithAFailedRecord() throws Exception {
+		Matter created = create(2, "Demo", alice, demo);
+		int recorded = AdminRecord.events().size();
+
+		// The record's insert fails, inside the change's transaction
+		jdbc.execute("alter table hd_admin_event rename to hd_admin_event_away");
+		try {
+			assertThrows(DataAccessException.class,
+					() -> service.update(created.getId(), "Renamed", "A description", bob.getId(), admin));
+			assertThrows(DataAccessException.class, () -> create(3, "Three", alice, demo));
+		} finally {
+			jdbc.execute("alter table hd_admin_event_away rename to hd_admin_event");
+		}
+
+		// The changes are gone with it: the row, the folder's name and the owner's entry
+		assertEquals("Demo",
+				jdbc.queryForObject("select hd_name from hd_matter where ld_id = ?", String.class, created.getId()));
+		assertEquals(alice.getId(), (long) jdbc.queryForObject("select hd_ownerid from hd_matter where ld_id = ?",
+				Long.class, created.getId()));
+		assertEquals("998.2 \u2013 Demo", jdbc.queryForObject("select ld_name from ld_folder where ld_id = ?",
+				String.class, created.getFolderId()));
+		assertFalse(acl(workspace(created)).containsKey(bobsGroup.getId()));
+		assertNoMatter(3);
+		assertEquals(recorded, AdminRecord.events().size());
 	}
 
 	@Test
@@ -574,14 +621,15 @@ public class MatterServiceTest extends AbstractRulesTestCase {
 				jdbc.queryForObject("select ld_deleted from ld_group where ld_id = ?", Integer.class, lenasGroup));
 		assertTrue(acl(ws).containsKey(lenasGroup));
 
-		int events = ClientServiceTest.events().size();
+		int events = AdminRecord.events().size();
 		service.update(created.getId(), "Demo", null, bob.getId(), admin);
 
 		assertEquals(bob.getId(), MatterDAO.get().findById(created.getId()).getOwnerId());
-		// The record names the deleted owner as she was
-		List<String> recorded = eventsSince(events);
+		// The record names the deleted owner as she was, by the username CE gave her account when it deleted it
+		List<String> recorded = AdminRecord.eventsSince(events);
 		assertEquals(1, recorded.size());
-		assertTrue(recorded.get(0), recorded.get(0).endsWith(" {\"owner\":{\"before\":\"lena lena\",\"after\":\"bob bob\"}}"));
+		assertTrue(recorded.get(0), recorded.get(0).endsWith(" {\"owner\":{\"before\":\"lena lena (%s)\",\"after\":\"bob bob (bob)\"}}"
+				.formatted(jdbc.queryForObject("select ld_username from ld_user where ld_id = ?", String.class, lena.getId()))));
 		Map<Long, Set<Permission>> acl = acl(ws);
 		assertFalse(acl.containsKey(lenasGroup));
 		assertEquals(set(Permission.values()), acl.get(bobsGroup.getId()));
@@ -709,15 +757,6 @@ public class MatterServiceTest extends AbstractRulesTestCase {
 			throws Exception {
 		return service.create(new NewMatter(healdan.getId(), number, name, description, store.getId(), owner.getId(),
 				template.getId()), admin);
-	}
-
-	/**
-	 * @return the administration record's rows after the first ones, as
-	 *         {@link ClientServiceTest#events()} gives them
-	 */
-	private static List<String> eventsSince(int first) {
-		List<String> events = ClientServiceTest.events();
-		return events.subList(first, events.size());
 	}
 
 	private NewMatter request(Client client, long number, String name, User owner, Folder template) {

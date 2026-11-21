@@ -30,8 +30,8 @@ import com.logicaldoc.util.spring.Context;
  * its rows when it deletes a group (or a user, with the user's own group), but
  * then it grants nobody anything (plan, R30), so the permission rules and
  * narrowing neither count nor touch its rows. A deleted group that still has
- * members, as {@code GroupDAO.delete} leaves one (SOAP's {@code deleteGroup}
- * calls it), still lets them in, so it counts as live (R31). The ACLs are read
+ * members, as {@code GroupDAO.delete} leaves one, counts as live: its rows are
+ * checked and narrowed as any group's (R31). The ACLs are read
  * from {@code ld_folder_acl} with
  * JDBC on CE's data source, so the reads join the caller's transaction and see
  * what it has flushed.
@@ -183,6 +183,22 @@ public final class AclMath {
 	 */
 	public static String firstExcess(Map<Long, Set<Permission>> child, Map<Long, Set<Permission>> parent) {
 		return firstExcess(child, parent, true);
+	}
+
+	/**
+	 * @param child an ACL
+	 * @param parent another
+	 * @return the group {@link #firstExcess} is about: the lowest group id the
+	 *         child grants something the parent doesn't grant it; null if
+	 *         there is none
+	 */
+	public static Long firstExcessGroup(Map<Long, Set<Permission>> child, Map<Long, Set<Permission>> parent) {
+		for (Map.Entry<Long, Set<Permission>> entry : new TreeMap<>(child).entrySet()) {
+			Set<Permission> allowed = parent.getOrDefault(entry.getKey(), Set.of());
+			if (!allowed.containsAll(entry.getValue()))
+				return entry.getKey();
+		}
+		return null;
 	}
 
 	private static String firstExcess(Map<Long, Set<Permission>> child, Map<Long, Set<Permission>> parent,

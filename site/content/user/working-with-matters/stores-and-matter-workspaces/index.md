@@ -8,7 +8,8 @@ Everything in Healdan lives in a **matter**, and every matter lives in a **Store
 ## Stores
 
 A Store is a top-level container: Personal and Client Work, say, or one per region. Your administrator creates the
-Stores and decides who can see each one. You don't open a Store to look for a matter: you reach matters through
+Stores and decides who can see each one (see the Admin Guide's [Stores](../../../admin/stores/)). You don't open a
+Store to look for a matter: you reach matters through
 [My Matters and Recent Matters](../../finding-documents/my-matters-and-recent-matters/). The Classic Interface's
 folder tree still shows the Stores at its top.
 
@@ -19,11 +20,13 @@ folder tree still shows the Stores at its top.
   *projects* instead.
 - **A matter's workspace** is its folder in a Store. It's built from a workspace template, so matters of the same
   kind start with the same folders, for example Documents, Secured Documents, Emails, and search folders such as
-  Recent Work.
+  Recent Work. Administrators build the templates in the Admin app: see the Admin Guide's
+  [Workspace Templates](../../../admin/workspace-templates/).
 - **Client and matter pass down.** Every folder and document in a workspace carries its client and matter, and so
   do the other [properties](../properties/) set on its folders.
-- **Admins create matters,** and only admins add, rename, move or delete the folders directly inside a workspace.
-  Below that, you can create folders wherever your permissions allow.
+- **Admins create matters,** in the Admin app, and only admins add, rename, move or delete the folders directly
+  inside a workspace. Below that, you can create folders wherever your permissions allow. See the Admin Guide's
+  [Clients and Matters](../../../admin/clients-and-matters/) and [Top-Level Folders](../../../admin/top-level-folders/).
 - **A workspace can't be renamed directly.** Its name follows the matter's, which an admin edits.
 
 ## Opening a Matter
@@ -59,7 +62,9 @@ the same way. A document you can't read never shows, in the list or in the count
 
 A matter's workspace decides who can see the matter. A folder inside it can be more restricted than the workspace,
 for example a Secured Documents folder only some people can open, but it can never let in someone the workspace
-doesn't. A single document can be shared more widely: see [Document Permissions](../document-permissions/).
+doesn't. Administrators set who can use each folder in the Admin app: see the Admin Guide's
+[Permissions](../../../admin/permissions/). A single document can be shared more widely: see
+[Document Permissions](../document-permissions/).
 
 ## Words That Mean Something Else in LogicalDOC
 

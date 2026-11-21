@@ -8,6 +8,7 @@ import java.util.Optional;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 
 import com.logicaldoc.healdan.HealdanConstants;
+import com.logicaldoc.healdan.listing.ListingSql;
 import com.logicaldoc.healdan.matter.ClientMatterRef;
 
 /**
@@ -20,7 +21,7 @@ public class ClientSearch extends MatterSearch {
 	@Override
 	protected String condition(String input, MapSqlParameterSource params) {
 		params.addValue("text", containing(input));
-		String match = "lower(c.hd_name) like :text escape '!'";
+		String match = "lower(c.hd_name) like :text " + ListingSql.LIKE_ESCAPE;
 		Optional<ClientMatterRef> ref = ClientMatterRef.parse(input);
 		if (ref.isPresent() && ref.get().isNumberOnly()) {
 			params.addValue("client", ref.get().client());

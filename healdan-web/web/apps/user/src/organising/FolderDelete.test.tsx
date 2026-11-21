@@ -113,7 +113,7 @@ describe('The ways in to deleting a folder', () => {
     const matterRow = within(box).getByRole('row', { name: /1001\.1/ })
     act(() => matterRow.focus())
     await userEvent.keyboard('{Delete}')
-    expect(await screen.findByText("A matter's own folder is deleted by an administrator in the Classic Interface.")).toBeTruthy()
+    expect(await screen.findByText("A matter's own folder is deleted by an administrator, with Delete on the matter's page in the Admin app.")).toBeTruthy()
     expect(screen.queryByRole('dialog')).toBeNull()
 
     const folderRow = within(box).getByRole('row', { name: /Correspondence/ })

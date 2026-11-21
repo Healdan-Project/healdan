@@ -192,10 +192,9 @@ public class ErrorStore {
 			params.addValue("area", query.area());
 		}
 		if (query.text() != null) {
-			// LIKE's wildcards are escaped with "!", which both databases take
-			where.append(" and (lower(e.hd_message) like :text escape '!' or lower(e.hd_logger) like :text escape '!')");
-			params.addValue("text", "%" + query.text().toLowerCase(Locale.ROOT).replace("!", "!!").replace("%", "!%")
-					.replace("_", "!_") + "%");
+			where.append(" and (lower(e.hd_message) like :text %1$s or lower(e.hd_logger) like :text %1$s)"
+					.formatted(ListingSql.LIKE_ESCAPE));
+			params.addValue("text", ListingSql.containing(query.text().toLowerCase(Locale.ROOT)));
 		}
 		String times = "(select coalesce(sum(h.hd_count), 0) from hd_error_hour h"
 				+ " where h.hd_errorid = e.hd_id and h.hd_hour >= :hour)";

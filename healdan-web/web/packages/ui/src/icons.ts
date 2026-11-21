@@ -5,6 +5,7 @@
 import { createElement, type SVGAttributes } from 'react'
 import {
   IconArrowDown,
+  IconArrowRight,
   IconArrowUp,
   IconArrowUpRight,
   IconBriefcase,
@@ -48,9 +49,11 @@ import {
   IconSearch,
   IconStar,
   IconStarFilled,
+  IconTemplate,
   IconTrash,
   IconUpload,
   IconUser,
+  IconUsersGroup,
   IconX,
   IconZoomIn,
   IconZoomOut,
@@ -60,6 +63,7 @@ import styles from './icons.module.css'
 
 export const icons = {
   arrowDown: IconArrowDown,
+  arrowRight: IconArrowRight,
   arrowUp: IconArrowUp,
   arrowUpRight: IconArrowUpRight,
   briefcase: IconBriefcase,
@@ -104,9 +108,11 @@ export const icons = {
   spreadsheet: IconFileSpreadsheet,
   star: IconStar,
   starFilled: IconStarFilled,
+  template: IconTemplate,
   trash: IconTrash,
   upload: IconUpload,
   user: IconUser,
+  usersGroup: IconUsersGroup,
   zoomIn: IconZoomIn,
   zoomOut: IconZoomOut,
 }

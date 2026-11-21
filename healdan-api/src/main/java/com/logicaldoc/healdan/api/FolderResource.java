@@ -90,6 +90,14 @@ public class FolderResource {
 	static final int SEARCH_FOLDER_CAP = 1000;
 
 	/**
+	 * @return the folder deletes and moves, which take the renames' locks, for
+	 *         the Admin app's matter routes to share
+	 */
+	public FolderChanges changes() {
+		return changes;
+	}
+
+	/**
 	 * @return the folders inside matters the caller changed a document in
 	 *         lately, newest first, that the caller can still read; at most 20
 	 */

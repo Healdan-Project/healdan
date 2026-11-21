@@ -143,11 +143,11 @@ db_query() {
 }
 # PostgreSQL's own log (PostgreSQL spec section 10.1): a statement PostgreSQL refuses is an ERROR line there, whatever
 # the Java around it swallowed. docker/tests/db-log-expected.txt lists those a run is expected to have, one extended
-# regular expression a line, each with its reason above it. A line it doesn't expect is printed, and passes, until the
-# list has held for five consecutive runs of the draft pull request's CI on each architecture (each run's "PostgreSQL's
-# log" lines reporting 0 unexpected); then, before that pull request is marked ready, a commit of it makes check_db_log
-# fail on one: its return 0 becomes [ "$unexpected" = 0 ] (the plan's Task 23).
-# A log that can't be read, or isn't PostgreSQL's, fails now: a clean log has to be one that was read.
+# regular expression a line, each with its reason above it. A line it doesn't expect is printed and fails the run: it's
+# a finding, not a pattern to add. Until 2026-11-20 it printed and passed, while the list held for five consecutive
+# runs of CI on each architecture, each run's "PostgreSQL's log" lines reporting 0 unexpected (the plan's Task 23,
+# Step 6, and its Decision Log 54).
+# A log that can't be read, or isn't PostgreSQL's, fails too: a clean log has to be one that was read.
 DB_LOG_SERVICE=db
 DB_LOG_EXPECTED=docker/tests/db-log-expected.txt
 # db_log_errors <log file>: each line of the log that holds ERROR:, with the first line of the statement PostgreSQL
@@ -167,7 +167,7 @@ db_log_errors() {
 # check_db_log <the steps the db container's log covers>: reads the db service's whole log, and fails when it can't, when
 # it's empty or isn't PostgreSQL's (no "database system is ready to accept connections"), and when the list of
 # expected lines can't be read. Then it prints the lines read, the ERROR lines' count, expected and unexpected, how many
-# each pattern matched, and every unexpected line, which passes until the list has held.
+# each pattern matched, and the unexpected lines, the first 50, and fails when there's one.
 check_db_log() {
   local log=$WORK/db-log lines=$WORK/db-log-errors patterns=$WORK/db-log-patterns status=0 read_lines total unexpected pattern
   compose logs --no-log-prefix "$DB_LOG_SERVICE" > "$log" 2> "$log.err" || status=$?
@@ -207,10 +207,10 @@ check_db_log() {
     echo "  $(grep -cE -- "$pattern" "$lines" || true)  $pattern" | cut -c 1-160
   done < "$patterns"
   if [ "$unexpected" != 0 ]; then
-    echo "  unexpected, which don't fail the run until the list has held:"
+    echo "  unexpected, which fail the run:"
     grep -vEf "$patterns" "$lines" | head -n 50 | cut -c 1-400 | sed 's/^/    /'
   fi
-  return 0
+  [ "$unexpected" = 0 ]
 }
 # The app writes its warnings to dms.log in the repository volume, not to stdout, and step 8 replaces the container
 # but keeps the volume, so the log covers the whole run. docker cp reads it from a stopped container too.
@@ -782,7 +782,7 @@ check "ld_webservicecall exists" test "$(db_query "select to_regclass('ld_webser
 echo "== 7. setup wizard blocked"
 check "GET /setup is 403" test "$(http_code "$BASE/setup")" = 403
 # Before step 8's down, which removes the db container and its log
-check "PostgreSQL's log, steps 1 to 7, read against $DB_LOG_EXPECTED (unexpected lines reported, not yet failing)" \
+check "PostgreSQL's log, steps 1 to 7, has no ERROR line but those $DB_LOG_EXPECTED expects" \
   check_db_log "steps 1 to 7"
 
 echo "== 8. data survives down/up, and an earlier image's default is replaced"
@@ -846,7 +846,7 @@ web_test() {
 check "the User app in the browser" web_test
 echo "step 9 took $((SECONDS - web_started)) s"
 # The db container step 8 made: its log holds steps 8 and 9
-check "PostgreSQL's log, steps 8 and 9, read against $DB_LOG_EXPECTED (unexpected lines reported, not yet failing)" \
+check "PostgreSQL's log, steps 8 and 9, has no ERROR line but those $DB_LOG_EXPECTED expects" \
   check_db_log "steps 8 and 9"
 
 echo "The smoke test took $SECONDS s"

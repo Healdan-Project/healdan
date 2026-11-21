@@ -19,7 +19,7 @@ open it in the main area.
   asking. See [Renaming a Folder in the App](../../documents/copying-moving-and-deleting/#renaming-a-folder-in-the-app),
   [Moving a Folder in the App](../../documents/copying-moving-and-deleting/#moving-a-folder-in-the-app) and
   [Deleting in the App](../../documents/copying-moving-and-deleting/#deleting-in-the-app). A matter's own folder has
-  neither **Move To…** nor **Delete**: an administrator moves or deletes it in the Classic Interface.
+  neither **Move To…** nor **Delete**: only an administrator moves or deletes it.
 - **Drag a folder onto another** in the tree, or drag rows from a list onto a folder, to move them there. The folder
   you're over lights up. Dragging a folder into another matter asks first. A drag can't be done from the keyboard: use
   **Move To…**.

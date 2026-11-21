@@ -227,10 +227,11 @@ and `ResourceServiceImplTest#testMoveFolder` (WebDAV's move). `RpcPermissionGaps
 
 ### The Admin App's Server Tests
 
-The administration record's, the error capture's, the job status's and the Dashboard's tests are in `healdan-core`
-(`com.logicaldoc.healdan.admin` and the packages under it), `healdan-api` and `healdan-storage`. No test makes a real
-start, so they call `ErrorWriter.drainOnce()` and `UsageSummary.refreshNow()` themselves, and the tests of the threads
-start them; `DashboardServiceTest` calls `forget()`, which drops what the Dashboard keeps, before it reads again.
+The administration record's, the error capture's, the job status's, the Dashboard's, and the clients', matters',
+folder access's, Stores', workspaces' and templates' tests are in `healdan-core` (`com.logicaldoc.healdan.admin` and
+the packages under it), `healdan-api` and `healdan-storage`. No test makes a real start, so they call
+`ErrorWriter.drainOnce()` and `UsageSummary.refreshNow()` themselves, and the tests of the threads start them;
+`DashboardServiceTest` calls `forget()`, which drops what the Dashboard keeps, before it reads again.
 
 - **`AdminEventsTest`** checks the record: who, what, when and from where, the detail's fields in the order of their
   names, no address outside an admin request, the record rolled back with its change and committed with it, a failed
@@ -263,7 +264,9 @@ start them; `DashboardServiceTest` calls `forget()`, which drops what the Dashbo
 - **`DashboardServiceTest`** checks Needs Attention and Server Health over fakes of each source: each attention code,
   several backends and Stores, the ten tiles in order and those that need attention, a part that fails leaving the
   rest whole, a source that can't be read unchecked, a slow one still being worked out, storage backends off, the
-  database's tile on PostgreSQL, Sign-In and Outgoing Email, and a second read coming from what's kept. `CachedTest`
+  database's tile on PostgreSQL, Sign-In and Outgoing Email, and a second read coming from what's kept.
+  `DashboardScreensTest` pins where the links go: each shipped screen's Admin address, the Dashboard, Clients, Matters
+  and Workspace Templates, and the Classic Interface for every other. `CachedTest`
   checks what's kept: one ask per period however many read, the last answer while it's asked again, none older than
   two periods, a failure kept like an answer, `forget()` and a clock set back. `WordsTest` checks the tiles' words,
   and `ProviderClientTest` that `answers` fetches a provider's discovery document afresh and remembers a failure for
@@ -278,8 +281,60 @@ start them; `DashboardServiceTest` calls `forget()`, which drops what the Dashbo
   written; and the failed list's order, matters and paging.
 - **`AdminDashboardResourceTest` and `AdminFindResourceTest`**, in `healdan-api`, check the Dashboard's route, the
   usage route, before the first summary and after a failed refresh too, the find's clients, live matters and people,
-  at most five of each, wildcards taken as they are, a blank query `422`, and the refusals of a non-administrator and
-  of a device token, each answer against `openapi-admin.yaml`.
+  at most five of each, wildcards and the escape character `!` taken as they are, a blank query `422`, and the
+  refusals of a non-administrator and of a device token, each answer against `openapi-admin.yaml`. `ListingSqlTest`
+  checks the `like` patterns the lists and searches share.
+- **`AdminClientsResourceTest`** checks the clients' routes: the list's columns before and after the summary, `q` by
+  a number's start and a name's part, each sort both ways with ties by number and blanks last, paging, the next
+  number, a create and its record, a rename that changes only the name and records nothing when the name is the same,
+  each refusal changing and recording nothing, in the check order, a create that loses a race for its number answered
+  as a used one, no delete, and the refusals of a non-administrator and of a device token.
+- **`AdminMattersResourceTest`** checks the matters' routes the same way: the list's columns, a matter made since the
+  summary, a deleted owner and template, `q` and each filter, alone and together, each sort, paging, and 10,000
+  matters paged, sorted and searched; the next number, which a matter in the Trash keeps taken; a matter's page with
+  its counts of documents that failed to index and previews given up on; the create, its refusals, the permission
+  rules among them, and its race; the check; the edit, with `not-editable` members and a description cleared; the
+  move, into the same Store, onto a name taken in another case, and with a document checked out; and the delete, its
+  Trash item and counts, a restore that brings the matter back to its Store, and its refusals. `MatterCheckTest`, in
+  `healdan-core`, checks each problem code and when it's looked for, their order, that the create refuses what the
+  check reports, that the check writes nothing, and that only an administrator may ask. `MatterServiceTest` checks
+  that a create or edit whose record fails is rolled back, and `IndexCountsTest` and `PreviewJobsTest` the counts for
+  one matter.
+- **`FolderAccessServiceTest`**, in `healdan-core`, checks a workspace's folder access: rows from its own permissions
+  and from the folder it follows, rows that grant nothing left out, the owner's row, exact flags saved, P1 and P2
+  refused inside a matter and saved in a template, the owner's row kept on the matter's folder, the cap on `guest` and
+  read-only people, groups and people that no longer exist, a person named by id or by their own group, an empty
+  list, Follow Parent, what's in scope, the records, and a refused save changing and recording nothing. Its
+  `testApplyToSubfoldersOpensUpARestrictedFolderBelow` pins what LogicalDOC's `applySecurityToTree` does to a
+  restricted folder below, a search folder and a folder in the Trash. `AccessLevelTest` checks the levels' exact
+  matches, and `AdminFolderAccessResourceTest`, in `healdan-api`, the routes, their check order and their refusals.
+- **`StoreServiceTest`**, in `healdan-core`, checks New Store and who can see a Store: a Store a matter can be made in
+  at once, its record, a create whose record fails leaving no folder, the create's refusals, Read given and other
+  permissions kept, each row as Can See or Custom, a change of nothing neither written nor recorded, a Store that
+  followed another folder's permissions getting its own, what's a Store, and the refusals, P2's among them: a group a
+  matter lets in refused while it can still read the matter, the owner passing while they can read the Store, a matter
+  that already let in more blocking no other change, and only live matters with their own permissions checked.
+  `AdminStoresResourceTest`, in `healdan-api`, checks the Stores' routes, their check order and refusals, P2's among
+  them, and `AdminGroupsResourceTest` the groups' list: by name, without people's own or deleted groups, `q` and
+  paging. Each also checks the refusals of a non-administrator and of a device token.
+- **`WorkspaceAdminTest`**, in `healdan-core`, checks a workspace's folders: what's in scope, a search folder directly
+  in the Templates Store among what isn't; a matter's tree and a template's, in order, hidden folders kept and aliases
+  and deleted ones left out, search folders last; New Folder at a matter's top level, deeper and in a template, taking
+  its parent's permissions and the matter's stamps, and its refusals, a name a hidden folder or a search folder has
+  among them; renames, a change of case and the folder's own name, and their refusals; moves, a folder narrowed to fit
+  its new parent inside a matter, and the refusals (the top folders, another matter, a template into a matter, a Store,
+  into itself, a name taken, a document checked out); the values a folder sets, local, inherited and the default,
+  and setting them, passed down to a folder and a document, back to inheriting, and Client refused; and search folders,
+  their rule's round trip, a change recording only what changed, and their refusals. Each refusal writes nothing.
+  `TemplateAdminTest` checks the list's counts, an empty template following the Templates Store, a copy (its folders,
+  permissions of their own and followed, values, a search folder's rule, the template it copies unchanged), the
+  create's refusals, the rename, and the problems: none for a clean template, a folder wider than its parent, a folder
+  that keeps following a folder above its parent, and a group that can't read a Store, the template still renamed and
+  added to and New Matter refusing it. `AdminWorkspaceResourceTest` and `AdminTemplatesResourceTest`, in
+  `healdan-api`, check each route's answer, its check order and refusals, the records, the deletes' Trash items and
+  their restore (a matter's folder comes back; a template's, and a template's folder, are `409 place-gone`), a matter
+  made from a deleted template unchanged but for its template, and the refusals of a non-administrator and of a
+  device token.
 
 ### The Storage Tests
 
@@ -507,13 +562,20 @@ PostgreSQL's log, steps 1 to 7: 62 lines read, 0 ERROR lines, 0 expected and 0 u
   and the patterns were taken from a stack with the task's delay shortened. Nothing
   Healdan does in the ordinary way may be on the list: a line no pattern matches is a finding, not a pattern to add.
   A line's `DETAIL`, which can quote a row's values, is left out.
-- **It fails** when it can't read the log, when the log is empty or isn't PostgreSQL's (it has no `database system
-  is ready to accept connections`), and when the list can't be read, so a clean log is one it read.
-- **An unexpected line doesn't fail the run yet.** It prints every one, and passes, until the list has held for five
-  consecutive runs of CI on each architecture, each run's `PostgreSQL's log` lines reporting 0 unexpected. The switch
-  merged with four such runs on arm64 and two on amd64, on the owner's word, so `master`'s own runs make up the rest.
-  Then a pull request of its own makes the check fail on one: the function's last line, `return 0`, becomes
-  `[ "$unexpected" = 0 ]`.
+- **A line no pattern matches fails the run.** After how many lines each pattern matched (the `…` here), the check
+  prints each unexpected line, the first 50, with the first line of its statement:
+
+  ```text
+  PostgreSQL's log, steps 1 to 7: 70 lines read, 4 ERROR lines, 3 expected and 1 unexpected
+    …
+    unexpected, which fail the run:
+      2026-11-20 17:05:43.256 UTC [107] ERROR:  relation "hd_no_such_table" does not exist at character 21 STATEMENT:  select hd_name from hd_no_such_table where hd_id = 1
+  FAIL  PostgreSQL's log, steps 1 to 7, has no ERROR line but those docker/tests/db-log-expected.txt expects (17:05:43 UTC)
+  ```
+
+  The statement is the place to start: find the code that sent it, and put it right there.
+- **It fails too** when it can't read the log, when the log is empty or isn't PostgreSQL's (it has no `database
+  system is ready to accept connections`), and when the list can't be read, so a clean log is one it read.
 
 The start-up tool asks whether a table exists with `to_regclass`, never by reading it, so a start leaves no `ERROR`
 line, and `test-move.sh` checks the moves left none either.
@@ -826,14 +888,22 @@ Tests](#the-web-modules-tests) are Maven's). [The Web App](../the-web-app/) says
     script, asked with `webuser`'s own session (`page.request`), a `403`, `no-store`, without the file's bytes; and
     that a request for it with no session isn't `200`, and holds none of its bytes either. It changes nothing on the
     stack.
+  - `admin-matters.spec.ts` takes a matter from nothing to the User app (Admin app spec §17.1). As `admin`, with names
+    of its own run, it makes a Store that Everyone can see, a workspace template with a folder and a restricted
+    subfolder, a client, and a matter from the template; edits the matter; and changes a folder's access in the
+    Workspace Editor. Then it signs in as `webuser` and checks in the User app that the matter's restricted folder
+    isn't visible and the other folder is. Like every admin spec, it changes nothing global: it makes its own clients,
+    matters, Stores and templates, and changes neither `webuser`, Everyone nor `Smoke Garage`.
   - `admin-a11y.spec.ts` runs axe on the Admin app as `admin`, in the light theme and again in the dark one, as
-    `a11y.spec.ts` does: the Dashboard once its ten tiles and Usage's figures are drawn (it waits for Usage's chart,
-    so a summary that failed fails it), the find's list for the smoke fixture's client and matter, the Help menu, the
-    person menu, at 768 × 1024 the Dashboard (with no sideways scroll) and the left pane opened over it (Esc closes
-    it, and the focus goes back to **☰**), and last the signed-out screen. This is where the Dashboard's colour
-    contrast is checked. The find's list is checked with the whole page around it, as the User app's search box's
-    is: `@healdan/ui`'s `ComboBox` draws the list right after the box, inside the find's search landmark, and keeps
-    the page around it shown to a screen reader while it's open (The Web App page's The Search Box and Search
+    `a11y.spec.ts` does: the Dashboard once its ten tiles and Usage's figures are drawn (it waits for Usage's chart, so
+    a summary that failed fails it), the find's list for the smoke fixture's client and matter, the Help menu, the
+    person menu, at 768 × 1024 the Dashboard (with no sideways scroll) and the left pane opened over it (Esc closes it,
+    and the focus goes back to **☰**), Phase 2's screens (the Clients list, the Matters list, a matter's page on its
+    Overview and Workspace tabs, and Workspace Templates, with the smoke fixture's client 1 and matter 1.1, which it
+    only reads, so it changes nothing and needs the smoke overlay), and last the signed-out screen. This is where the
+    Dashboard's colour contrast is checked. The find's list is checked with the whole page around it, as the User app's
+    search box's is: `@healdan/ui`'s `ComboBox` draws the list right after the box, inside the find's search landmark,
+    and keeps the page around it shown to a screen reader while it's open (The Web App page's The Search Box and Search
     Results), so nothing hidden holds a link (axe's `aria-hidden-focus`). `e2e/helpers.ts`'s `expectListUnder` then
     checks that the list's layer covers the window and the list starts at the find's left edge, 4 pixels below it, as
     wide as the box, though the find's field is positioned and padded.

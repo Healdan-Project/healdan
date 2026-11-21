@@ -16,6 +16,7 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 
 import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.healdan.HealdanConstants;
+import com.logicaldoc.healdan.listing.ListingSql;
 import com.logicaldoc.util.spring.Context;
 
 /**
@@ -26,9 +27,6 @@ import com.logicaldoc.util.spring.Context;
  * for a property that few documents carry.
  */
 public final class CommentsMatch {
-
-	/** Marks the escaped characters in a {@code LIKE} pattern */
-	private static final char ESCAPE = '!';
 
 	/** Words Lucene reads as operators, not as text to find */
 	private static final Set<String> OPERATORS = Set.of("AND", "OR", "NOT");
@@ -74,9 +72,9 @@ public final class CommentsMatch {
 		MapSqlParameterSource params = new MapSqlParameterSource("name", HealdanConstants.ATTR_COMMENTS)
 				.addValue("tenant", tenantId);
 		for (int i = 0; i < words.size(); i++) {
-			sql.append(" and lower(b.ld_stringvalue) like :w").append(i).append(" escape '").append(ESCAPE)
-					.append("'\n");
-			params.addValue("w" + i, "%" + escape(words.get(i)) + "%");
+			sql.append(" and lower(b.ld_stringvalue) like :w").append(i).append(' ').append(ListingSql.LIKE_ESCAPE)
+					.append('\n');
+			params.addValue("w" + i, ListingSql.containing(words.get(i)));
 		}
 		if (folderId != null) {
 			Collection<Long> folders = subPath ? FolderDAO.get().findFolderIdInTree(folderId, false)
@@ -109,10 +107,5 @@ public final class CommentsMatch {
 				words.add(word);
 		}
 		return words;
-	}
-
-	private static String escape(String word) {
-		return word.replace(String.valueOf(ESCAPE), ESCAPE + "" + ESCAPE).replace("%", ESCAPE + "%").replace("_",
-				ESCAPE + "_");
 	}
 }

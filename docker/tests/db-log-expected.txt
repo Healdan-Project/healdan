@@ -3,7 +3,7 @@
 # line of the db container's log that holds ERROR:, with the first line of the statement PostgreSQL logged after it
 # appended as " STATEMENT:  <statement>". Each has its reason above it: the step that provokes it on purpose, or the
 # code of LogicalDOC's that raises it and why that's expected. Nothing Healdan does in the ordinary way may be here
-# (spec section 7.3), and a line no pattern matches is a finding, not a pattern to add.
+# (spec section 7.3), and a line no pattern matches fails the run: it's a finding, not a pattern to add.
 
 # LogicalDOC's StatsCollector (logicaldoc-core's com.logicaldoc.core.stats.StatsCollector, the scheduled task
 # StatsCollector: 30 minutes after a start, then every 12 hours) counts the rows of twelve tables this edition doesn't

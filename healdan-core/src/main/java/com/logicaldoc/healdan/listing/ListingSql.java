@@ -18,6 +18,12 @@ public final class ListingSql {
 	/** Paging, after the {@code order by}, with {@code :limit} and {@code :offset} */
 	public static final String PAGE = " limit :limit offset :offset";
 
+	/**
+	 * The escape clause that follows a {@code like} whose pattern
+	 * {@link #likeLiteral} made, as in {@code lower(x) like :q escape '!'}
+	 */
+	public static final String LIKE_ESCAPE = "escape '!'";
+
 	/** The longest doc # the API takes, as {@code ApiViews.hasDocNumber} decides */
 	static final int DOC_NUMBER_DIGITS = 18;
 
@@ -25,6 +31,38 @@ public final class ListingSql {
 	private static final int VERSION_DIGITS = 9;
 
 	private ListingSql() {
+	}
+
+	/**
+	 * The one escaping of what a person looks for with a {@code like}.
+	 *
+	 * @param text the text to look for, as it is
+	 * @return the text with {@code like}'s wildcards, {@code %} and
+	 *         {@code _}, and the escape character, {@code !}, escaped, so a
+	 *         pattern made of it, followed by {@link #LIKE_ESCAPE}, matches
+	 *         them as plain characters; its case is kept
+	 */
+	public static String likeLiteral(String text) {
+		// The escape character first, so the escapes added aren't escaped again
+		return text.replace("!", "!!").replace("%", "!%").replace("_", "!_");
+	}
+
+	/**
+	 * @param text the text to look for, as it is
+	 * @return a pattern, for a {@code like} with {@link #LIKE_ESCAPE}, that
+	 *         matches text containing it ({@link #likeLiteral})
+	 */
+	public static String containing(String text) {
+		return "%" + likeLiteral(text) + "%";
+	}
+
+	/**
+	 * @param text the text to look for, as it is
+	 * @return a pattern, for a {@code like} with {@link #LIKE_ESCAPE}, that
+	 *         matches text starting with it ({@link #likeLiteral})
+	 */
+	public static String startingWith(String text) {
+		return likeLiteral(text) + "%";
 	}
 
 	/**

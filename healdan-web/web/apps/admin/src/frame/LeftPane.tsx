@@ -39,8 +39,14 @@ export interface NavGroup {
  */
 export const NAV: readonly NavGroup[] = [
   { group: null, items: [{ label: 'admin.dashboard.title', route: routes.dashboard, icon: 'dashboard' }] },
-  // Clients, Matters and Workspace Templates join in Phase 2
-  { group: 'admin.nav.firm', items: [] },
+  {
+    group: 'admin.nav.firm',
+    items: [
+      { label: 'admin.nav.clients', route: routes.clients, icon: 'building' },
+      { label: 'admin.nav.matters', route: routes.matters, icon: 'briefcase' },
+      { label: 'admin.nav.templates', route: routes.templates, icon: 'template' },
+    ],
+  },
   // Users and Groups, in Phase 4
   { group: 'admin.nav.people', items: [] },
   // Stores and Backends, in Phase 3
@@ -51,7 +57,7 @@ export const NAV: readonly NavGroup[] = [
   { group: 'admin.nav.monitoring', items: [] },
 ]
 
-/** The label of the screen at an address of the app (with ADMIN_BASE), or undefined when no shipped screen is there */
+/** The label of the screen at a path of the app (with ADMIN_BASE, no query), or undefined when no shipped screen is there */
 export function screenAt(href: string, nav: readonly NavGroup[] = NAV): string | undefined {
   if (href !== ADMIN_BASE && !href.startsWith(`${ADMIN_BASE}/`)) return undefined
   const path = href.slice(ADMIN_BASE.length) || '/'

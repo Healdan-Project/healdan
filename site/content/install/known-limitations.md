@@ -39,9 +39,9 @@ weight: 13
   says what the person finds there.
 - **Provider accounts can't use LogicalDOC's API keys.** An account that signs in through a provider never signs in
   with an API key, on any route, as the key would skip the provider. Linking an account to a provider deletes the
-  API keys it had and closes the sessions they opened, and so does unlinking it. The web page still lets a provider
-  account make a key, under the person icon, **Security → API Keys**, but that key never signs in, and unlinking
-  deletes it rather than let it start working.
+  API keys it had and closes the sessions they opened, and so does unlinking it. A key a provider account makes on
+  the web page, under the person icon, **Security → API Keys**, never signs in either, and unlinking deletes it
+  rather than let it start working.
 - **Web page sessions aren't checked again with the provider.** Healdan checks a Healdan Helper sign-in with its
   provider every eight hours, but not a sign-in to the web page. A web page session stays open after the person is
   disabled at the provider, until they sign out, it times out, or an administrator kills it.
@@ -158,12 +158,13 @@ weight: 13
   - your profile and password, and your messages;
   - making and editing search folders;
   - choosing and reordering the list's columns, and setting properties on many documents at once;
-  - moving and deleting a matter's own folder or a Store, which an administrator does there, and copying documents and
-    folders, and locking documents;
+  - moving and deleting a Store, which an administrator does there (a matter's own folder is moved and deleted on the
+    matter's page in the Admin app), and copying documents and folders, and locking documents;
   - tags, and a bookmark's own name and description (the Bookmarks section; the app's My Favorites adds and removes
     them).
 
-  Administration is there as well, apart from [the Admin app](#the-admin-app)'s Dashboard.
+  Administration is there as well, apart from what [the Admin app](#the-admin-app) has: its Dashboard, its clients
+  and matters with their workspaces, and the workspace templates.
 - **The Classic Interface's Trash lists a deleted folder's contents as rows of their own.** Healdan records a folder
   and what it held as one item, but LogicalDOC's Trash screen lists every deleted row, so a deleted folder's documents
   and subfolders show beside it. It also restores into the folder open in its tree, not where the item was deleted
@@ -190,11 +191,12 @@ weight: 13
 
 ## The Admin App
 
-- **Only the Dashboard so far.** The Admin app at `/admin/` has its Dashboard and nothing else yet. Stores, clients
-  and matters, workspace templates, users and groups, permissions, Healdan Settings, storage backends, scheduled
-  tasks, search and indexing and the server's log are all in the Classic Interface, which the Admin app's left pane
-  and its links open. Its find opens the Classic Interface too, not the client, matter or person it found. See
-  [The Admin App](../../admin/the-admin-app/).
+- **The Dashboard, clients, matters and templates so far.** The Admin app at `/admin/` has its Dashboard, the clients
+  and matters with a page for each, each matter's workspace and the workspace templates, and makes a Store with New
+  Store. The rest of the Stores' screens, users and groups, the permissions of Stores and documents, Healdan Settings,
+  storage backends, scheduled tasks, search and indexing and the server's log are all in the Classic Interface, which
+  the Admin app's left pane and its links open. Its find opens a client's or a matter's page in the Admin app, but
+  the Classic Interface for a person, not the person it found. See [The Admin App](../../admin/the-admin-app/).
 - **For the `admin` group only.** A group given Administration screens through the Classic Interface's menus doesn't
   get the Admin app, and keeps using those screens there.
 - **As the User app,** it needs a [secure address](#the-user-app) and a host name of its own, is made for current

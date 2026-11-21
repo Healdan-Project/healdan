@@ -4,15 +4,17 @@ weight: 7
 ---
 
 Healdan's own settings are under **Administration → Healdan → Settings**. Click **Save** after changing them.
-Clients are saved from their own window, without Save. Two tabs sit beside them: **Sign-In**, which sets up signing
-in through a provider, such as Microsoft Entra ID (see [Sign-In Providers](#sign-in-providers)), and **Storage**,
-which sets up where each Store keeps its files (see [The Storage Tab](#the-storage-tab)).
+The client list there saves each client from its own window, without Save, though clients are made and renamed in
+the Admin app now (see [Clients and Matters](../clients-and-matters/#clients)). Two tabs sit beside the settings:
+**Sign-In**, which sets up signing in through a provider, such as Microsoft Entra ID (see
+[Sign-In Providers](#sign-in-providers)), and **Storage**, which sets up where each Store keeps its files (see
+[The Storage Tab](#the-storage-tab)).
 
 ![The Healdan settings panel, with the Sign-In and Storage tabs beside it: matter labels, numbering, default Class, the Recent Matters window, the next doc #, Start In set to User App, the two device sign-in limits, Removed Items Kept, API origins allowed (CORS), and the client list with Add client and Edit, holding seven clients from 998 Ashcombe Reeve LLP to 1006 Oliver and Grace Pemberton](healdan-settings.png)
 
 | Setting | What it does |
 |---|---|
-| Matter label, Plural label | the word Healdan uses for a matter, such as Matter and Matters, or Project and Projects. It shows in the scope picker, the left pane's lists, the New Matter dialog and this panel, and renames the Matter property and the right-click menu items. Others see it after they next sign in. "Client" can't be changed |
+| Matter label, Plural label | the word Healdan uses for a matter, such as Matter and Matters, or Project and Projects. It shows in the scope picker, the left pane's lists, the New Matter dialog, the Admin app's screens and this panel, and renames the Matter property and the right-click menu items. Others see it after they next sign in. "Client" can't be changed |
 | Numbering | per client or system-wide. See [Matter Numbers](../clients-and-matters/#matter-numbers) |
 | Default Class | the Class a document gets when nothing above it sets one. "Docs" to begin with |
 | Recent Matters window | how many days of a person's work their Recent Matters list covers. 30 to begin with |
@@ -22,7 +24,7 @@ which sets up where each Store keeps its files (see [The Storage Tab](#the-stora
 | Device sign-in lasts at most (days) | how long a device's sign-in lasts however often it's used. 365 to begin with, from 1 to 3650, and no less than the unused days. A change applies to sign-ins made after it |
 | Removed Items Kept | how many days an administrator can still restore an item removed from the Trash, before the nightly job destroys it for good. 30 to begin with, and from 1 to 365. A change applies to everything already removed, not only to what is removed after it. See [The Trash and Removed Items](../the-trash-and-removed-items/) |
 | API origins allowed (CORS) | the addresses, other than Healdan's own, whose pages may call the API, such as `https://localhost:3000`, separated by commas: scheme, host and an optional port, with no path and no `*`. Empty to begin with, which is right unless an add-in is served from another address |
-| Clients | the client list. **Add client** adds one, and **Edit** changes the selected client's name |
+| Clients | the client list. **Add client** adds one, and **Edit** changes the selected client's name. It still works, though the Admin app's **Clients** is where clients are made and renamed now: see [Clients and Matters](../clients-and-matters/#clients). Healdan records each client made and each rename, from either, with who made it and when |
 
 ## The Class and Subclass Lists
 
@@ -81,7 +83,7 @@ services.
 - **Alerts.** When a username, an address or an API key gets blocked, the users in `throttle.alert.recipients`
   (`admin` to begin with) get one message in Healdan about it, and an email too if
   [outgoing email](../system/outgoing-email/) is set up. Attempts during the block don't send more.
-- **`admin` and the server's own address.** LogicalDOC never blocks the `admin` account signing in from
+- **`admin` and the server's own address.** The throttle never blocks the `admin` account signing in from
   `127.0.0.1` or `::1`. Only a request from inside the app's container comes from that address, and Healdan believes
   a forwarded `127.0.0.1` only from a proxy it trusts. Give `admin` a long password that isn't used anywhere else
   all the same.
