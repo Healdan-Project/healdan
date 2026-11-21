@@ -12,6 +12,7 @@ import com.logicaldoc.healdan.HealdanRuleException;
 import com.logicaldoc.healdan.admin.storage.StorageRecords.AddedBackend;
 import com.logicaldoc.healdan.admin.storage.StorageRecords.BackendDetail;
 import com.logicaldoc.healdan.admin.storage.StorageRecords.BackendDraft;
+import com.logicaldoc.healdan.admin.storage.StorageRecords.BackendList;
 import com.logicaldoc.healdan.admin.storage.StorageRecords.KeyEvent;
 import com.logicaldoc.healdan.admin.storage.StorageRecords.StorageLimits;
 import com.logicaldoc.healdan.admin.storage.StorageRecords.StorageOverview;
@@ -58,6 +59,23 @@ public interface StorageAdministration {
 	Optional<BackendDetail> backend(long id) throws PersistenceException;
 
 	/**
+	 * @return every backend as {@link #backend} gives it, and the files with no Store, from one reading of the
+	 *         backends' and the Stores' files, as {@link #overview} reads them; while storage backends are off,
+	 *         {@code on} false, no backend and the other files' counts 0
+	 * @throws PersistenceException error at data layer
+	 */
+	BackendList backends() throws PersistenceException;
+
+	/**
+	 * Whether a backend is there to act on, without counting its files: what a route asks before it changes one.
+	 *
+	 * @param id a backend
+	 * @return true if storage backends are on and the backend exists; false otherwise, as {@link #backend} is empty
+	 * @throws PersistenceException error at data layer
+	 */
+	boolean exists(long id) throws PersistenceException;
+
+	/**
 	 * @return the most each storage setting may be; the least is 1 for each
 	 */
 	StorageLimits limits();
@@ -101,7 +119,7 @@ public interface StorageAdministration {
 	 * @param secret a new S3 secret; null or blank keeps the stored one
 	 * @param newKey as for {@link #add}
 	 * @param by the administrator
-	 * @return the backend as saved
+	 * @return the backend as saved, read as {@link #backend} reads it but for this backend's files alone
 	 * @throws PersistenceException a {@link SecretKeyMissingProblem}, with nothing saved, as for {@link #add}; a
 	 *         {@link HealdanRuleException} saying why it was refused; or an error at data layer
 	 */

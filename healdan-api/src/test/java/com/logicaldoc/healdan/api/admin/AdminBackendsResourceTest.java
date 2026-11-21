@@ -9,7 +9,6 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 
 import org.junit.After;
@@ -29,7 +28,7 @@ import com.logicaldoc.healdan.admin.storage.StorageRecords.StuckFile;
 import com.logicaldoc.healdan.api.ApiCall;
 import com.logicaldoc.healdan.api.ApiResponse;
 import com.logicaldoc.healdan.api.ApiTestCase;
-import com.logicaldoc.healdan.api.ProblemMapper;
+import com.logicaldoc.healdan.api.admin.AdminMattersResourceTest.Body;
 import com.logicaldoc.healdan.setting.HealdanSettings;
 import com.logicaldoc.healdan.support.LogCapture;
 
@@ -588,12 +587,12 @@ public class AdminBackendsResourceTest extends ApiTestCase {
 	 */
 	@Test
 	public void testNoAnswerRecordOrLogHoldsASecret() throws Exception {
+		jdbc().update("delete from hd_admin_event");
 		long wasabi = port.s3("Wasabi EU", true, false, BackendInfo.OK);
 		port.storeBackends.put(store.getId(), wasabi);
 		List<String> withKey = new ArrayList<>();
 		List<String> without = new ArrayList<>();
-		try (LogCapture mapper = LogCapture.of(ProblemMapper.class);
-				LogCapture stores = LogCapture.of(AdminStoresResource.class)) {
+		try (LogCapture log = LogCapture.root()) {
 			withKey.add(post(BACKENDS).webSession(web).json(s3("Backup")).send().text());
 			withKey.add(post(BACKENDS + "/" + wasabi + "/recovery-key/show").webSession(web).send().text());
 
@@ -603,7 +602,11 @@ public class AdminBackendsResourceTest extends ApiTestCase {
 					post(BACKENDS + "/" + wasabi + "/recovery-key/enter")
 							.json(new Body().with("recoveryKey", FakeStoragePort.RECOVERY_KEY)),
 					post(BACKENDS + "/" + wasabi + "/recovery-key/confirm")
-							.json(new Body().with("lastGroup", FakeStoragePort.LAST_GROUP))))
+							.json(new Body().with("lastGroup", FakeStoragePort.LAST_GROUP)),
+					// A Store's own changes, which the routes record: made on the backend, then renamed
+					post(STORES).json(new Body().with("name", "Cloud Work").with("groupIds", List.of())
+							.with("backendId", wasabi)),
+					patch(STORES + "/" + store.getId()).json(new Body().with("name", "Firm Work"))))
 				without.add(call.webSession(web).send().text());
 			// Refused, each typing a secret: a 422, a 409 and a secret-key-missing
 			without.add(post(BACKENDS).webSession(web).json(local("Archive", "/srv/a")
@@ -620,7 +623,7 @@ public class AdminBackendsResourceTest extends ApiTestCase {
 			for (ApiCall call : routesButShow(wasabi, store.getId()))
 				without.add(call.webSession(web).send().text());
 
-			for (String logged : concat(mapper.lines(), stores.lines()))
+			for (String logged : log.lines())
 				assertNoSecret("logged: " + logged, logged);
 		}
 
@@ -630,12 +633,58 @@ public class AdminBackendsResourceTest extends ApiTestCase {
 		}
 		for (String answer : without)
 			assertNoSecret(answer, answer);
-		for (String row : jdbc().queryForList("select coalesce(hd_detail, '') || ' ' || coalesce(hd_targetname, '')"
-				+ " from hd_admin_event", String.class))
+		// What the routes record, a Store's own changes; the storage changes are the port's to record, and the real
+		// port's records hold no secret (StorageAdministrationImplTest#testS3SecretsThroughThePort)
+		List<String> recorded = jdbc().queryForList("select hd_action || ' ' || coalesce(hd_detail, '') || ' '"
+				+ " || coalesce(hd_targetname, '') from hd_admin_event order by hd_id", String.class);
+		assertEquals(recorded.toString(), List.of("store.created", "store.renamed"),
+				recorded.stream().map(row -> row.substring(0, row.indexOf(' '))).toList());
+		for (String row : recorded)
 			assertNoSecret(row, row);
 		// And what the port was told holds the secret only where it's typed
 		for (String call : port.calls)
 			assertNoSecret(call, call);
+	}
+
+	// What a request reads
+
+	/**
+	 * Each request counts the backends' files once at most, as the real port's overview, its backend and its list of
+	 * them each read every backend's and every Store's files: the list from its list form, a change's answer once
+	 * after it, and a route that only needs the backend to be there asks without counting
+	 */
+	@Test
+	public void testEachRequestReadsTheBackendsOnceAtMost() throws Exception {
+		long wasabi = port.s3("Wasabi EU", true, false, BackendInfo.OK);
+		long folder = port.local("Archive", "/srv/archive");
+		port.local("Spare", "/srv/spare");
+		String one = BACKENDS + "/" + wasabi;
+		String key = one + "/recovery-key/";
+
+		assertReads(1, get(BACKENDS));
+		assertReads(1, get(one));
+		assertReads(1, patch(one).json(new Body().with("name", "Wasabi")));
+		assertReads(1, post(key + "confirm").json(new Body().with("lastGroup", FakeStoragePort.LAST_GROUP)));
+		assertReads(1, post(key + "enter").json(new Body().with("recoveryKey", FakeStoragePort.RECOVERY_KEY)));
+		assertReads(0, post(key + "show"));
+		assertReads(0, get(one + "/key-events"));
+		assertReads(0, post(one + "/test"));
+		assertReads(0, post(BACKENDS + "/test").json(new Body().with("kind", "local")));
+		assertReads(0, post(BACKENDS).json(local("Ledger", "/srv/ledger")));
+		assertReads(1, get(STORES + "/" + store.getId() + "/backend?backendId=" + wasabi));
+		assertReads(1, put(STORES + "/" + store.getId() + "/backend").json(new Body().with("backendId", wasabi)));
+		assertReads(1, post(STORES).json(new Body().with("name", "Cloud Work").with("groupIds", List.of())
+				.with("backendId", wasabi)));
+		assertReads(1, get(STORES));
+		assertReads(1, get(SETTINGS));
+		assertReads(0, delete(BACKENDS + "/" + folder));
+	}
+
+	private void assertReads(int reads, ApiCall call) {
+		port.reads = 0;
+		ApiResponse response = call.webSession(web).send();
+		assertTrue(response.toString(), response.status() < 300);
+		assertEquals(response.toString(), reads, port.reads);
 	}
 
 	// Who gets in
@@ -656,17 +705,6 @@ public class AdminBackendsResourceTest extends ApiTestCase {
 	 * Helpers
 	 */
 
-	/** A JSON object, in the order its members are added; null values included */
-	static final class Body extends LinkedHashMap<String, Object> {
-
-		private static final long serialVersionUID = 1L;
-
-		Body with(String name, Object value) {
-			put(name, value);
-			return this;
-		}
-	}
-
 	private static Body local(String name, String path) {
 		return new Body().with("kind", "local").with("name", name).with("path", path);
 	}
@@ -685,12 +723,6 @@ public class AdminBackendsResourceTest extends ApiTestCase {
 		assertFalse(what, text.contains(FakeStoragePort.SECRET));
 		assertFalse(what, text.contains(FakeStoragePort.RECOVERY_KEY));
 		assertFalse(what, text.contains(FakeStoragePort.RECOVERY_KEY.replace(" ", "")));
-	}
-
-	private static List<String> concat(List<String> a, List<String> b) {
-		List<String> all = new ArrayList<>(a);
-		all.addAll(b);
-		return all;
 	}
 
 	private static List<Long> ids(JsonNode list) {

@@ -37,7 +37,11 @@ public final class LogCapture implements AutoCloseable {
 	private final Level previous;
 
 	private LogCapture(Class<?> source, Level level) {
-		logger = (Logger) LogManager.getLogger(source);
+		this((Logger) LogManager.getLogger(source), level);
+	}
+
+	private LogCapture(Logger logger, Level level) {
+		this.logger = logger;
 		this.level = level;
 		LoggerConfig config = logger.getContext().getConfiguration().getLoggerConfig(logger.getName());
 		configured = config.getName().equals(logger.getName());
@@ -75,6 +79,16 @@ public final class LogCapture implements AutoCloseable {
 	 */
 	public static LogCapture of(Class<?> source, Level level) {
 		return new LogCapture(source, level);
+	}
+
+	/**
+	 * Starts collecting the lines the root logger writes: those of every logger that passes its events up to it, at
+	 * the levels the configuration lets through.
+	 *
+	 * @return the capture
+	 */
+	public static LogCapture root() {
+		return new LogCapture((Logger) LogManager.getRootLogger(), null);
 	}
 
 	/**

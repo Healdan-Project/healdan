@@ -16,8 +16,7 @@ import com.logicaldoc.healdan.admin.AdminArea;
 import com.logicaldoc.healdan.admin.storage.StorageAdministration;
 import com.logicaldoc.healdan.admin.storage.StorageRecords.BackendDetail;
 import com.logicaldoc.healdan.admin.storage.StorageRecords.BackendDraft;
-import com.logicaldoc.healdan.admin.storage.StorageRecords.BackendInfo;
-import com.logicaldoc.healdan.admin.storage.StorageRecords.StorageOverview;
+import com.logicaldoc.healdan.admin.storage.StorageRecords.BackendList;
 import com.logicaldoc.healdan.api.ApiProblem;
 import com.logicaldoc.healdan.api.Caller;
 import com.logicaldoc.healdan.api.admin.StorageView.AddedBackend;
@@ -141,17 +140,14 @@ public class AdminBackendsResource {
 	@GET
 	public BackendOverview list() {
 		StorageAdministration port = StoragePort.get().require();
-		StorageOverview overview = StoragePort.run("Can't read the storage overview", port::overview);
-		List<Backend> backends = new ArrayList<>();
-		for (BackendInfo info : overview.backends().stream()
-				.sorted(Comparator.comparing((BackendInfo b) -> b.id() != AdminStoresResource.ORIGINAL)
-						.thenComparingLong(BackendInfo::id))
-				.toList())
-			// One removed since the overview was read isn't listed
-			StoragePort.run("Can't read storage backend #" + info.id(), () -> port.backend(info.id()))
-					.map(Backend::of).ifPresent(backends::add);
-		return new BackendOverview(overview.on(), backends,
-				new PendingFiles(overview.otherFiles(), overview.otherBytes(), overview.otherStuck()));
+		// Every backend and the files with no Store, read together
+		BackendList list = StoragePort.run("Can't read the storage backends", port::backends);
+		List<Backend> backends = list.backends().stream()
+				.sorted(Comparator.comparing((BackendDetail b) -> b.id() != AdminStoresResource.ORIGINAL)
+						.thenComparingLong(BackendDetail::id))
+				.map(Backend::of).toList();
+		return new BackendOverview(list.on(), backends,
+				new PendingFiles(list.otherFiles(), list.otherBytes(), list.otherStuck()));
 	}
 
 	/**
@@ -225,9 +221,9 @@ public class AdminBackendsResource {
 		if (body == null)
 			throw ApiProblem.badRequest("Send the settings as a JSON object.");
 		StorageAdministration port = StoragePort.get().require();
-		String kind = body.kind();
-		boolean local = LOCAL.equals(StringUtils.strip(kind));
-		boolean s3 = S3.equals(StringUtils.strip(kind));
+		String kind = StringUtils.strip(body.kind());
+		boolean local = LOCAL.equals(kind);
+		boolean s3 = S3.equals(kind);
 		BackendDraft draft = new BackendDraft(kind, body.name(), s3 ? null : body.path(),
 				local ? null : body.endpoint(), local ? null : body.region(), local ? null : body.bucket(),
 				local ? null : body.prefix(), !local && Boolean.TRUE.equals(body.pathStyle()),
@@ -339,7 +335,7 @@ public class AdminBackendsResource {
 	@Path("{id: [0-9]+}")
 	public Response remove(@PathParam("id") long id) {
 		StorageAdministration port = StoragePort.get().require();
-		StoragePort.backend(port, id);
+		StoragePort.existing(port, id);
 		StoragePort.run("Can't remove storage backend #" + id, () -> {
 			port.remove(id, Caller.current().user());
 			return null;
@@ -357,7 +353,7 @@ public class AdminBackendsResource {
 	@Path("{id: [0-9]+}/test")
 	public BackendTestResult test(@PathParam("id") long id) {
 		StorageAdministration port = StoragePort.get().require();
-		StoragePort.backend(port, id);
+		StoragePort.existing(port, id);
 		return new BackendTestResult(StoragePort.run("Can't test storage backend #" + id, () -> port.test(id)));
 	}
 
@@ -371,7 +367,7 @@ public class AdminBackendsResource {
 	@Path("{id: [0-9]+}/recovery-key/show")
 	public RecoveryKey showRecoveryKey(@PathParam("id") long id) {
 		StorageAdministration port = StoragePort.get().require();
-		StoragePort.backend(port, id);
+		StoragePort.existing(port, id);
 		return new RecoveryKey(StoragePort.run("Can't show storage backend #" + id + "'s recovery key",
 				() -> port.showRecoveryKey(id, Caller.current().user())));
 	}
@@ -390,7 +386,7 @@ public class AdminBackendsResource {
 		if (body == null)
 			throw ApiProblem.badRequest("Send the last group as a JSON object.");
 		StorageAdministration port = StoragePort.get().require();
-		StoragePort.backend(port, id);
+		StoragePort.existing(port, id);
 		if (StringUtils.isBlank(body.lastGroup()))
 			throw ApiProblem.validation(List.of(new FieldError("lastGroup", "required",
 					"Type the recovery key's last four characters.")));
@@ -415,7 +411,7 @@ public class AdminBackendsResource {
 		if (body == null)
 			throw ApiProblem.badRequest("Send the recovery key as a JSON object.");
 		StorageAdministration port = StoragePort.get().require();
-		StoragePort.backend(port, id);
+		StoragePort.existing(port, id);
 		if (StringUtils.isBlank(body.recoveryKey()))
 			throw ApiProblem.validation(
 					List.of(new FieldError("recoveryKey", "required", "Type or paste the recovery key.")));
@@ -434,7 +430,7 @@ public class AdminBackendsResource {
 	@Path("{id: [0-9]+}/key-events")
 	public List<KeyEvent> keyEvents(@PathParam("id") long id) {
 		StorageAdministration port = StoragePort.get().require();
-		StoragePort.backend(port, id);
+		StoragePort.existing(port, id);
 		return StoragePort.run("Can't read storage backend #" + id + "'s key history", () -> port.keyEvents(id))
 				.stream().map(KeyEvent::of).toList();
 	}

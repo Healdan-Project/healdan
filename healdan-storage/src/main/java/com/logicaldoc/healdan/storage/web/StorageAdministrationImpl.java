@@ -26,6 +26,7 @@ import org.springframework.stereotype.Component;
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
+import com.logicaldoc.core.security.Tenant;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.gui.frontend.client.healdan.beans.GUIStorageBackend;
 import com.logicaldoc.gui.frontend.client.healdan.beans.GUIStorageEvent;
@@ -42,6 +43,7 @@ import com.logicaldoc.healdan.admin.storage.StorageRecords.AddedBackend;
 import com.logicaldoc.healdan.admin.storage.StorageRecords.BackendDetail;
 import com.logicaldoc.healdan.admin.storage.StorageRecords.BackendDraft;
 import com.logicaldoc.healdan.admin.storage.StorageRecords.BackendInfo;
+import com.logicaldoc.healdan.admin.storage.StorageRecords.BackendList;
 import com.logicaldoc.healdan.admin.storage.StorageRecords.KeyEvent;
 import com.logicaldoc.healdan.admin.storage.StorageRecords.StorageLimits;
 import com.logicaldoc.healdan.admin.storage.StorageRecords.StorageOverview;
@@ -56,6 +58,8 @@ import com.logicaldoc.healdan.storage.StorageBackend;
 import com.logicaldoc.healdan.storage.StorageBackendDAO;
 import com.logicaldoc.healdan.storage.StorageEvent;
 import com.logicaldoc.healdan.storage.StorageSettings;
+import com.logicaldoc.healdan.storage.StoreBackend;
+import com.logicaldoc.healdan.storage.StoreBackendDAO;
 import com.logicaldoc.healdan.storage.StoredFiles;
 
 /**
@@ -103,15 +107,18 @@ public class StorageAdministrationImpl implements StorageAdministration {
 
 	private final SecretBox box;
 
+	private final StoreBackendDAO storeBackends;
+
 	@Autowired
 	public StorageAdministrationImpl(StorageAdmin admin, AdminEvents events, StorageBackendDAO backends,
-			StoredFiles files, StorageSettings storageSettings, SecretBox box) {
+			StoredFiles files, StorageSettings storageSettings, SecretBox box, StoreBackendDAO storeBackends) {
 		this.admin = admin;
 		this.events = events;
 		this.backends = backends;
 		this.files = files;
 		this.storageSettings = storageSettings;
 		this.box = box;
+		this.storeBackends = storeBackends;
 	}
 
 	// Reading
@@ -147,16 +154,58 @@ public class StorageAdministrationImpl implements StorageAdministration {
 		// As the overview: nothing to show while CE keeps its files in its own store
 		if (!gui.isOn())
 			return Optional.empty();
-		// The tab lists the Templates Store among the workspaces, on Original; it holds templates, not files
-		Long templates = HealdanSettings.get().templatesStoreId();
 		for (GUIStorageBackend backend : gui.getBackends())
 			if (backend.getId() == id)
-				return Optional.of(detail(backend,
-						Arrays.stream(gui.getStores())
-								.filter(store -> store.getBackendId() == id
-										&& !Long.valueOf(store.getStoreId()).equals(templates))
-								.map(GUIStoreBackend::getName).sorted(String.CASE_INSENSITIVE_ORDER).toList()));
+				return Optional.of(detail(backend, storesOn(gui, id)));
 		return Optional.empty();
+	}
+
+	@Override
+	public BackendList backends() throws PersistenceException {
+		GUIStorageOverview gui = admin.overview();
+		if (!gui.isOn())
+			return new BackendList(false, List.of(), 0, 0, 0);
+		List<BackendDetail> details = new ArrayList<>();
+		for (GUIStorageBackend backend : gui.getBackends())
+			details.add(detail(backend, storesOn(gui, backend.getId())));
+		return new BackendList(true, details, gui.getOtherWaiting(), gui.getOtherWaitingSize(), gui.getOtherStuck());
+	}
+
+	@Override
+	public boolean exists(long id) throws PersistenceException {
+		// As the overview: none while CE keeps its files in its own store
+		return admin.on.getAsBoolean() && backends.findById(id) != null;
+	}
+
+	/**
+	 * @return the names of the Stores the tab's overview has on the backend, by name: not the Templates Store, which
+	 *         the tab lists among the workspaces, on Original, as it holds templates, not files
+	 */
+	private static List<String> storesOn(GUIStorageOverview gui, long id) {
+		Long templates = HealdanSettings.get().templatesStoreId();
+		return Arrays.stream(gui.getStores())
+				.filter(store -> store.getBackendId() == id && !Long.valueOf(store.getStoreId()).equals(templates))
+				.map(GUIStoreBackend::getName).sorted(String.CASE_INSENSITIVE_ORDER).toList();
+	}
+
+	/**
+	 * @return the names of the Stores on the backend, by name, as {@link #storesOn(GUIStorageOverview, long)} gives
+	 *         them, read from the Stores' backends without the overview's counts: a Store with none of its own is on
+	 *         Original
+	 */
+	private List<String> storesOn(long id) throws PersistenceException {
+		Map<Long, Long> mapped = new HashMap<>();
+		for (StoreBackend row : storeBackends.findAll())
+			if (row.getDeleted() == 0)
+				mapped.put(row.getStoreId(), row.getBackendId());
+		Long templates = HealdanSettings.get().templatesStoreId();
+		List<String> names = new ArrayList<>();
+		for (Folder store : FolderDAO.get().findWorkspaces(Tenant.DEFAULT_ID))
+			if (store.getId() != Folder.DEFAULTWORKSPACEID && !Long.valueOf(store.getId()).equals(templates)
+					&& mapped.getOrDefault(store.getId(), StorageBackend.ORIGINAL) == id)
+				names.add(store.getName());
+		names.sort(String.CASE_INSENSITIVE_ORDER);
+		return names;
 	}
 
 	@Override
@@ -233,7 +282,8 @@ public class StorageAdministrationImpl implements StorageAdministration {
 						new AdminEvent(AdminArea.STORAGE, "backend.changed", BACKEND, id, saved.getName(), changes),
 						by);
 		}
-		return backend(id).orElseGet(() -> detail(saved, List.of()));
+		// The tab's answer is the backend as saved, its own files counted: no overview of every backend's
+		return detail(saved, storesOn(id));
 	}
 
 	@Override

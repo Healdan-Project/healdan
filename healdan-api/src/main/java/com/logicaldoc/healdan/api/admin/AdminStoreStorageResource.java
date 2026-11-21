@@ -68,7 +68,7 @@ public class AdminStoreStorageResource {
 		SwitchPreview preview = null;
 		if (backendId != null) {
 			// None is listed while storage backends are off
-			StoragePort.backend(port, backendId);
+			StoragePort.existing(port, backendId);
 			var moving = StoragePort.run("Can't count Store #" + id + "'s move",
 					() -> port.previewSwitch(id, backendId));
 			preview = new SwitchPreview(backendId, moving.files(), moving.bytes());

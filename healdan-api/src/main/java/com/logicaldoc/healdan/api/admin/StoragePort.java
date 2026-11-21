@@ -90,7 +90,23 @@ public class StoragePort {
 	 *         are off, as none is listed then
 	 */
 	static BackendDetail backend(StorageAdministration port, long id) {
-		return run("Can't read storage backend #" + id, () -> port.backend(id))
-				.orElseThrow(() -> ApiProblem.notFound("There's no storage backend %d.".formatted(id)));
+		return run("Can't read storage backend #" + id, () -> port.backend(id)).orElseThrow(() -> noBackend(id));
+	}
+
+	/**
+	 * What a route asks before it acts on a backend, without counting the backends' files: those a route needs it
+	 * reads once, after.
+	 *
+	 * @param port the storage port
+	 * @param id a backend
+	 * @throws ApiProblem {@code 404 not-found} as {@link #backend} answers it
+	 */
+	static void existing(StorageAdministration port, long id) {
+		if (!run("Can't read storage backend #" + id, () -> port.exists(id)))
+			throw noBackend(id);
+	}
+
+	private static ApiProblem noBackend(long id) {
+		return ApiProblem.notFound("There's no storage backend %d.".formatted(id));
 	}
 }

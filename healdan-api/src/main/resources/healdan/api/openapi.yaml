@@ -2536,7 +2536,8 @@ paths:
         3. `403 forbidden` without the Delete permission on the item, unless
            the caller is an administrator.
         4. `409 refused` for a Store, with or without `folderId`: a Store
-           is restored in the Classic Interface.
+           is restored from Deleted Stores on the Admin app's Stores page,
+           or in the Classic Interface.
         5. Without `folderId`: `409 place-gone` when the folder it was
            deleted from isn't there for it: deleted, the caller can't read
            it, or Healdan's rules or the caller's permissions no longer let

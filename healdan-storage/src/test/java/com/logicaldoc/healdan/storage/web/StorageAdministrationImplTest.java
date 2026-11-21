@@ -47,6 +47,7 @@ import com.logicaldoc.healdan.admin.storage.StorageRecords.AddedBackend;
 import com.logicaldoc.healdan.admin.storage.StorageRecords.BackendDetail;
 import com.logicaldoc.healdan.admin.storage.StorageRecords.BackendDraft;
 import com.logicaldoc.healdan.admin.storage.StorageRecords.BackendInfo;
+import com.logicaldoc.healdan.admin.storage.StorageRecords.BackendList;
 import com.logicaldoc.healdan.admin.storage.StorageRecords.KeyEvent;
 import com.logicaldoc.healdan.admin.storage.StorageRecords.StorageLimits;
 import com.logicaldoc.healdan.admin.storage.StorageRecords.StorageOverview;
@@ -341,13 +342,43 @@ public class StorageAdministrationImplTest extends AbstractStorageTestCase {
 		port.setStoreBackend(store.getId(), id, boss);
 		assertEquals(List.of("Archive Store"), port.backend(id).orElseThrow().stores());
 		assertFalse(port.backend(StorageBackend.ORIGINAL).orElseThrow().stores().contains("Archive Store"));
+		// A save's answer, read for the backend alone, is what a read of every backend gives; saved as it is, it
+		// records nothing
+		BackendDetail kept = port.save(id, local("Archive", root, false), null, false, boss);
+		assertEquals(port.backend(id).orElseThrow(), kept);
+		assertEquals(List.of("Archive Store"), kept.stores());
+		// Original's save checks it, so it's read after
+		BackendDetail home = port.save(StorageBackend.ORIGINAL, local("Original", root, false), null, false, boss);
+		assertEquals(port.backend(StorageBackend.ORIGINAL).orElseThrow(), home);
+
+		// The Backends page: every backend as backend(id) gives it, Original first, and the files with no Store,
+		// from one overview
+		BackendList list = port.backends();
+		assertTrue(list.on());
+		assertEquals(StorageBackend.ORIGINAL, list.backends().get(0).id());
+		StorageOverview overview = port.overview();
+		assertEquals(overview.backends().stream().map(BackendInfo::id).toList(),
+				list.backends().stream().map(BackendDetail::id).toList());
+		for (BackendDetail each : list.backends())
+			assertEquals(port.backend(each.id()).orElseThrow(), each);
+		assertEquals(List.of(overview.otherFiles(), overview.otherBytes(), overview.otherStuck()),
+				List.of(list.otherFiles(), list.otherBytes(), list.otherStuck()));
+		// And whether one is there, without its files
+		assertTrue(port.exists(id));
+		assertTrue(port.exists(StorageBackend.ORIGINAL));
+		assertFalse(port.exists(999_999L));
+		// The switch alone is recorded
+		assertEquals(2, events().size());
 		port.setStoreBackend(store.getId(), StorageBackend.ORIGINAL, boss);
 		assertEquals(List.of(), port.backend(id).orElseThrow().stores());
-		// Original names every Store with no other backend, but never the Templates Store, which holds no files
+		// Original names every Store with no other backend, but never the Templates Store, which holds no files,
+		// whether its Stores are read with the overview or for a save's answer
 		List<String> onOriginal = port.backend(StorageBackend.ORIGINAL).orElseThrow().stores();
 		assertTrue(onOriginal.toString(), onOriginal.contains("Archive Store"));
 		String templates = FolderDAO.get().findById(HealdanSettings.get().templatesStoreId()).getName();
 		assertFalse(onOriginal.toString(), onOriginal.contains(templates));
+		assertEquals(onOriginal,
+				port.save(StorageBackend.ORIGINAL, local("Original", root, false), null, false, boss).stores());
 		assertEquals(3, events().size());
 
 		// A rename: the name alone, before and after
@@ -389,6 +420,8 @@ public class StorageAdministrationImplTest extends AbstractStorageTestCase {
 		admin.on = () -> false;
 		try {
 			assertTrue(port.backend(StorageBackend.ORIGINAL).isEmpty());
+			assertEquals(new BackendList(false, List.of(), 0, 0, 0), port.backends());
+			assertFalse(port.exists(StorageBackend.ORIGINAL));
 			refused("off", "Storage backends are off", () -> port.add(local("Spare", root, false), null, false, boss));
 			refused("off", "Storage backends are off",
 					() -> port.saveSettings(new StorageSettingsInfo(9, 9, 2), boss));

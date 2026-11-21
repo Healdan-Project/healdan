@@ -190,6 +190,23 @@ public final class StorageRecords {
 	}
 
 	/**
+	 * The Backends page: every backend as its edit form shows it, and the files with no Store, read together.
+	 *
+	 * @param on as {@link StorageOverview#on}; if not, no backend is listed and the other files' counts are 0
+	 * @param backends the backends, Original first
+	 * @param otherFiles as {@link StorageOverview#otherFiles}
+	 * @param otherBytes as {@link StorageOverview#otherBytes}
+	 * @param otherStuck as {@link StorageOverview#otherStuck}
+	 */
+	public record BackendList(boolean on, List<BackendDetail> backends, long otherFiles, long otherBytes,
+			long otherStuck) {
+
+		public BackendList {
+			backends = List.copyOf(backends);
+		}
+	}
+
+	/**
 	 * A backend just added.
 	 *
 	 * @param backend the backend as added
