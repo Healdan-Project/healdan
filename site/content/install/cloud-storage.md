@@ -104,8 +104,9 @@ Press **Test**, then **Add**. Save the recovery key in the firm's password manag
 
 ### Give a Store the Backend
 
-On a Store's page, such as Client Work's, in **Storage → Stores**, give it the new backend. Its files move to Wasabi
-in the background, and new saves into it go there too. <!-- P3 docs pass 2: the Store's page --> See
+On a Store's page, such as Client Work's, in **Storage → Stores**, press **Change Backend** and choose the new
+backend. Healdan says how many files will move before you press **Change Backend** in its window. Its files then move
+to Wasabi in the background, and new saves into it go there too. See
 [Choosing a Store's Backend](../../admin/storage-backends/choosing-a-stores-backend/).
 
 {{% /steps %}}

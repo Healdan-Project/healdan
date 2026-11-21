@@ -5,10 +5,12 @@ weight: 4
 
 A file that hasn't reached its Store's backend yet is **waiting to move**: after the Store was given another
 backend, after a matter moved in from another Store, or a save still to be uploaded. One the mover gave up on is
-**stuck**. A Store's page, in **Storage → Stores**, shows its own, and the [Backends list](../#the-backends-list)
-shows those of the files with no Store. <!-- P3 docs pass 2: a Store's waiting and stuck files on its page -->
-Neither updates while you watch it: they're asked again when you come back to the window, and **Refresh** on the
-Backends list asks at once.
+**stuck**. The Stores list, in **Storage → Stores**, says each Store's in its **Files** column, as "188 files waiting
+(11.3 MB)" or "3 files stuck", and **Up to Date** when there are none; a Store's page says the same under **Files**,
+and its **Storage** tab has **Waiting to Move** and **Stuck**, with the stuck files listed. The
+[Backends list](../#the-backends-list) shows those of the files with no Store. None of them updates while you watch
+it: they're asked again when you come back to the window, and **Refresh**, on the Stores list or the Backends list,
+asks at once.
 
 ## Retries
 
@@ -24,7 +26,9 @@ is, where it still opens, until you retry it.
 
 ## Stuck Files and Retry
 
-**Stuck Files** opens the list of stuck files, such as **Stuck Files with No Store**:
+A Store's stuck files are listed on its page's **Storage** tab, under **Stuck Files**, with **Retry** below them. For
+the files with no Store, **Stuck Files**, on the Backends list, opens the list in a window, **Stuck Files with No
+Store**. Each list has:
 
 | Column | What it shows |
 |---|---|
@@ -37,10 +41,12 @@ is, where it still opens, until you retry it.
 The list holds the files of the newest documents, a thousand at most, and says how many it shows when there are
 more, as "Listed: the files of the newest documents, 1,000 of 1,500."
 
-Put the cause right, such as the S3 user's permissions or a full disk, then press **Retry**, in the list or beside
-**Stuck Files**. Every stuck file goes back to waiting, with its tries counted from nought again, and moves with the
-others: "The stuck files with no Store wait to move again", and the list closes. While the retry is on its way, the
-list's **Close** is greyed out. Healdan records each retry that puts stuck files back to waiting, with who and when.
+Put the cause right, such as the S3 user's permissions or a full disk, then press **Retry**: under the Store's list,
+or, for the files with no Store, in their window or beside **Stuck Files**. Every stuck file goes back to waiting,
+with its tries counted from nought again, and moves with the others. Healdan says so, as "The stuck files of Client
+Work wait to move again" or "The stuck files with no Store wait to move again", and the window closes. While the retry
+is on its way, the window's **Close** is greyed out. Healdan records each retry that puts stuck files back to waiting,
+with who and when.
 
 ## Files with No Store
 

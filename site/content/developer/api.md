@@ -578,8 +578,10 @@ The calls:
   `admins-only`, then `409 already-filed` and `refused`). A caller restores the items they deleted, while they are in the
   Trash, and needs Delete on them; an administrator restores anyone's, from the Trash or from Removed. An item that
   doesn't exist, is restored or destroyed already, is someone else's, or is removed (for anyone but an administrator) is
-  `404`. A Store, which only an administrator deletes, in the Classic Interface, is restored there: it's `409 refused`,
-  with or without `folderId`, before anything is written, as no folder a client could send would change where it goes.
+  `404`. A Store's item, which only an administrator makes, is `409 refused`, with or without `folderId`, before
+  anything is written, as no folder a client could send would change where it goes: "A Store is restored from Deleted
+  Stores on the Admin app's Stores page, or in the Classic Interface." (`POST /v1/admin/stores/{id}/restore`, see
+  [Stores and Groups](#stores-and-groups)).
   A restore brings back only what that delete took, queues the documents for indexing, and never brings back what was
   removed since.
 - **`DELETE /trash/{id}`** removes an item, moving it and what it holds from the Trash to Removed, and answers `204`.
@@ -1016,9 +1018,9 @@ A change is checked in one order, and a refusal changes nothing:
 
 1. `400 bad-request` for a body that isn't the JSON the route takes, holds a member it doesn't take (but for those it
    answers `not-editable`), or holds NUL or a lone surrogate.
-2. `404 not-found` for what the path names, when it doesn't exist or isn't what the route acts on. One query
-   parameter is read the same way: `clientId` of `GET /v1/admin/matters/next-number`. A list's filter that names
-   nothing keeps nothing.
+2. `404 not-found` for what the path names, when it doesn't exist or isn't what the route acts on. Two query
+   parameters are read the same way: `clientId` of `GET /v1/admin/matters/next-number`, and `backendId` of
+   `GET /v1/admin/stores/{id}/backend`. A list's filter that names nothing keeps nothing.
 3. `422 validation` for a member that's missing or blank (`required`), one that can't change (`not-editable`), and
    what a route names, such as an access row's, each in `fields`.
 4. `409 refused` for what Healdan's rules refuse, with the rule's sentence in `detail`, which the Admin app shows as
@@ -1027,7 +1029,9 @@ A change is checked in one order, and a refusal changes nothing:
    delete while one is immutable, with the sentence the public routes' `checked-out` and `immutable` give, but no
    `holds`.
 
-Beside `401` and the two `403`s above, these are the only problems the admin routes answer. A create that loses a
+Beside `401` and the two `403`s above, these are the only problems the admin routes answer, but for the Storage
+routes' two (see [Storage](#storage)): `503 storage-unavailable`, on a server without Healdan's storage module, after a
+body that isn't the JSON expected and before anything else, and `409 secret-key-missing`. A create that loses a
 race for its number, of two creates of one client number, or of one number in one client's matters, at the same
 moment, is answered as a number already used, `409 refused` with the same sentence: the database's unique index
 refuses the second, and the server asks the number's check again once the first has committed.
@@ -1257,17 +1261,58 @@ through the routes above, and its name is checked as a folder's is (`FolderName`
 ### Stores and Groups
 
 A Store is a workspace directly under the root that holds matters: LogicalDOC's Default workspace and the Templates
-Store aren't Stores.
+Store aren't Stores, and nor is the root. The Stores routes are the `STORES` area's; a Store's backend and files are
+the Storage area's, under the same address (see [Storage](#storage)). A Store's create, rename and restore hold the
+root's lock while they check and give its name, so of two at the same moment giving one name, the second is refused
+as a name taken, `409 refused` with the same sentence.
 
-- **`GET /v1/admin/stores`**: every live Store, `{ "id", "name" }`, by name, ignoring case, as a plain array: it's a
-  short list, for the Store menus of New Matter, Move to Another Store and the Matters list.
-- **`POST /v1/admin/stores`** with `{ "name", "groupIds" }` makes the Store, and gives each group in `groupIds`, a
-  person's own group among them, Read, the Store's one level, **Can See**, all in one transaction, so a matter can be
-  made in it at once. It answers `201` with the Store and no `Location`. An empty `groupIds` leaves the Store to
-  administrators. A new Store keeps its files on Original. A `groupIds` that names a group twice or holds a null is
-  `400`; the name is checked as a folder's is (`422`), and a missing `groupIds` is `422` `required`; a name another
-  live folder directly under the root has, compared without regard to case, and a group that no longer exists, are
-  `409 refused`.
+- **`GET /v1/admin/stores`**: every live Store, by name, ignoring case, as a plain array: a short list, for the Store
+  menus of New Matter, Move to Another Store and the Matters list, and for the Stores list. Each is a `StoreInfo`:
+  `id`, `name`, `matters` (its live matters, counted at the request), `documents` and `bytes` (its matters', from the
+  Dashboard's usage summary, null with `figuresAt` until the first after a start, and 0 for a Store made or restored
+  since the last), `figuresAt`, `readers` (each group and person whose row has Read, with `groupId`, `name` and
+  `person`), `backend` (the `StoreBackend` it keeps its files on: `id`, `name`, `kind` and `encrypted`) and `pending`
+  (`waiting`, `waitingBytes` and `stuck`, its files not on that backend yet and those the mover gave up on). `backend`
+  and `pending` are null while storage backends are off, and on a server without the storage module, which this route
+  answers all the same.
+- **`POST /v1/admin/stores`** with `{ "name", "groupIds", "backendId" }` makes the Store, and gives each group in
+  `groupIds`, a person's own group among them, Read, the Store's one level, **Can See**, all in one transaction, so a
+  matter can be made in it at once. It answers `201` with `{ "id", "name" }` and no `Location`. An empty `groupIds`
+  leaves the Store to administrators. The Store keeps its files on the backend `backendId` names, Original when it's
+  null or left out: the backend is checked before anything is made, the Store made, then given the backend as
+  `PUT /v1/admin/stores/{id}/backend` gives one. Should the backend stop being offered in between, the Store stays on
+  Original, the answer is still `201`, and the server logs it. A `groupIds` that names a group twice or holds a null
+  is `400`; the name is checked as a folder's is (`422`), and a missing `groupIds` is `422` `required`. It's
+  `409 refused` for a name another live folder directly under the root has, compared without regard to case, a group
+  that no longer exists, and a `backendId` that names no backend, one not offered to Stores (an encrypted backend whose
+  recovery key isn't confirmed), or any but Original while storage backends are off or there's no storage module.
+- **`GET /v1/admin/stores/{id}`**: one Store, as the list gives it, for its page. Anything but a live Store, Default,
+  the Templates Store, the root and a Store in the Trash among them, is `404`.
+- **`PATCH /v1/admin/stores/{id}`** with `{ "name" }` renames the Store's folder, through `StoreService.rename`, and
+  answers the Store; its matters keep their folders and names. Default, the Templates Store and the root are
+  `409 refused`, each with a sentence that says so, whatever the name, their own included; any other folder that
+  isn't a live Store is `404`. The name is checked as a folder's is (`422`); its own name changes nothing, and
+  changing only its case renames it. A name another live folder directly under the root has is `409 refused`, with
+  the create's sentences. Recorded as `store.renamed`.
+- **`DELETE /v1/admin/stores/{id}`** moves the Store, every matter in it and everything live in them, to the caller's
+  Trash as one item, as a matter's delete does, and answers the Trash item, `DeletedFolder`,
+  `{ "trashItemId", "folders", "documents" }`, `folders` counting its matters' folders too. The matters' rows stay,
+  so their numbers stay taken. Default, the Templates Store and the root are `409 refused`, each with its sentence,
+  and so is a Store with a document inside checked out, by anyone, or immutable, with the sentence the public routes'
+  `checked-out` and `immutable` give. Recorded as `store.deleted`, straight after.
+- **`GET /v1/admin/stores/deleted`**: the Stores in the Trash, most recently deleted first, a plain array of
+  `DeletedStore`: the Store's folder `id`, `name`, `trashItemId`, `state` (`deleted`, or `removed` from the Trash and
+  not destroyed yet), `matters` (its matters' folders still in its item in that state), `deletedAt`, `deletedBy` (a
+  `PersonBrief`, null when it isn't known), and `removedAt` and `destroyAfter`, null unless `removed`, as the public
+  `TrashItem`'s.
+- **`POST /v1/admin/stores/{id}/restore`**, with the Store's folder `id` and no body, restores it directly under the
+  root, with the matters and everything else its delete took, through the Trash's restore (`TrashRestore`), whether
+  its item is `deleted` or `removed`, and answers the Store. What was deleted on its own before the Store was stays
+  in the Trash. `404` only when `id` names no Store, live or in the Trash; `409 refused` for a live Store ("That Store
+  isn't in the Trash."), for a name another live folder directly under the root now has, with the create's sentences,
+  so that folder is renamed first, for an item the nightly destroy or another restore takes as this one runs, and for
+  what Healdan's rules refuse on a restore. Recorded as `store.restored`, straight after. The public
+  `POST /v1/trash/{id}/restore` refuses a Store's item (see [The Trash](#the-trash)).
 - **`GET /v1/admin/stores/{id}/access`**: who can see the Store, `storeId` and its `rows`, as a folder's rows are
   given, but with `level` `can-see` for a row of Read alone and `custom` for any other, and `owner` always false. A
   group or person the Store grants nothing isn't listed. Default, Templates, the root and anything else that isn't a
@@ -1283,9 +1328,80 @@ Store aren't Stores.
   read its Store." A matter that already let in a group the Store didn't refuses no other change, so the change that
   puts it right goes through. New Matter's **Let Everyone Read the Store** sends the groups whose rows have `read`, with
   the problem's group added, so the `PUT` takes away a `custom` row without `read`, which lets nobody see a Store.
+  The Admin app adds groups only; a person's row already there is sent back by its `groupId`, their own group.
 - **`GET /v1/admin/groups?q=`**: a page of live groups, by name, ignoring case, without people's own groups, each with
   its `id`, `name` and `description` (null for none). `q`, read trimmed, in any case, with `%` and `_` taken as they
   are, keeps the groups whose name contains it; without it, every group.
+
+### Storage
+
+The Storage area's routes do what the Classic Interface's Storage tab does, with its rules and its sentences: the
+backends, a Store's backend, the files the mover gave up on, and the storage settings. Each reads and changes storage
+through `healdan-core`'s storage port, which `healdan-storage` implements (see
+[How Healdan Extends LogicalDOC](../how-healdan-extends-logicaldoc/#healdans-code)).
+
+- **Without the storage module,** every route here is `503 storage-unavailable`, after a body that isn't the JSON
+  expected (`400`) and before anything else. The Stores routes answer all the same, with a Store's storage parts null.
+- **While storage backends are off,** on a server that keeps its files in LogicalDOC's own store,
+  `GET /v1/admin/backends`, `GET /v1/admin/storage/settings` and `GET /v1/admin/stores/{id}/backend` answer `on: false`,
+  with no backends; a backend named in the path is `404`, as none is listed; the two lists of stuck files answer what's
+  recorded; and every other route, Test before saving included, is `409 refused`, with a sentence that says so.
+- **The refusals** are the Storage tab's own, each `409 refused` with its sentence in `detail`.
+- **`409 secret-key-missing`** answers an add or an edit that types an S3 secret while Healdan's secret key file is
+  missing and values are sealed with it: `detail` says so, and `sealed` counts the stored values sealed with the missing
+  key. Nothing is written. Sent again with `newKey: true`, the change makes a new key, which leaves those values to be
+  entered again, so the Admin app asks first, as the tab does.
+- **Nothing secret is answered.** No answer holds an S3 secret, only `hasSecret`, whether one is stored. A `Backend`
+  holds the access key ID, which Edit shows. An encrypted backend's recovery key is in two answers only: its add's, as
+  `recoveryKey`, and `POST /v1/admin/backends/{id}/recovery-key/show`'s, each recorded as a showing. A problem never
+  holds what a request typed as a secret, a recovery key or its last group.
+- **Each change is recorded** in the Storage area, straight after it succeeds, by the port, as a storage change isn't
+  one transaction with its record: `backend.added`, `backend.changed`, `backend.removed`,
+  `backend.recovery-key-shown`, `-confirmed` and `-entered`, `store.backend-changed`, `storage.stuck-retried` and
+  `storage.settings-changed`. An access key's and a secret's changes are recorded as changed, with no value, and a
+  change that changes nothing, a retry with nothing stuck among them, isn't recorded.
+
+The routes:
+
+- **`GET /v1/admin/backends`**: `on`, `backends`, every backend as its page shows it (`Backend`), Original first, then
+  the others in the order they were added, and `otherFiles`, the `waiting`, `waitingBytes` and `stuck` of the files
+  with no Store, such as a document's saved before it had a folder. A `Backend` has its `id`, `name`, `kind` (`local` or
+  `s3`), `original`, its settings (`path`; `endpoint`, the scheme, host and port alone, null for a folder or an
+  endpoint that can't be read; `region`, `bucket`, `prefix`, `pathStyle` and `accessKey`), `hasSecret`, `encrypted`,
+  `keyConfirmed`, `offered` (whether a Store can be given it), `inUse`, `files`, `bytes`, `status` (`ok`,
+  `unreachable`, `failing` or `unchecked`), `error` and `since`, `keyLastShown` and `keyLastShownBy`, and `stores`, the
+  names of the live Stores on it: for Original, every Store with no other backend, the Templates Store left out.
+- **`POST /v1/admin/backends`** adds a local folder or an S3 bucket, as the tab's Add does, and answers `201` with an
+  `AddedBackend`, `{ "backend", "recoveryKey" }`, and its `Location`. Test runs on the settings first, and must pass;
+  `recoveryKey` is null for a backend that isn't encrypted. `422` for what the kind needs, missing or blank
+  (`required`), a `kind` other than `local` and `s3`, and a member of the other kind sent with a value (`invalid`).
+- **`POST /v1/admin/backends/test`** tests the settings as typed, saving nothing, with `id` for the backend being
+  edited, whose stored secret a missing one uses. It answers `{ "problems" }`, empty when it passed: a test that fails
+  isn't a refusal, and it never answers `422`.
+- **`GET`, `PATCH` and `DELETE /v1/admin/backends/{id}`** read, edit and remove a backend. `PATCH` is partial, a member
+  left out staying, and a `secret` null, blank or left out keeping the stored one. `kind` and `encrypted`, any member
+  but `name` for Original, and a member of the other kind are `422` `not-editable`, each only when sent with a value. A
+  new bucket, prefix or path is refused once files are recorded or copies held on the backend, or while a Store keeps
+  its files there. `DELETE` answers `204`, and removes only an empty backend, never Original.
+- **`POST /v1/admin/backends/{id}/test`** tests the saved backend in full, and answers its `problems`.
+- **`POST /v1/admin/backends/{id}/recovery-key/show`**, **`/confirm`** with `{ "lastGroup" }`, and **`/enter`** with
+  `{ "recoveryKey" }` show, confirm and enter an encrypted backend's recovery key; `confirm` and `enter` answer the
+  backend. **`GET /v1/admin/backends/{id}/key-events`** is every showing and entering, newest first, each `event`
+  `shown` or `entered`, with `at`, `userId` and `username`.
+- **`GET /v1/admin/stores/{id}/backend`** is a Store's `StoreStorage`: `storeId`, `on`, its `backend` (null while
+  storage backends are off), its `files` and `bytes` on any backend, and its `pending`. With `backendId`,
+  `switchPreview` says how many files, and their bytes, a switch to that backend would move, and changes nothing.
+  **`PUT /v1/admin/stores/{id}/backend`** with `{ "backendId" }` gives the Store that backend; its files move in the
+  background. Its own backend changes nothing, and one not offered to Stores is `409 refused`.
+- **`GET /v1/admin/stores/{id}/stuck-files`** and **`GET /v1/admin/storage/stuck-files`** list a Store's stuck files and
+  those with no Store, the newest documents first, at most 1,000 (`pending.stuck` or `otherFiles.stuck` counts them
+  all): each with `docId` (the internal id, not the doc #), `fileName` (null for a document deleted for good),
+  `resource`, `attempts` and `lastError`. **`POST` to each list's `/retry`** puts them all back to waiting, and answers
+  `204`.
+- **`GET /v1/admin/storage/settings`** is `on`, `holdDays`, `cacheGb` and `transfers`, and `limits`, each setting's
+  `min` (1) and `max` from the server. **`PUT`** takes all three, and answers them as saved: a value that isn't a whole
+  number is `400`, a missing one `422` `required`, and one outside its limits `422` `out-of-range`, on its field,
+  before anything is saved.
 
 ## Healdan's Own Client
 

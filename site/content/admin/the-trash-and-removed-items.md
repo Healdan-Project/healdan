@@ -57,7 +57,11 @@ with it. Every document that comes back is queued for indexing, so search finds 
   choose.
 - **Filing rules still apply.** A restore into another matter gives the documents that matter's Client and Matter,
   and a matter that already holds a copy of an email refuses a second one.
-- **A Store deleted in the Classic Interface is restored there,** not through the API.
+- **A deleted Store is restored from Deleted Stores,** on the Admin app's Stores list, back under the root, with what
+  its delete took, whether it's in the Trash or removed: see [Deleted Stores](../stores/#deleted-stores). The User
+  app's Trash lists its item for whoever deleted it, but can't restore it, and the API answers its restore
+  `409 refused`: "A Store is restored from Deleted Stores on the Admin app's Stores page, or in the Classic
+  Interface." The Classic Interface's Trash can restore it too.
 - **A workspace template, or a folder deleted from one,** is listed like any other item, but the API restores only
   into Stores, so its restore is `409 place-gone`, and the folders the User app then offers are matters and their
   folders, never the Templates Store or a template. An administrator restores them in the Classic Interface, below:
@@ -109,9 +113,10 @@ and Healdan's own.
 
 ### What It Never Destroys
 
-- **A matter's own folder, and a Store.** Only an administrator deletes them: a matter with **Delete** on
-  [its page](../clients-and-matters/#delete) in the Admin app, and a Store in the Classic Interface. They stay removed,
-  and their contents are destroyed. The matter's number stays reserved.
+- **A matter's own folder, and a Store.** Only an administrator deletes them, with **Delete** on their pages in the
+  Admin app: a matter's [page](../clients-and-matters/#delete) and a Store's [page](../stores/#deleting-a-store). They
+  stay removed, and their contents are destroyed. The matter's number stays reserved, and a removed Store can still be
+  restored from [Deleted Stores](../stores/#deleted-stores), with its matters' own folders.
 - **A folder something still needs.** The job keeps a removed folder for another night, and tries again, while any of
   these holds:
   - a document or folder that isn't destroyed yet still has it as its folder or its parent, such as a document a

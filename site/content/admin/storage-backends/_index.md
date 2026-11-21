@@ -9,9 +9,9 @@ on the server's disk while Client Work goes to the cloud. LogicalDOC calls a pla
 a Store is a top-level container for matters, so these pages say *backend*.
 
 Backends are set up in [the Admin app](../the-admin-app/): **Backends** is under **Storage** in its left pane. Each
-Store's backend is chosen on the Store's page in **Storage → Stores**: see
-[Choosing a Store's Backend](choosing-a-stores-backend/). <!-- P3 docs pass 2: the Stores screens (Task 24b) -->
-The Classic Interface's **Storage** tab does the same, and stays for now: see
+Store's backend is chosen with **Change Backend** on the Store's page, in **Storage → Stores**, which also shows the
+Store's files waiting to move and stuck: see [Choosing a Store's Backend](choosing-a-stores-backend/). The Classic
+Interface's **Storage** tab does the same, and stays for now: see
 [The Storage Tab in the Classic Interface](#the-storage-tab-in-the-classic-interface).
 
 ## What a Backend Holds

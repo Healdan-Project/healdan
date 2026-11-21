@@ -198,7 +198,36 @@ see [Building from Source](../building-from-source/#running-the-war-outside-dock
     `healdan-core`'s `StoreService`, and `AdminGroupsResource` (`PEOPLE`), which reads `ld_group` itself: live groups
     of the caller's tenant, LogicalDOC's ordinary groups only, without the `_user_` group each person has. A new
     Store's name is checked by `FolderRenames.name`, the folder routes' rule, whose form overload adds its errors to
-    the other fields' so one `422` names them all.
+    the other fields' so one `422` names them all. `StoreInfos` makes a Store's row for the list and its page: its
+    live matters in one grouped query, its documents and bytes from `UsageSummary`, who can read it from
+    `StoreService.access`, and its backend and files from one read of the storage port's overview, null without the
+    port or while storage backends are off.
+  - **A Store's rename, delete and restore.** `PATCH`, `DELETE` and `POST …/restore` on `/v1/admin/stores/{id}` refuse
+    LogicalDOC's Default workspace, the Templates Store and the root first (`StoreService.fixedFolder`, a sentence for
+    each, `409 refused`), and answer anything else that isn't a live Store `404` (a restore, anything that's no Store,
+    live or in the Trash). The rename is `StoreService.rename` and the restore `StoreService.restore`, each in its own
+    transaction. The delete is `FolderChanges.deleteStore`, beside `deleteMatter`: the same checks and delete
+    (`deleteForAdmin`: Delete on everything inside, a document checked out or immutable refused, then `trashTree`),
+    so the Store and its matters go to the Trash as one item, which it answers. A Store's create, rename and restore
+    hold the root's folder lock, through `FolderChanges.withFolderLocks`, taken in the resource around the service's
+    transaction, as the folder routes hold the folder a name goes into, so two of them at once can't give one name
+    twice under the root (`AdminStoresResourceTest#testTwoCreatesOfOneName`, `#testTheRootsLock`).
+  - **The storage routes** are three classes, all `STORAGE`, over `StoragePort`, so each route's area is its record's:
+    `AdminStoreStorageResource`, rooted at exactly `/v1/admin/stores` beside `AdminStoresResource` (CXF looks for a
+    method only in the root classes whose path is the best match's), with a Store's backend, its switch and its stuck
+    files; `AdminBackendsResource` (`/v1/admin/backends`); and `AdminStorageResource` (`/v1/admin/storage`), the
+    settings and the files with no Store. Each checks what a form sends (`400`, `422`) before it asks the port, and
+    records nothing itself, as the port records every storage change. A new Store's `backendId` is checked through the
+    port before the create, and given after it (`setStoreBackend`, a transaction of its own, which needs the Store
+    committed); a switch that fails in between, only in a race, leaves the Store on Original, logged at warn.
+  - **`StoragePort`** (a `@Component`) finds the port by type, through a seam tests set to a fake and put back
+    (`volatile Supplier<List<StorageAdministration>> ports`), as `DashboardService` and `UsageSummary` have. With none
+    it answers `503 storage-unavailable` (`require()`). Its `run` turns the port's `SecretKeyMissingProblem` into
+    `409 secret-key-missing` with `detail` the port's sentence and `sealed`, and leaves any other refusal of the port's,
+    a `HealdanRuleException` with the Storage tab's sentence, to `ProblemMapper`'s `409 refused`. A backend named in
+    the path that the port doesn't give is `404`, as is any while storage backends are off, as the port gives none
+    then. `StorageView` holds the contract's records; `AddedBackend` and `RecoveryKey` leave the key out of their
+    `toString()`.
   - **A workspace's folders and the templates** are four classes, all `MATTERS`, each rooted at its own exact path for
     the same reason: `AdminWorkspaceResource` (`/v1/admin/workspaces`, the tree), `AdminFoldersResource`
     (`/v1/admin/folders`, beside `AdminFolderAccessResource`: New Folder, rename, move, delete, the values and New
@@ -488,14 +517,16 @@ see [Building from Source](../building-from-source/#running-the-war-outside-dock
     included, had their own permissions and how many followed, before and after. Each names its folder by that path, as
     `1001.1 – Charter Dispute/Documents`. A Store's changes are the `STORES` area's: `store.created`, with its name and
     a change for each row it was given, and `store.access-changed`, with `follows` when it followed another folder's
-    permissions and a change for each row that changed, both inside their transaction and named as a folder's rows are.
-    Storage's are the `STORAGE` area's, which the storage port records itself (see `healdan-storage` above).
-    A workspace's folders and the templates record inside their transactions `folder.created` (its name and the folder
-    it's in), `folder.renamed`, `folder.moved` (the folder it was in, before and after), `folder.properties-changed`
-    (each value the folder sets of its own that changed, by the property's name, null for one it inherits),
-    `search-folder.created` (its name, the folder it's in and its rule), `search-folder.rule-changed` (the rule's
-    members that changed), `template.created` (its name, and the template it copies) and `template.renamed`, and after
-    the delete `folder.deleted` and `template.deleted`. A folder is named by its path, and a template by its name.
+    permissions and a change for each row that changed, both inside their transaction and named as a folder's rows are,
+    `store.renamed`, with the name before and after, inside the rename's, and `store.deleted` and `store.restored`
+    straight after the change. Storage's are the `STORAGE` area's, which the storage port records itself (see
+    `healdan-storage` above). A workspace's folders and the templates record inside their transactions `folder.created`
+    (its name and the folder it's in), `folder.renamed`, `folder.moved` (the folder it was in, before and after),
+    `folder.properties-changed` (each value the folder sets of its own that changed, by the property's name, null for
+    one it inherits), `search-folder.created` (its name, the folder it's in and its rule), `search-folder.rule-changed`
+    (the rule's members that changed), `template.created` (its name, and the template it copies) and `template.renamed`,
+    and after the delete `folder.deleted` and `template.deleted`. A folder is named by its path, and a template by its
+    name.
   - **New Matter's check** is `MatterAdmin.check` (`com.logicaldoc.healdan.admin.matters`), which takes a
     `MatterAdmin.Draft`, every member of which may be null, and answers a `MatterCheck`. It looks for each problem
     only once the draft has what it needs, with `MatterService`'s own checks and sentences and `MatterNumbering`'s,
@@ -542,7 +573,13 @@ see [Building from Source](../building-from-source/#running-the-war-outside-dock
     transaction, so a failed record leaves no folder. `setAccess` gives each group listed Read, keeping its other
     permissions, and takes every other row away, in one `FolderDAO.store` with `FolderEvent.PERMISSION`, so
     `PermissionsFolderListener` narrows what in the Store's matters follows the Store; a change that changes nothing
-    writes and records nothing.
+    writes and records nothing. `rename` takes `create`'s name rules, the Store itself left out, its own name changing
+    nothing, and records `store.renamed` in its transaction. `restore` takes the Store's Trash item, `deleted` or
+    `removed` (`trashItem`), checks its name as `create` checks a new one, as the restore keeps a folder's name, then
+    restores it through `TrashRestore.restore(item, rootId, …)`, back directly under the root, with what its delete
+    took, so Healdan's rules and hooks decide as on every route; its caller records `store.restored`. `deleted` lists
+    the Stores in the Trash in one query, with their item, state, matters, who deleted them and when they were
+    removed. All of them refuse anyone but an administrator first.
   - **P2 for a Store's matters** is `PermissionRules.checkStoreP2(storeId, storeAcl)`, which `setAccess` calls before
     it writes, as `HibernateFolderDAO.store` logs a listener's refusal at error level. It reads the Store's live
     matters' own folders, the groups each lets read it and the owners' memberships in a few queries, chunked by 500
@@ -689,8 +726,9 @@ see [Building from Source](../building-from-source/#running-the-war-outside-dock
     `attention` for status, and the rest are whole; the failure is logged at warn with its class only, its stack at
     debug. Each item's and tile's link is the screen that fixes it, from `DashboardService.Screen`, a table of the
     Admin app's addresses that is the Classic Interface's, `/frontend.jsp`, until each screen ships. Phase 2 gave
-    Clients, Matters and Workspace Templates theirs (`DashboardScreensTest`), though no item or tile links to them
-    yet. Tests call
+    Clients, Matters and Workspace Templates theirs, and Phase 3 Stores and Backends (`DashboardScreensTest`):
+    `files-stuck` links to Stores, and `backend-unreachable`, `disk-low`, the Storage Backends tile and the Disk tile
+    to Backends. Tests call
     `read()` after `forget()`, which drops what's kept.
 - **One-time setup steps** in `com.logicaldoc.healdan.seed` create what Healdan needs inside LogicalDOC, such as
   the Everyone group and the Healdan profile. Each records that it ran in `hd_setting`, and never runs again, so a

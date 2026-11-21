@@ -7,9 +7,9 @@ Only an empty backend can be removed: one that no Store uses, with no file recor
 Original can't be removed, as it keeps the files of every Store that has no other backend, so its page has no
 **Remove**.
 
-1. **Give each of its Stores another backend,** on each Store's page in **Storage → Stores**: see
-   [Choosing a Store's Backend](../choosing-a-stores-backend/). <!-- P3 docs pass 2: the Store's page --> The
-   backend's page lists them under **Stores**.
+1. **Give each of its Stores another backend,** with **Change Backend** on each Store's page in
+   **Storage → Stores**: see [Choosing a Store's Backend](../choosing-a-stores-backend/). The backend's page lists
+   them under **Stores**.
 2. **Wait for the files to move,** until the backend's **Files**, on the Backends list, is 0, as its page's **Holds**
    says too. Press **Refresh** on the list to see it fall.
 3. **Wait for the holding period to end,** so the purge deletes the copies it holds: see

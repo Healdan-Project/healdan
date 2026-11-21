@@ -265,8 +265,8 @@ the packages under it), `healdan-api` and `healdan-storage`. No test makes a rea
   several backends and Stores, the ten tiles in order and those that need attention, a part that fails leaving the
   rest whole, a source that can't be read unchecked, a slow one still being worked out, storage backends off, the
   database's tile on PostgreSQL, Sign-In and Outgoing Email, and a second read coming from what's kept.
-  `DashboardScreensTest` pins where the links go: each shipped screen's Admin address, the Dashboard, Clients, Matters
-  and Workspace Templates, and the Classic Interface for every other. `CachedTest`
+  `DashboardScreensTest` pins where the links go: each shipped screen's Admin address, the Dashboard, Clients,
+  Matters, Workspace Templates, Stores and Backends, and the Classic Interface for every other. `CachedTest`
   checks what's kept: one ask per period however many read, the last answer while it's asked again, none older than
   two periods, a failure kept like an answer, `forget()` and a clock set back. `WordsTest` checks the tiles' words,
   and `ProviderClientTest` that `answers` fetches a provider's discovery document afresh and remembers a failure for
@@ -313,10 +313,26 @@ the packages under it), `healdan-api` and `healdan-storage`. No test makes a rea
   permissions kept, each row as Can See or Custom, a change of nothing neither written nor recorded, a Store that
   followed another folder's permissions getting its own, what's a Store, and the refusals, P2's among them: a group a
   matter lets in refused while it can still read the matter, the owner passing while they can read the Store, a matter
-  that already let in more blocking no other change, and only live matters with their own permissions checked.
-  `AdminStoresResourceTest`, in `healdan-api`, checks the Stores' routes, their check order and refusals, P2's among
-  them, and `AdminGroupsResourceTest` the groups' list: by name, without people's own or deleted groups, `q` and
-  paging. Each also checks the refusals of a non-administrator and of a device token.
+  that already let in more blocking no other change, and only live matters with their own permissions checked; and a
+  Store's rename (a change of case, its own name, a name taken under the root) and restore, deleted and removed, back
+  under the root with its matters, and their refusals. `AdminStoresResourceTest`, in `healdan-api`, checks the Stores'
+  routes, their check order and refusals, P2's among them: the list's rows before and after the summary, with and
+  without the storage port; a create on another backend, and one whose switch fails after it, left on Original;
+  Default, the Templates Store and the root refused a rename and a delete; a delete's one Trash item, a document
+  checked out inside refusing it, and its restore from Deleted Stores; and the root's lock, with two creates of one
+  name at once, in different cases, one made and the other refused (`testTwoCreatesOfOneName`), and a create, a
+  rename and a restore each made to wait for the lock while the test gives their name to another Store, then refused
+  as a name taken (`testTheRootsLock`). `AdminGroupsResourceTest` checks the groups' list: by name, without people's
+  own or deleted groups, `q` and paging. Each also checks the refusals of a non-administrator and of a device token.
+- **`AdminBackendsResourceTest`**, in `healdan-api`, checks the Storage routes through `FakeStoragePort`, a storage port
+  in the tests that keeps its backends, Stores and settings in memory, refuses as the Storage tab does with sentences
+  of its own, and keeps what each write was given, never a secret or a recovery key. The tests set `StoragePort`'s
+  seam to it and put the real one back after. It checks every route `503 storage-unavailable` without the port, after
+  a body that isn't the JSON expected, while the Stores' own routes answer; storage backends off; each route's answer,
+  `422`s and refusals, in the check order; `409 secret-key-missing` with `sealed`, then `newKey`; Test before saving,
+  which never answers `422`; a Store's backend, its count before a switch, and its stuck files; the settings' limits
+  and `out-of-range`; and that a recovery key is in the add's and Show's answers only, and an S3 secret in none, no
+  record, log line or refusal of a request that typed one holding either (`testNoAnswerRecordOrLogHoldsASecret`).
 - **`WorkspaceAdminTest`**, in `healdan-core`, checks a workspace's folders: what's in scope, a search folder directly
   in the Templates Store among what isn't; a matter's tree and a template's, in order, hidden folders kept and aliases
   and deleted ones left out, search folders last; New Folder at a matter's top level, deeper and in a template, taking

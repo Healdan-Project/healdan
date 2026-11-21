@@ -6,9 +6,10 @@ weight: 6
 Healdan uses LogicalDOC's permissions, and adds rules so a matter's permissions stay consistent. An administrator sets
 the permissions of a matter's folders, and of a workspace template's, in the Admin app's
 [Workspace Editor](../top-level-folders/#the-workspace-editor), under
-[Who Can Use This Folder](#who-can-use-this-folder). A Store's and a document's are set on their **Security** tab,
-where a folder's can be set too, and a Store made with the Admin app's New Store starts with the groups it names (see
-[Stores](../stores/#creating-a-store)).
+[Who Can Use This Folder](#who-can-use-this-folder). Who can see a Store is set on its page in the Admin app, under
+**Who Can See It**, and a Store made with New Store starts with the groups it names (see
+[Stores](../stores/#who-can-see-a-store)). A document's permissions are set on its **Security** tab in the Classic
+Interface, where a folder's can be set too.
 
 ## Folders Narrow, Never Widen
 
@@ -28,7 +29,8 @@ but no folder can let in someone its parent doesn't.
 ## A Matter and Its Store
 
 Every group a matter lets read it must be able to read its Store, so a matter can't be read through search by people
-who can't see its Store. The matter's owner only needs to be able to read the Store themselves. See
+who can't see its Store. The matter's owner only needs to be able to read the Store themselves. Taking a group off a
+Store in the Admin app is refused while that group can read one of the Store's matters. See
 [Stores](../stores/#who-can-see-a-store).
 
 ## Who Can Use This Folder
@@ -137,9 +139,8 @@ the next save of that document's **Security** tab asks for the row to be ticked 
 
 ## What These Rules Don't Do
 
-Permissions are checked when they're saved, so two changes aren't checked:
+Permissions are checked when they're saved, so a change of group membership isn't checked: if someone joins or
+leaves a group later, Healdan doesn't re-check the matters that group can read against their Stores.
 
-- **A Store's own permissions.** Taking a group off a Store leaves the matters in it readable by that group, if their
-  own permissions let it in. Change the matters' permissions too.
-- **Group membership.** If someone joins or leaves a group later, Healdan doesn't re-check the matters that group can
-  read against their Stores.
+Change who can see a Store on its page in the Admin app, where taking a group off it is checked against the Store's
+matters: see [Who Can See a Store](../stores/#who-can-see-a-store).

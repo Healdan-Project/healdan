@@ -387,5 +387,6 @@ The **Storage** tab sets up the storage backends, the places where Healdan keeps
 server, or a bucket at an S3 service such as Wasabi. The Admin app does the same, and is where
 [Storage Backends](../storage-backends/) describes it: **Backends**, under **Storage** in its left pane, adds, tests,
 changes and removes backends, shows and confirms their recovery keys, and holds the storage settings, and each
-Store's page in **Storage → Stores** gives the Store its backend. <!-- P3 docs pass 2: the Stores screens --> The tab stays for now,
+Store's page in **Storage → Stores** gives the Store its backend and shows its files waiting and stuck, with
+**Retry**. The tab stays for now,
 with the same rules: see [The Storage Tab in the Classic Interface](../storage-backends/#the-storage-tab-in-the-classic-interface).

@@ -181,10 +181,11 @@ bucket: give each its own.
 
 ## Files Are Stuck
 
-A file the mover failed to move ten times in a row, over about four hours, is stuck. Its Store's page, in the Admin
-app's **Storage → Stores**, counts it, and the Dashboard's Needs Attention says how many are stuck in all. **Stuck
-Files** lists each one with its last error: put the cause right, and press **Retry**. <!-- P3 docs pass 2 --> A file
-whose document isn't in a Store is counted under **Files with No Store**, on **Backends**. See
+A file the mover failed to move ten times in a row, over about four hours, is stuck. The Admin app's Stores list, in
+**Storage → Stores**, counts each Store's in its **Files** column, and the Dashboard's Needs Attention says how many are
+stuck in all, linking to the Stores list. On the Store's page, its **Storage** tab lists each one under **Stuck Files**
+with its last error: put the cause right, and press **Retry**. A file whose document isn't in a Store is counted under
+**Files with No Store**, on **Backends**. See
 [Waiting and Stuck Files](../../admin/storage-backends/waiting-and-stuck-files/). An outage never makes a file stuck:
 the mover waits for the backend instead.
 

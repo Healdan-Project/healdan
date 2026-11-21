@@ -7,8 +7,9 @@ The Admin app is where administrators run Healdan, at `/admin/` on your Healdan 
 Dashboard: what needs your attention, the server's health and how Healdan is used, on one page; the Clients and
 Matters lists, where clients and matters are made, with a page for each client and matter (see
 [Clients and Matters](../clients-and-matters/)); each matter's workspace, its folders and who can use them; the
-workspace templates (see [Workspace Templates](../workspace-templates/)); and the storage backends, with a page for
-each (see [Storage Backends](../storage-backends/)). Everything else is still done in the Classic Interface, which
+workspace templates (see [Workspace Templates](../workspace-templates/)); the Stores, with a page for each (see
+[Stores](../stores/)); and the storage backends, with a page for each (see [Storage Backends](../storage-backends/)).
+Everything else is still done in the Classic Interface, which
 the rest of this guide describes, and the Admin app links there.
 
 {{< callout type="warning" >}}
@@ -64,9 +65,9 @@ Interface. See [Reverse Proxy](../../install/reverse-proxy/).
 
 The left pane has what the Admin app has so far: **Dashboard**; under **Firm**, **Clients**, **Matters**, which
 takes your install's word for matters, such as **Projects**, and **Workspace Templates**; under **Storage**,
-**Backends**; and at its foot **Classic Interface**, which opens the Classic Interface, in the same window, for
-everything else. <!-- P3 docs pass 2: Stores under Storage --> The entry for the screen you're on is marked, and so
-is a list's entry while one of its pages is open, such as **Matters** for a matter's page.
+**Stores** and **Backends**; and at its foot **Classic Interface**, which opens the Classic Interface, in the same
+window, for everything else. The entry for the screen you're on is marked, and so is a list's entry while one of its
+pages is open, such as **Matters** for a matter's page.
 
 An entry shows a count where something there needs attention: **Backends**, how many storage backends can't be
 reached or are failing, as Needs Attention counts them (below). The count is asked for when the Admin app opens and
@@ -92,9 +93,10 @@ work.
 ### Needs Attention
 
 Needs Attention comes first: what an administrator should act on, each with how many, a line that says more, such as
-which Store or since when, and a link to where it's fixed. Until that place is in the Admin app, the link is
-**Classic Interface**. <!-- P3 docs pass 2: the Dashboard's links to Stores and Backends (P3-R15) --> With nothing
-to report, it says "Nothing needs your attention."
+which Store or since when, and a link to where it's fixed. Stuck files link to **Stores**, where each Store's stuck
+files are, and a storage backend that can't be reached, or a disk more than 85% full, to **Backends**. The others link
+to **Classic Interface** until their place is in the Admin app. With nothing to report, it says "Nothing needs your
+attention."
 
 | It says, for example | What it means |
 |---|---|
@@ -112,8 +114,8 @@ Stuck Files, Errors.", and never says that nothing needs your attention while it
 
 ### Server Health
 
-Ten tiles, each with its status in words and a line of detail. A tile opens the screen behind it, which for now is the
-Classic Interface. <!-- P3 docs pass 2: the Storage Backends tile opens Backends (P3-R15) --> The status is:
+Ten tiles, each with its status in words and a line of detail. A tile opens the screen behind it: **Storage
+Backends** and **Disk** open **Backends**, and the others, for now, the Classic Interface. The status is:
 
 - **OK** when all is well;
 - **Needs Attention** when something needs acting on;
@@ -163,15 +165,14 @@ from. Why is in the server's log.
 
 ## What's Still in the Classic Interface
 
-Everything else, which the rest of this guide describes there: Stores, but for making one with
-[New Store](../stores/#creating-a-store) and letting a group read one from New Matter, so the Stores list, renaming and
-deleting a Store, who can see it and its storage backend; <!-- P3 docs pass 2: the Stores screens --> users and
-groups; the permissions of Stores and documents; Healdan Settings with its Sign-In tab; and the screens
+Everything else, which the rest of this guide describes there: users and groups; the permissions of documents, and
+of a Store beyond who can see it; Healdan Settings with its Sign-In tab; and the screens
 [System](../system/) covers, such as scheduled tasks, search and indexing, outgoing email, reports and the server's
 log. **Classic Interface**, in your menu or at the foot of the left pane, opens it, on the same sign-in. Its own ways
 of making and changing clients, matters and templates still work there too, and so does Healdan Settings' **Storage**
 tab, which does what the Admin app's storage screens do (see
-[The Storage Tab in the Classic Interface](../storage-backends/#the-storage-tab-in-the-classic-interface)).
+[The Storage Tab in the Classic Interface](../storage-backends/#the-storage-tab-in-the-classic-interface)), and so
+does its Trash, which can restore a deleted Store too (see [Deleted Stores](../stores/#deleted-stores)).
 
 ## When Something Goes Wrong
 

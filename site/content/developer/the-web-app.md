@@ -141,23 +141,30 @@ takes Esc first).
 `NAV`, in `frame/LeftPane.tsx`, is the left pane: the Dashboard, then the spec's groups in its order (Firm, People,
 Storage, Search and Monitoring), each a heading from the catalogue and its `NavItem`s. A group with no items isn't
 drawn, so the pane shows only the groups a shipped screen is in: Firm, with Clients, Matters and Workspace Templates,
-so far. **Classic Interface** is at the pane's foot, apart from `NAV`. A screen joins when its phase ships:
+and Storage, with Stores and Backends, so far. **Classic Interface** is at the pane's foot, apart from `NAV`. A screen
+joins when its phase ships:
 
 1. Write the view in `views/`. Take its data through `useAdminQuery` (below), and its pieces from `@healdan/ui`.
 2. Give it a route in `router.tsx`, a child of the root, at its path in `addresses.ts`' `routes`.
 3. Add a `NavItem` to its group in `NAV`: `label`, an `admin.` key of the catalogue; `route`, typed `NavRoute`, the
    registered router's route ids, so only a routed path type-checks; `icon`; and, where something there can need
-   attention, `count`, the attention codes whose counts its badge adds up from the Dashboard's answer. The pane asks
-   `GET /v1/admin/dashboard` only while an entry it shows has a `count`. `aria-current="page"` marks the open entry:
+   attention, `count`, the attention codes whose counts its badge adds up from the Dashboard's answer, as **Backends**
+   has `backend-unreachable`. The pane reads them with `useDashboardCounts` (`queries.ts`), only while an entry it
+   shows has a `count`: the Dashboard's own query, under its key, asked as the frame loads and at each return to the
+   window, with no timer of its own, so the counts come every 30 seconds only while the Dashboard is open and polls
+   (the spec's section 7.2 keeps the 30-second asks to the Dashboard and running jobs). `aria-current="page"` marks
+   the open entry:
    the Dashboard at `/` only, and any other at its address and the pages under it.
 4. Point what led to the Classic Interface at it: the Dashboard's links, which the server gives (`AttentionItem.link`
-   and `HealthTile.link`, from `healdan-core`'s `DashboardService.Screen`, `/frontend.jsp` until the screen ships;
-   Phase 2 gave Clients, Matters and Workspace Templates theirs, though no row or tile links to them yet), and the
-   find's `DESTINATIONS`. The Dashboard's rows and tiles draw their links with `frame/ServerLink.tsx`: a plain click on
-   a link to one of the app's own addresses (`appAddressOf`) opens it with the router, without a page load, and the
-   Classic Interface, another origin, a click with a modifier or another button and a link with a `target` stay the
-   browser's. An attention row's link takes its label from `NAV` by its path (`linkLabel`, through `screenAt`: the
-   screen's name, **Classic Interface** for `/frontend.jsp`, or **Open**), so it follows by itself.
+   and `HealthTile.link`, from `healdan-core`'s `DashboardService.Screen`, `/frontend.jsp` until the screen ships; Phase
+   2 gave Clients, Matters and Workspace Templates theirs, which no row or tile links to yet, and Phase 3 Stores, which
+   stuck files link to, and Backends, which a backend that can't be reached, a disk nearly full and the Storage Backends
+   and Disk tiles link to), and the find's `DESTINATIONS`. The Dashboard's rows and tiles draw their links with
+   `frame/ServerLink.tsx`: a plain click on a link to one of the app's own addresses (`appAddressOf`) opens it with the
+   router, without a page load, and the Classic Interface, another origin, a click with a modifier or another button and
+   a link with a `target` stay the browser's. An attention row's link takes its label from `NAV` by its path
+   (`linkLabel`, through `screenAt`: the screen's name, **Classic Interface** for `/frontend.jsp`, or **Open**), so it
+   follows by itself.
 5. Add its words to the app's catalogue, and test it with `renderApp`, the fake API and `expectNoAxeViolations`.
 
 ### Asking the Server
@@ -234,13 +241,37 @@ What the screens from Phase 2 on share (the spec's section 7.2):
   person whose account has gone doesn't stop the save; and a value left alone as the server's own `value`, only an
   edited one converted. The owner's row on a matter's own folder is drawn at Full Access, locked, and sent with all 25
   permissions, whatever the folder holds.
-- **Leaving the page.** While any panel is dirty or saving, the editor's `useBlocker` (TanStack Router's, with
-  `withResolver`) asks the Leave question before the page's path changes, by a link, the find, the crumb or Back, but
-  not when a matter's tab changes, which changes only the search; and a `beforeunload` handler has the browser ask
-  before a reload or closing the tab, as `FilingProvider` does for uploads. A page's own delete navigates with
+- **Leaving the page.** `workspace/LeavePageQuestion.tsx` holds the Leave question, which the Workspace Editor and a
+  Store's page (over **Who Can See It**, whose `StoreAccessPanel` reports through the same `useEditState`) both draw:
+  while anything is dirty or saving, TanStack Router's `useBlocker` (with `withResolver`) asks it before the page's path
+  changes, by a link, the find, the crumb or Back, but not when a page's tab changes, which changes only the search;
+  and a `beforeunload` handler has the browser ask before a reload or closing the tab, as `FilingProvider` does for
+  uploads. Unsaved, it offers **Discard Changes**; saving, **Leave Page**. A page's own delete navigates with
   `ignoreBlocker: true`, as the change goes with what it deletes.
-- **A page starts afresh.** A client's, a matter's and a template's page are keyed by its id, so Back or Forward between
-  two pages of one route carries no dialog, tab or chosen folder over.
+- **A page starts afresh.** A client's, a matter's, a template's, a Store's and a backend's page are keyed by its id,
+  so Back or Forward between two pages of one route carries no dialog, tab or chosen folder over.
+- **Stores** are `stores/`: `NewStoreDialog` (its **Backend** menu, the `offered` backends from `useBackends`, Original
+  first), `RenameStoreDialog`, `StoreAccessPanel` (groups only, from `useGroupPicker`, which New Store shares; a
+  person's row already there is kept and can be removed) and `StoreStoragePanel`, beside `queries.ts` (`storeKeys`,
+  under `['admin', 'stores']`, and `useStore`, `useStoreAccess`, `useStoreStorage`, `useDeletedStores` and
+  `useSwitchPreview`) and `text.ts`. After a change, `storesChanged` asks for the Stores again (the list, the deleted
+  ones, the Store's page and the Dashboard, and with `matters` the matters, clients and find too), never splicing an
+  answer in, as a create answers only `{ id, name }`; `storeFilesChanged` does the same after a Store's files change
+  place. The list's and a page's reads ask again at each return to the window, with no timer (`ASK_ON_RETURN`).
+- **Storage** is `storage/`: `BackendDialog` (add and edit, Test first, the `secret-key-missing` question and **Make a
+  New Key**), `RecoveryKeyDialog` (show, after its question, confirm, enter and history), `SwitchBackendDialog` (every
+  backend, one not `offered` greyed out with why, the count from `switchPreview` before **Change Backend** is
+  offered), `StorageSettingsForm` (the server's `limits`), and `StuckFiles.tsx`: `StuckFiles`, the inline list a
+  Store's page draws, `StuckFilesDialog`, the same list in a window, for the files with no Store, and `useStuckRetry`,
+  the retry both use. `queries.ts` has the shared reads (`storageKeys`, `useBackends`, `useBackend`, `useKeyEvents`,
+  `useStorageSettings`, `useStuckFiles`), `backendsChanged` and `isStorageUnavailable`, for a
+  `503 storage-unavailable`, which a screen says in words and doesn't retry; `text.ts` says a backend's kind, place,
+  status and files. An S3 secret and a recovery key live only in a dialog's state and the request: never in the query
+  cache, the address or the browser's storage. The admin catalogue holds the two problem codes only the admin API
+  answers (`problems.storage-unavailable`, `problems.secret-key-missing`), and `strings.test.ts` allows a `problems.`
+  key there only when the shared catalogue lacks it. `@healdan/ui`'s `TextField` takes `type: 'password'`,
+  `autoComplete` (`off` or `new-password`, which turn spell checking off too) and `description`, and `RadioChoices`
+  a choice `disabled`, with a `description` tied to it by `aria-describedby`.
 - **A link the server gives,** such as the Dashboard's, goes through `frame/ServerLink.tsx` (see
   [Adding a Screen](#adding-a-screen)).
 
