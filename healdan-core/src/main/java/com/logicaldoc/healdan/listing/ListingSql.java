@@ -125,7 +125,7 @@ public final class ListingSql {
 	 *         taken out, in plain SQL with no pattern: a space or any other
 	 *         character is left, and fails it.
 	 */
-	static String digits(String expression, int max) {
+	public static String digits(String expression, int max) {
 		String stripped = expression;
 		for (char digit = '0'; digit <= '9'; digit++)
 			stripped = "replace(%s, '%c', '')".formatted(stripped, digit);
