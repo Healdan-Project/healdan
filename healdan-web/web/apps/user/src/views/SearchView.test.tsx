@@ -11,6 +11,7 @@ import { comeBack, settle } from '../test/comeBack'
 import { client, document, folder, matter, problem, zone, type Routes } from '../test/fakeApi'
 import { detailsRoutes } from '../test/details'
 import { bringObservedIntoView } from '../test/intersection'
+import { setListSize } from '../test/listSize'
 import { renderApp } from '../test/renderApp'
 
 type S = components['schemas']
@@ -217,6 +218,8 @@ describe('SearchView', () => {
   })
 
   it('pages on as the end of the list comes into view, to the end of what the server counted', async () => {
+    // Sized, the list draws the rows in view, as in a browser: with none it would draw all 150, and each again at every page
+    setListSize(1280, 680)
     const many = Array.from({ length: 150 }, (_, i) => document({ docNumber: 20000 + i, name: `Doc ${String(i).padStart(3, '0')}.docx` }))
     const { api } = await renderApp(
       '/search?scope=documents&q=doc',
@@ -227,17 +230,25 @@ describe('SearchView', () => {
         },
       }),
     )
-    expect(await within(await grid()).findByRole('row', { name: /Doc 000/ })).toBeTruthy()
+    const table = await grid()
+    // How many rows the list holds, drawn or not: its heading row and the documents loaded
+    const held = () => Number(table.getAttribute('aria-rowcount'))
+    expect(await within(table).findByRole('row', { name: /Doc 000/ })).toBeTruthy()
     expect(await within(main()).findByText('150 documents')).toBeTruthy()
+    expect(held()).toBe(1 + 100)
     act(() => {
       bringObservedIntoView()
       bringObservedIntoView()
     })
-    expect(await within(await grid()).findByRole('row', { name: /Doc 120/ })).toBeTruthy()
+    await waitFor(() => expect(held()).toBe(1 + 150))
     // The second page starts where the first ended, and the 150 counted are all there: nothing more is asked for
     act(() => bringObservedIntoView())
     await new Promise((resolve) => setTimeout(resolve, 100))
     expect(api.callsTo('GET /v1/search').map((call) => call.query?.offset)).toEqual([0, 100])
+    // Scrolled past its end, where the list stops, it draws the last document the server counted
+    table.scrollTop = Number.MAX_SAFE_INTEGER
+    fireEvent.scroll(table)
+    expect(await within(table).findByRole('row', { name: /Doc 149/ })).toBeTruthy()
   })
 
   it('has Filters with Client and Matter besides Edit Date, File Type, Author and Class', async () => {

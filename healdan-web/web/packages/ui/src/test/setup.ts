@@ -5,6 +5,7 @@ import { cleanup } from '@testing-library/react'
 import { afterEach } from 'vitest'
 import { resetAnnouncer } from '../announcer'
 import { installIntersectionObserver } from './intersection'
+import { resetListSize } from './listSize'
 
 installIntersectionObserver()
 
@@ -13,4 +14,5 @@ afterEach(() => {
   cleanup()
   // React Aria's first announcement waits 100 ms, which can outlast the test file's page
   resetAnnouncer()
+  resetListSize()
 })

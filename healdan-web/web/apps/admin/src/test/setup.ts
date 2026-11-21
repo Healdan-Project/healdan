@@ -5,6 +5,7 @@ import { cleanup } from '@testing-library/react'
 import { clearToasts, resetAnnouncer, setLabels } from '@healdan/ui'
 import { afterEach, vi } from 'vitest'
 import { installIntersectionObserver } from './intersection'
+import { resetListSize } from './listSize'
 import { showPage } from './visibility'
 import { resetViewport } from './viewport'
 
@@ -21,6 +22,7 @@ afterEach(() => {
   vi.useRealTimers()
   clearToasts()
   resetViewport()
+  resetListSize()
   showPage()
   // What a test kept as a preference isn't the next one's
   window.localStorage.clear()
