@@ -145,7 +145,7 @@ describe('The Users list', () => {
   it("opens New User, and the new person's page once they're added", async () => {
     const created = { ...helenRow, id: 40, username: 'ann', name: 'Ann Lee' }
     const { router } = await openUsers('/users', {
-      'POST /v1/admin/users': { user: { ...adminRow, ...created, language: 'en', timeZone: null, created: '2026-11-21T10:00:00Z', passwordChanged: '2026-11-21T10:00:00Z', mustChangePassword: true, checkedOut: 0, mattersOwned: 0, refusals: { disable: null, enable: null, resetPassword: null, leaveAdmin: null } }, temporaryPassword: 'Tq7-mapLe-29', emailed: false },
+      'POST /v1/admin/users': { user: { ...adminRow, ...created, language: 'en', timeZone: null, created: '2026-11-21T10:00:00Z', passwordChanged: '2026-11-21T10:00:00Z', mustChangePassword: true, checkedOut: 0, mattersOwned: 0, refusals: { disable: null, enable: null, resetPassword: null, leaveAdmin: null } }, temporaryPassword: 'Tq7-mapLe-29', emailed: false, notEmailed: 'not-asked' },
     })
     await userEvent.click(screen.getByRole('button', { name: 'New User' }))
     const dialog = await screen.findByRole('dialog', { name: 'New User' })

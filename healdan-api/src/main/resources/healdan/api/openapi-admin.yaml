@@ -6872,7 +6872,7 @@ components:
       type: object
       description: A person just added, and their temporary password unless it was emailed
       additionalProperties: false
-      required: [user, temporaryPassword, emailed]
+      required: [user, temporaryPassword, emailed, notEmailed]
       properties:
         user:
           $ref: '#/components/schemas/User'
@@ -6887,6 +6887,15 @@ components:
             True when it was emailed, as `emailPassword` asked; false when
             it's `temporaryPassword` instead: not asked, or it couldn't be
             emailed, as `adminCreateUser` says
+        notEmailed:
+          type: [string, 'null']
+          enum: [not-asked, not-set-up, no-email, not-taken, null]
+          description: |
+            Why it's `temporaryPassword` instead of an email: `not-asked`;
+            `not-set-up`, outgoing email isn't set up or the server doesn't
+            send now; `no-email`, the person has no email address; or
+            `not-taken`, the email couldn't be sent or the mail server didn't
+            take it in time, so it may still arrive. Null when it was emailed
     UserChange:
       type: object
       description: |
@@ -6931,7 +6940,7 @@ components:
       type: object
       description: A reset's temporary password, unless it was emailed
       additionalProperties: false
-      required: [temporaryPassword, emailed]
+      required: [temporaryPassword, emailed, notEmailed]
       properties:
         temporaryPassword:
           type: [string, 'null']
@@ -6940,6 +6949,10 @@ components:
             sign-in, given in this answer only; null when it was emailed
         emailed:
           type: boolean
+          description: As in `CreatedUser`
+        notEmailed:
+          type: [string, 'null']
+          enum: [not-asked, not-set-up, no-email, not-taken, null]
           description: As in `CreatedUser`
     SignedOut:
       type: object
@@ -7031,7 +7044,7 @@ components:
       type: object
       description: A document a person has checked out
       additionalProperties: false
-      required: [docNumber, fileVersion, title, matter, since, device, app]
+      required: [docNumber, fileVersion, title, matter, since, device, deviceId, app]
       properties:
         docNumber:
           type: integer
@@ -7065,6 +7078,12 @@ components:
             wrote through is; null when no device holds it, as for a
             check-out from the web page
           examples: [Healdan Helper on MacBook]
+        deviceId:
+          type: [string, 'null']
+          description: |
+            That computer's id, which the public API's
+            `DELETE /v1/documents/{n}/checkout` takes as `elsewhere`, as its
+            holder's own release of it must; null when no device holds it
         app:
           type: [string, 'null']
           description: The app its check-out named; null when no device holds it, or it named none

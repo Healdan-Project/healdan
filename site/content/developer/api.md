@@ -1483,11 +1483,12 @@ is.
   account out of the `admin` group, or yourself; and any change that would leave the tenant with no enabled
   administrator, an enabled account in `admin` that isn't a system account. That's counted after the change and before
   it commits, under a lock every such change holds, so of two administrators taking each other out at the same moment,
-  the second is refused. They bind Disable, `PUT …/groups` and a member's `DELETE`. Under the same lock, Disable,
-  `PUT …/groups` and a member's `PUT` and `DELETE` first refuse a caller whose own account is no longer enabled, as
-  another administrator disabled it while the change waited its turn ("Your own account has been disabled, so you
-  can't change people's accounts and groups."). Edit, Enable, Reset Password and a group's `DELETE` hold the lock too,
-  so the changes to one person take turns, and none puts back what another has just changed.
+  the second is refused. They bind Disable, `PUT …/groups` and a member's `DELETE`. Every change to people and groups
+  first refuses a caller whose own account is no longer enabled, as another administrator disabled it while the
+  change waited its turn ("Your own account has been disabled, so you can't change people's accounts and groups."),
+  under that lock where the change holds it. New User, Edit, Enable, Reset Password and a group's `DELETE` hold the
+  lock too, so the changes to one person take turns, none puts back what another has just changed, and nobody is made
+  in a group as it's deleted.
 - **Everyone and `guest`.** Every person but a read-only one is always in Everyone, and a read-only one always in its
   own group and `guest`, and in no other. `PUT …/groups` keeps them whether it names them or not, so the answer's
   `groups` has them. Naming any other group for a read-only account, Everyone included, a member's `PUT` of one into
@@ -1495,8 +1496,9 @@ is.
   `409 refused`.
 - **The temporary password** is in two answers only, `POST /v1/admin/users`' `CreatedUser` and `reset-password`'s
   `TemporaryPassword`, and only when it wasn't emailed: never in another answer, a problem, the administration record
-  or a log line. `emailed` says whether the mail server took it, within 15 seconds; an answer doesn't say why it
-  wasn't, which the Admin app works out from the options' `outgoingEmail` and the person's `email`.
+  or a log line. `emailed` says whether the mail server took it, within 15 seconds, and `notEmailed` why it wasn't:
+  `not-asked`, `not-set-up`, `no-email` or `not-taken` (the email couldn't be sent, or the mail server didn't take it
+  in time), null when it was emailed.
 - **Signing out.** Disable and Reset Password revoke the person's device tokens in their transaction, and once it has
   committed close every session the person opened on the server, however it was opened, as themselves or as another
   account they may impersonate; Sign Out Everywhere does both. A session is closed by its id, never through the
@@ -1516,7 +1518,7 @@ The routes:
   (`{ "kind", "provider" }`: `password` with no provider, or `provider` with the provider an account is linked to, as
   `{ "id", "label" }`), `status` (`active`, `disabled` or `blocked`, disabled winning over blocked), `blockedUntil`
   (when a block ends, else null), `lastSignIn`, `devices` (how many usable device tokens), `readOnly` and `admin`.
-  `lastSignIn` is null for an account with no sign-in in its history, and otherwise when a session was last opened
+  `lastSignIn` is null for an account that has never signed in, and otherwise when a session was last opened
   for the person, by any route: a device token's request opens one once its last has timed out, so a device in steady
   use keeps it recent. Filters, all together: `q`, read trimmed, in any case, with `%` and `_` taken as they are, on the
   username, the email, the first name, the last name and the two together; `groupId`, a group's members, by an id as
@@ -1553,7 +1555,7 @@ The routes:
   closes the sessions; Enable gives no token back.
 - **`POST /v1/admin/users/{id}/reset-password`** with `{ "emailPassword" }`, `422 required` without it, gives the
   person a temporary password, revokes their device tokens, closes their sessions and clears the wrong passwords
-  counted against their username, and answers `TemporaryPassword`, `{ "temporaryPassword", "emailed" }`. A provider
+  counted against their username, and answers `TemporaryPassword`, `{ "temporaryPassword", "emailed", "notEmailed" }`. A provider
   account and your own are `409 refused`; another administrator may reset the `admin` account's.
 - **`POST /v1/admin/users/{id}/sign-out`** revokes the person's device tokens and closes their sessions, and answers
   `{ "sessions", "devices" }`: the sessions it closed and the usable devices it signed out.
@@ -1569,8 +1571,9 @@ The routes:
 - **`GET /v1/admin/users/{id}/checkouts`**, beyond the spec's list, is the documents the person has checked out, the
   latest check-out first, as a plain array, as `GET /v1/me/checkouts` reads one's own: `docNumber`, `fileVersion` (the
   file version, as `DocumentView` names it), `title`, `matter` (`{ "id", "number", "name" }`, or null), `since`,
-  `device` and `app`. Documents only locked aren't listed. The Admin app releases one with the public
-  `DELETE /v1/documents/{n}/checkout`, which an administrator may call on anyone's check-out.
+  `device`, `deviceId` and `app`. Documents only locked aren't listed. The Admin app releases one with the public
+  `DELETE /v1/documents/{n}/checkout`, which an administrator may call on anyone's check-out; for the caller's own,
+  held on a computer, it sends that computer's `deviceId` as `elsewhere`, as the route asks of a check-out's holder.
 - **`GET /v1/admin/groups?q=`**: a page of groups, by name, ignoring case, without people's own, each with `id`,
   `name`, `description` (null for none), `members` (its people, disabled and read-only accounts included), `fixed`
   (true for `admin`, `guest`, `publisher` and Everyone), `admin` and `mappedBy`, the labels of the sign-in providers,

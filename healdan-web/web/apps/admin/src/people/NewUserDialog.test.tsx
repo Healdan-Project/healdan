@@ -67,7 +67,7 @@ describe('New User', () => {
     const { onClose, onCreated, queryClient, view } = renderDialog({
       'POST /v1/admin/users': ({ body }: Sent) => {
         sent = body
-        return { user: ann, temporaryPassword: PASSWORD, emailed: false } satisfies A['CreatedUser']
+        return { user: ann, temporaryPassword: PASSWORD, emailed: false, notEmailed: 'not-asked' } satisfies A['CreatedUser']
       },
     })
     expect(document.activeElement).toBe(field('Username'))
@@ -103,7 +103,7 @@ describe('New User', () => {
 
   it("says so when the browser won't copy, and the password stays to be written down", async () => {
     vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText: () => Promise.reject(new Error('Not allowed')) } })
-    renderDialog({ 'POST /v1/admin/users': { user: ann, temporaryPassword: PASSWORD, emailed: false } satisfies A['CreatedUser'] })
+    renderDialog({ 'POST /v1/admin/users': { user: ann, temporaryPassword: PASSWORD, emailed: false, notEmailed: 'not-asked' } satisfies A['CreatedUser'] })
     await fill()
     await userEvent.click(create())
     const done = await screen.findByRole('dialog', { name: 'Added Ann Lee' })
@@ -117,7 +117,7 @@ describe('New User', () => {
     renderDialog({
       'POST /v1/admin/users': ({ body }: Sent) => {
         sent = body
-        return { user: ann, temporaryPassword: null, emailed: true } satisfies A['CreatedUser']
+        return { user: ann, temporaryPassword: null, emailed: true, notEmailed: null } satisfies A['CreatedUser']
       },
     })
     await fill()
@@ -135,17 +135,17 @@ describe('New User', () => {
   })
 
   it("shows the password, and why, when it was to be emailed and couldn't go", async () => {
-    renderDialog({ 'POST /v1/admin/users': { user: ann, temporaryPassword: PASSWORD, emailed: false } satisfies A['CreatedUser'] })
+    renderDialog({ 'POST /v1/admin/users': { user: ann, temporaryPassword: PASSWORD, emailed: false, notEmailed: 'not-taken' } satisfies A['CreatedUser'] })
     await fill({ email: 'ann@example.test' })
     await userEvent.click(within(dialog()).getByRole('checkbox', { name: 'Email It to Them' }))
     await userEvent.click(create())
     const done = await screen.findByRole('dialog', { name: 'Added Ann Lee' })
-    expect(within(done).getByText("Couldn't email the temporary password: the mail server didn't take it in time. Give it to Ann Lee yourself.")).toBeTruthy()
+    expect(within(done).getByText("Couldn't email the temporary password: the mail server didn't take it. Give it to Ann Lee yourself.")).toBeTruthy()
     expect(within(done).getByRole('group', { name: 'Temporary Password' }).textContent).toBe(PASSWORD)
   })
 
   it("never says it was emailed when it wasn't, even with no password to show", async () => {
-    renderDialog({ 'POST /v1/admin/users': { user: ann, temporaryPassword: null, emailed: false } satisfies A['CreatedUser'] })
+    renderDialog({ 'POST /v1/admin/users': { user: ann, temporaryPassword: null, emailed: false, notEmailed: 'not-taken' } satisfies A['CreatedUser'] })
     await fill({ email: 'ann@example.test' })
     await userEvent.click(within(dialog()).getByRole('checkbox', { name: 'Email It to Them' }))
     await userEvent.click(create())
@@ -195,7 +195,7 @@ describe('New User', () => {
     renderDialog({
       'POST /v1/admin/users': ({ body }: Sent) => {
         sent = body
-        return { user: ann, temporaryPassword: PASSWORD, emailed: false } satisfies A['CreatedUser']
+        return { user: ann, temporaryPassword: PASSWORD, emailed: false, notEmailed: 'not-asked' } satisfies A['CreatedUser']
       },
     })
     await fill({ email: 'ann@intranet' })
@@ -247,7 +247,7 @@ describe('New User', () => {
   })
 
   it('closes the temporary password only from Done, as it is its only showing: Esc and a click outside leave it (P4-R38)', async () => {
-    const { onClose, onCreated } = renderDialog({ 'POST /v1/admin/users': { user: ann, temporaryPassword: PASSWORD, emailed: false } satisfies A['CreatedUser'] })
+    const { onClose, onCreated } = renderDialog({ 'POST /v1/admin/users': { user: ann, temporaryPassword: PASSWORD, emailed: false, notEmailed: 'not-asked' } satisfies A['CreatedUser'] })
     await fill()
     await userEvent.click(create())
     const done = await screen.findByRole('dialog', { name: 'Added Ann Lee' })
@@ -279,7 +279,7 @@ describe('New User', () => {
     const { view } = renderDialog({
       'POST /v1/admin/users': ({ body }: Sent) => {
         sent = body
-        return { user: ann, temporaryPassword: PASSWORD, emailed: false } satisfies A['CreatedUser']
+        return { user: ann, temporaryPassword: PASSWORD, emailed: false, notEmailed: 'not-asked' } satisfies A['CreatedUser']
       },
     })
     await fill()
@@ -307,7 +307,7 @@ describe('New User', () => {
     await userEvent.keyboard('{Escape}')
     expect(screen.getByRole('dialog', { name: 'New User' })).toBeTruthy()
     expect(onClose).not.toHaveBeenCalled()
-    await act(async () => finish({ user: ann, temporaryPassword: PASSWORD, emailed: false }))
+    await act(async () => finish({ user: ann, temporaryPassword: PASSWORD, emailed: false, notEmailed: 'not-asked' }))
     expect(await screen.findByRole('dialog', { name: 'Added Ann Lee' })).toBeTruthy()
   })
 })

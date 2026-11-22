@@ -898,7 +898,7 @@ export const adminEnUS = {
   'admin.password.notEmailed': "Couldn't email the temporary password: {reason}. Give it to {name} yourself.",
   'admin.password.reasonNotSetUp': "outgoing email isn't set up",
   'admin.password.reasonNoEmail': 'they have no email address',
-  'admin.password.reasonTimedOut': "the mail server didn't take it in time",
+  'admin.password.reasonNotTaken': "the mail server didn't take it",
   // An answer with no password that wasn't emailed either, which the server never gives
   'admin.password.missing': "Healdan gave no temporary password to show. Use Reset Password on {name}'s page to make another.",
   'admin.password.done': 'Done',

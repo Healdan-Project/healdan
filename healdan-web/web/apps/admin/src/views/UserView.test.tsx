@@ -20,6 +20,7 @@ import {
   ronnieRow,
   sallyRow,
   trainees,
+  userCheckout,
   userOf,
   users,
   type Routes,
@@ -197,7 +198,7 @@ describe("A person's page", () => {
     const { api, view } = await openPerson(priyaRow.id, {
       'POST /v1/admin/users/7/reset-password': ({ body }: Sent) => {
         sent = body
-        return { temporaryPassword: PASSWORD, emailed: false } satisfies A['TemporaryPassword']
+        return { temporaryPassword: PASSWORD, emailed: false, notEmailed: 'not-asked' } satisfies A['TemporaryPassword']
       },
     })
     await userEvent.click(action('Reset Password')!)
@@ -231,7 +232,7 @@ describe("A person's page", () => {
     await openPerson(priyaRow.id, {
       'POST /v1/admin/users/7/reset-password': ({ body }: Sent) => {
         sent = body
-        return { temporaryPassword: null, emailed: true } satisfies A['TemporaryPassword']
+        return { temporaryPassword: null, emailed: true, notEmailed: null } satisfies A['TemporaryPassword']
       },
     })
     await userEvent.click(action('Reset Password')!)
@@ -438,6 +439,27 @@ describe("A person's page", () => {
     expect(within(main()).getByText('A member of admin: they can use Healdan Admin and read every document.')).toBeTruthy()
   })
 
+  it('saves their groups as they are now with what changed here, so one another administrator took away meanwhile stays away', async () => {
+    const brief = (...groups: { id: number; name: string }[]) => groups.map(({ id, name }) => ({ id, name }))
+    // In admin as the page opens; another administrator takes them out while a group is removed here
+    let meanwhile = false
+    let sent: unknown
+    await openPerson(priyaRow.id, {
+      'GET /v1/admin/users/7': () => (meanwhile ? userOf({ ...priyaRow, groups: brief(everyone, trainees) }) : userOf({ ...priyaRow, admin: true, groups: brief(adminGroup, everyone, trainees) })),
+      'PUT /v1/admin/users/7/groups': ({ body }: Sent) => {
+        sent = body
+        return userOf({ ...priyaRow, groups: brief(everyone) })
+      },
+    })
+    await userEvent.click(within(main()).getByRole('button', { name: `Remove ${trainees.name}` }))
+    meanwhile = true
+    await userEvent.click(within(main()).getByRole('button', { name: 'Save' }))
+    expect(await screen.findByText('Saved the groups of Priya Nair')).toBeTruthy()
+    // admin isn't put back, and nothing asked to add them to it
+    expect(sent).toEqual({ groupIds: [everyone.id] } satisfies A['UserGroups'])
+    expect(screen.queryByRole('alertdialog', { name: 'Add Priya Nair to admin?' })).toBeNull()
+  })
+
   it("keeps a read-only account in guest, and offers it no group", async () => {
     const { view } = await openPerson(ronnieRow.id)
     expect(groupsOf('Ronnie Hale').map((item) => item.textContent)).toEqual(['guestA read-only account is always in guest.'])
@@ -469,7 +491,19 @@ describe("A person's page", () => {
     await userEvent.click(within(question).getByRole('button', { name: 'Release' }))
     expect(await screen.findByText('Released Witness Statement.docx')).toBeTruthy()
     expect(api.callsTo('DELETE /v1/documents/10412/checkout')).toHaveLength(1)
+    // Someone else's, released as an administrator may: no computer is named
+    expect(api.callsTo('DELETE /v1/documents/10412/checkout')[0]?.query).toBeUndefined()
     await waitFor(() => expect(api.callsTo('GET /v1/admin/users/7/checkouts').length).toBeGreaterThan(1))
+  })
+
+  it('releases your own check-out held on a computer by naming that computer, as the route asks of its holder', async () => {
+    const { api } = await openPerson(adminRow.id, { 'GET /v1/admin/users/1/checkouts': [userCheckout()], 'DELETE /v1/documents/10388/checkout': {} })
+    const checkouts = await within(main()).findByRole('table', { name: 'Checked Out by Alex Morgan' })
+    await userEvent.click(within(checkouts).getByRole('button', { name: 'Release Heads of Terms.docx' }))
+    const question = await screen.findByRole('alertdialog', { name: 'Release Heads of Terms.docx?' })
+    await userEvent.click(within(question).getByRole('button', { name: 'Release' }))
+    expect(await screen.findByText('Released Heads of Terms.docx')).toBeTruthy()
+    expect(api.callsTo('DELETE /v1/documents/10388/checkout')[0]?.query).toEqual({ elsewhere: 'mac-7f3a' })
   })
 
   it('says so when the address names nobody', async () => {

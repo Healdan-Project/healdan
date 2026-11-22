@@ -7,12 +7,14 @@ import static com.logicaldoc.healdan.api.admin.ListOrder.date;
 
 import java.util.Date;
 import java.util.List;
+import java.util.Locale;
 
 import com.logicaldoc.healdan.admin.people.CheckedOut;
 import com.logicaldoc.healdan.admin.people.DeviceRow;
 import com.logicaldoc.healdan.admin.people.GroupDetail;
 import com.logicaldoc.healdan.admin.people.GroupRow;
 import com.logicaldoc.healdan.admin.people.MemberRow;
+import com.logicaldoc.healdan.admin.people.NotEmailed;
 import com.logicaldoc.healdan.admin.people.Person;
 import com.logicaldoc.healdan.admin.people.PersonRow;
 import com.logicaldoc.healdan.admin.people.SignsInWith;
@@ -124,9 +126,17 @@ public final class PeopleView {
 	}
 
 	/**
-	 * {@code CreatedUser}: a person just added, and their temporary password unless it was emailed.
+	 * @return why a temporary password wasn't emailed, as the contract's {@code notEmailed} says it, such as
+	 *         {@code not-set-up}; null when it was emailed
 	 */
-	public record CreatedUser(UserView user, String temporaryPassword, boolean emailed) {
+	static String notEmailed(NotEmailed why) {
+		return why != null ? why.name().toLowerCase(Locale.ROOT).replace('_', '-') : null;
+	}
+
+	/**
+	 * {@code CreatedUser}: a person just added, and their temporary password, with why, unless it was emailed.
+	 */
+	public record CreatedUser(UserView user, String temporaryPassword, boolean emailed, String notEmailed) {
 
 		@Override
 		public String toString() {
@@ -136,9 +146,9 @@ public final class PeopleView {
 	}
 
 	/**
-	 * {@code TemporaryPassword}: a reset's temporary password, unless it was emailed.
+	 * {@code TemporaryPassword}: a reset's temporary password, with why, unless it was emailed.
 	 */
-	public record TemporaryPassword(String temporaryPassword, boolean emailed) {
+	public record TemporaryPassword(String temporaryPassword, boolean emailed, String notEmailed) {
 
 		@Override
 		public String toString() {
@@ -175,13 +185,13 @@ public final class PeopleView {
 	 * {@code UserCheckout}: a document a person has checked out.
 	 */
 	public record UserCheckout(long docNumber, String fileVersion, String title, MatterBrief matter, Date since,
-			String device, String app) {
+			String device, String deviceId, String app) {
 
 		static UserCheckout of(CheckedOut held) {
 			CheckedOut.Matter matter = held.matter();
 			return new UserCheckout(held.docNumber(), held.fileVersion(), held.title(),
 					matter != null ? new MatterBrief(matter.id(), matter.number(), matter.name()) : null,
-					date(held.since()), held.device(), held.app());
+					date(held.since()), held.device(), held.deviceId(), held.app());
 		}
 	}
 

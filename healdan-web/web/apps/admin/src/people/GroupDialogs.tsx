@@ -118,8 +118,6 @@ export function NewGroupDialog({ onCreated, onClose }: NewGroupDialogProps) {
             />
             <TextField
               label={t('admin.newGroup.description')}
-              multiline
-              rows={2}
               value={description}
               error={descriptionError}
               onChange={(value) => {
@@ -256,8 +254,6 @@ export function GroupDescriptionDialog({ group, onClose }: GroupDialogProps) {
             <TextField
               label={t('admin.groupDescription.label')}
               autoFocus
-              multiline
-              rows={3}
               value={description}
               error={error}
               onChange={(value) => {

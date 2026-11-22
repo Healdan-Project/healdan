@@ -74,7 +74,8 @@ final class PeopleReads {
 	 * @param readOnly whether it's a read-only account
 	 * @param source how LogicalDOC made it, {@link UserSource}'s ordinal
 	 * @param lastLogin when LogicalDOC last stamped a sign-in; filled when the account is made
-	 * @param signedIn whether its history has a sign-in
+	 * @param signedIn whether it has signed in: its history has a sign-in, or, as the history may not record them
+	 *        ({@code history.events}), a sign-in's stamp is later than when it was made
 	 * @param language its language, null for a blank one
 	 * @param timeZone its time zone, null for a blank one
 	 * @param created when it was made
@@ -178,8 +179,9 @@ final class PeopleReads {
 				select u.ld_id, u.ld_username, u.ld_firstname, u.ld_name, u.ld_email, u.ld_enabled, u.ld_type,
 				       u.ld_source, u.ld_lastlogin, u.ld_language, u.ld_timezone, u.ld_creation, u.ld_passwordchanged,
 				       u.ld_passwordexpired,
-				       case when exists (select 1 from ld_user_history h
-				                          where h.ld_userid = u.ld_id and h.ld_event = :login) then 1 else 0 end
+				       case when u.ld_lastlogin > u.ld_creation
+				                 or exists (select 1 from ld_user_history h
+				                             where h.ld_userid = u.ld_id and h.ld_event = :login) then 1 else 0 end
 				  from ld_user u
 				 where""" + " " + PERSON + one, params, (rs, n) -> account(rs));
 	}

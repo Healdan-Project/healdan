@@ -51,6 +51,7 @@ final class PersonCheckouts {
 				DeviceHolds.Held device = DeviceHolds.get().held(doc).orElse(null);
 				held.add(new CheckedOut(Long.parseLong(doc.getCustomId()), doc.getFileVersion(), doc.getFileName(),
 						brief, since(doc), device != null ? device.name() : null,
+						device != null ? device.row().getDevice() : null,
 						device != null ? device.row().getApp() : null));
 			}
 			held.sort(Comparator.comparing(CheckedOut::since, Comparator.nullsLast(Comparator.reverseOrder()))

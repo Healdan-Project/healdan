@@ -662,7 +662,8 @@ see [Building from Source](../building-from-source/#running-the-war-outside-dock
     accounts, their groups, provider links, throttle counts and device tokens in one go (`PeopleReads`), then filters,
     sorts and pages in Java, as a firm has hundreds of people. A person's Last Sign-In is when LogicalDOC last opened a
     session for them: `Session` writes `ld_lastlogin` and an `event.user.login` history row for every new session, a
-    device token's included once its bound session has timed out, and an account with no such row has never signed
+    device token's included once its bound session has timed out, and an account with no such row, and no
+    `ld_lastlogin` later than when it was made (LogicalDOC's `history.events` can leave the row out), has never signed
     in.
   - **Each change runs a transaction of its own,** a `TransactionTemplate` rather than `@Transactional`, and refuses to
     run inside a caller's (`IllegalStateException`), so a guarded change commits before it lets go of its lock, and what
@@ -679,11 +680,12 @@ see [Building from Source](../building-from-source/#running-the-war-outside-dock
     of anyone's memberships (a person's groups, a group's member added or removed), holds
     `UserAdministration.ADMIN_CHANGES`, counts them after its write, inside its transaction, and commits before it lets
     go, so of two administrators taking each other out at the same moment the second counts what the first left, and is
-    refused. Inside the lock, before anything else, it refuses a caller whose own account, as stored now and read with
-    JDBC past the second-level cache, is no longer enabled (`YOUR_ACCOUNT_DISABLED`), so an administrator another
-    disabled while their change waited its turn changes nothing. Edit, Enable, Reset Password's transaction and a
-    group's delete hold `ADMIN_CHANGES` too, so the Admin app's stores of one person take turns, and none puts back
-    groups another has just changed. New User holds `NEW_USERNAMES`, and New Group and a rename
+    refused. Every change, inside its lock where it holds one and before anything else, refuses a caller whose own
+    account, as stored now and read with JDBC past the second-level cache, is no longer enabled
+    (`YOUR_ACCOUNT_DISABLED`), so an administrator another disabled while their change waited its turn changes
+    nothing. New User, Edit, Enable, Reset Password's transaction and a group's delete hold `ADMIN_CHANGES` too, so
+    the Admin app's stores of one person take turns, none puts back groups another has just changed, and nobody is
+    made in a group as it's deleted. New User holds `NEW_USERNAMES` as well, outside it, and New Group and a rename
     `GroupAdministration.GROUP_NAMES`, so a name's check in any case and its insert can't interleave with another's; a
     unique index's refusal (SQLState `23505`) is checked again after the transaction, as `NumberRaces` does, and
     answered `taken` only when the name is taken now. Each lock is taken outside its transaction, and nothing after a

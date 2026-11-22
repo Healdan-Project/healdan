@@ -102,7 +102,8 @@ deleted account does.
 **Groups** lists their groups by name, each opening the group's page, `admin` marked **Reads Every Document**.
 **Add a Group** adds them to one, finding it as you type, and the Remove button (an ×) beside a group takes them out
 of it. **Save** saves their groups, and stays greyed out until something has changed; **Discard Changes** puts back
-what's saved. Leaving the page with a change not saved, or while it's being saved, asks first, as the Workspace Editor
+what's saved. Save makes only the changes you made, to their groups as they are then, so a group another administrator
+added or took away meanwhile stays as that administrator left it. Leaving the page with a change not saved, or while it's being saved, asks first, as the Workspace Editor
 does: "Leave the Changes to Ann Lee?", with **Discard Changes**, or, while it's saving, **Leave Page**.
 
 - **Everyone stays.** Every account but a read-only one is always in [Everyone](#the-everyone-group), so it has no
@@ -186,9 +187,9 @@ to change it at their first sign-in: the sign-in page asks them for a new one.
   isn't shown again: once this closes, it's gone." Only **Done** closes it. Nothing shows it again, and Healdan keeps
   no copy anyone can read: if it's lost, use [Reset Password](#reset-password).
 - **Shown when it can't be emailed:** when outgoing email isn't set up, they have no email address, or the mail
-  server didn't take the email within 15 seconds, the account is still made, and New User shows the password instead,
-  saying why it wasn't emailed: "Couldn't email the temporary password: the mail server didn't take it in time. Give
-  it to Ann Lee yourself."
+  server didn't take the email, refusing it or not answering within 15 seconds, the account is still made, and New
+  User shows the password instead, saying why it wasn't emailed: "Couldn't email the temporary password: the mail
+  server didn't take it. Give it to Ann Lee yourself."
 
 The password is never in the record of the change, the server's log or any other page, and the Admin app keeps it only
 while its window is open: never in the page's address or the browser's storage.
@@ -299,9 +300,9 @@ So that someone can always administer Healdan, Healdan refuses, each with a sent
 - **any change that would leave no enabled administrator,** an enabled account in `admin`: "That would leave no
   enabled administrator. Make someone else an administrator first." Two such changes at the same moment are made one
   after the other, and the second is checked against what the first left, so two administrators can't take each other
-  out: it counts the administrators the first left, and a **Disable**, or a change of someone's groups or a group's
-  members, by an administrator the first disabled is refused, with "Your own account has been disabled, so you can't
-  change people's accounts and groups."
+  out: it counts the administrators the first left, and any change to people's accounts and groups by an
+  administrator the first disabled is refused, with "Your own account has been disabled, so you can't change people's
+  accounts and groups."
 
 It also refuses:
 
@@ -371,7 +372,7 @@ whose name, username or email holds what you type. It shows 100, and **Show More
 - **Name:** at most 200 characters, not starting `_user_`, as personal groups' names do, and with no control
   character. One that another group has, in any case, is taken: New Group says so before its button, and Healdan
   refuses it whoever has it.
-- **Description:** at most 255 characters, if you want one.
+- **Description:** one line of at most 255 characters, if you want one.
 
 It says the new group has no members, and gives nobody anything until a folder's or a Store's access names it: see
 [Permissions](../permissions/) and [Who Can See a Store](../stores/#who-can-see-a-store). **Create Group** makes it,

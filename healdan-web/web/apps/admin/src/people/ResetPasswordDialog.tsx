@@ -62,7 +62,7 @@ export function ResetPasswordDialog({ person, onClose }: { person: A['User']; on
       // showing (P4-R38)
       <Dialog title={t('admin.resetPassword.doneTitle', { name: person.name })} isOpen onOpenChange={() => undefined}>
         <div className={formStyles.form}>
-          <PasswordShown person={person} answer={reset.answer} asked={reset.asked} options={options} />
+          <PasswordShown person={person} answer={reset.answer} asked={reset.asked} />
           <div className={formStyles.buttons}>
             {/* The question went as this came, so the focus is put inside: on Copy, or here when nothing is shown */}
             <Button variant="default" autoFocus={reset.answer.temporaryPassword === null} onPress={onClose}>

@@ -223,6 +223,10 @@ public class UserAdministrationTest extends AbstractHealdanTestCase {
 		row = row(carol);
 		assertNotNull(row.lastSignIn());
 		assertEquals(1, row.devices());
+		// Without the history's row too, which LogicalDOC's history.events can leave out: by the sign-in's stamp
+		jdbc.update("delete from ld_user_history where ld_userid = ? and ld_event = ?", carol.getId(),
+				UserEvent.LOGIN.toString());
+		assertNotNull(row(carol).lastSignIn());
 
 		assertTrue(row(admin).admin());
 	}
@@ -870,6 +874,17 @@ public class UserAdministrationTest extends AbstractHealdanTestCase {
 		assertEquals(UserAdministration.YOUR_ACCOUNT_DISABLED, e.getMessage());
 		e = assertThrows(HealdanRuleException.class, () -> service.disable(ann.getId(), bob));
 		assertEquals(UserAdministration.YOUR_ACCOUNT_DISABLED, e.getMessage());
+		// Nor by any other change to people and groups
+		for (HealdanOperation.ThrowingRunnable change : List.<HealdanOperation.ThrowingRunnable>of(
+				() -> service.resetPassword(ann.getId(), false, bob), () -> service.enable(admin.getId(), bob),
+				() -> service.update(ann.getId(), UserDraft.edit("Ann", "Other", null, null, null), bob),
+				() -> service.signOut(ann.getId(), bob), () -> service.clearBlock(ann.getId(), bob),
+				() -> service.create(draft("zoe", null), false, bob),
+				() -> GroupAdministration.get().create("Clerks", null, bob),
+				() -> GroupAdministration.get().delete(partners.getId(), bob))) {
+			e = assertThrows(HealdanRuleException.class, change::run);
+			assertEquals(UserAdministration.YOUR_ACCOUNT_DISABLED, e.getMessage());
+		}
 		assertEquals(1, enabledAdmins());
 		assertEquals(List.of(), events("user"));
 

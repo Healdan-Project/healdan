@@ -15,10 +15,11 @@ import java.time.Instant;
  * @param matter the matter it's in; null for one in a Store's folder outside any matter
  * @param since when they checked it out; null when that isn't recorded
  * @param device the name of the device that holds the check-out; null when none does, or the device has no name
+ * @param deviceId that device's id, which the public API's release takes as {@code elsewhere}; null when none holds it
  * @param app the app it's open in on that device, such as {@code Word}; null when no device holds it
  */
 public record CheckedOut(long docNumber, String fileVersion, String title, Matter matter, Instant since,
-		String device, String app) {
+		String device, String deviceId, String app) {
 
 	/**
 	 * A matter

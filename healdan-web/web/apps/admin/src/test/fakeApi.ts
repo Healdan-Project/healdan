@@ -954,6 +954,7 @@ export function userCheckout(over: Partial<A['UserCheckout']> = {}): A['UserChec
     matter: { id: 11, number: '1001.1', name: 'Charter Dispute' },
     since: '2026-11-18T14:05:00Z',
     device: 'Healdan Helper on MacBook',
+    deviceId: 'mac-7f3a',
     app: 'Word',
     ...over,
   }
@@ -968,8 +969,8 @@ export const userDevices: Record<number, A['UserDevice'][]> = {
 export const userCheckouts: Record<number, A['UserCheckout'][]> = {
   [helenRow.id]: [userCheckout()],
   [priyaRow.id]: [
-    userCheckout({ docNumber: 10412, title: 'Witness Statement.docx', fileVersion: '1.3', device: 'Healdan Helper on ThinkPad', app: 'LibreOffice', since: '2026-11-19T09:00:00Z' }),
-    userCheckout({ docNumber: 10398, title: 'Board Minutes.xlsx', fileVersion: '1.0', matter: null, device: null, app: null, since: null }),
+    userCheckout({ docNumber: 10412, title: 'Witness Statement.docx', fileVersion: '1.3', device: 'Healdan Helper on ThinkPad', deviceId: 'linux-9e0b', app: 'LibreOffice', since: '2026-11-19T09:00:00Z' }),
+    userCheckout({ docNumber: 10398, title: 'Board Minutes.xlsx', fileVersion: '1.0', matter: null, device: null, deviceId: null, app: null, since: null }),
   ],
 }
 

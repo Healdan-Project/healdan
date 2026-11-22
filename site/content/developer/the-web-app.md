@@ -308,8 +308,9 @@ What the screens from Phase 2 on share (the spec's section 7.2):
   as the server allows), `ResetPasswordDialog` and `TemporaryPassword.tsx` (`PasswordShown`: the password once, with
   **Copy**, or that it was emailed, or why it wasn't, in a dialog only **Done** closes, Esc and a click outside ignored,
   as it's the only showing), `GroupsEditor` (a person's groups, which reports through `useEditState`, so the page's
-  Leave question covers it), `DevicesPanel`, `CheckoutsPanel` (whose **Release** is the public
-  `DELETE /v1/documents/{n}/checkout`), `MembersPanel`, `AddMemberDialog` and `GroupDialogs` (New Group, Rename and Edit
+  Leave question covers it, and whose Save reads the groups again and sends them with what was added and removed
+  here, so another administrator's change meanwhile stays), `DevicesPanel`, `CheckoutsPanel` (whose **Release** is the
+  public `DELETE /v1/documents/{n}/checkout`, with `elsewhere` for the caller's own check-out held on a computer), `MembersPanel`, `AddMemberDialog` and `GroupDialogs` (New Group, Rename and Edit
   Description), beside `queries.ts` (`peopleKeys`, under `['admin', 'users']`, `peopleChanged` and `personChanged`),
   `groupQueries.ts` (`groupKeys`, under `['admin', 'groups']`, `groupChanged`, which asks every admin answer again as a
   group's name is in many, and `membersChanged`), `text.ts`, `groupText.ts` (the name checks and what a group's page and

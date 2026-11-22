@@ -49,20 +49,19 @@ function PasswordText({ password }: { password: string }) {
   )
 }
 
-/** Why a temporary password the person was to be emailed wasn't: as far as the app can tell, else the mail server */
-function whyNotEmailed(person: A['User'], options: A['UserOptions'] | undefined): string {
-  if (options?.outgoingEmail === false) return t('admin.password.reasonNotSetUp')
-  if (person.email === null) return t('admin.password.reasonNoEmail')
-  return t('admin.password.reasonTimedOut')
+/** Why a temporary password the person was to be emailed wasn't, as the server says (`notEmailed`) */
+function whyNotEmailed(why: A['TemporaryPassword']['notEmailed']): string {
+  if (why === 'not-set-up') return t('admin.password.reasonNotSetUp')
+  if (why === 'no-email') return t('admin.password.reasonNoEmail')
+  return t('admin.password.reasonNotTaken')
 }
 
 export interface PasswordShownProps {
   person: A['User']
   /** What the create or the reset answered: the password, or that it was emailed */
-  answer: Pick<A['TemporaryPassword'], 'temporaryPassword' | 'emailed'>
+  answer: Pick<A['TemporaryPassword'], 'temporaryPassword' | 'emailed' | 'notEmailed'>
   /** Whether it was to be emailed, so a password shown says why it wasn't */
   asked: boolean
-  options: A['UserOptions'] | undefined
 }
 
 /**
@@ -71,14 +70,14 @@ export interface PasswordShownProps {
  * none to show. It lives only in the dialog's state that holds the answer,
  * and goes as the dialog closes: never in the query cache, the address or the browser's storage.
  */
-export function PasswordShown({ person, answer, asked, options }: PasswordShownProps) {
+export function PasswordShown({ person, answer, asked }: PasswordShownProps) {
   // Emailed only when the answer says so: a password missing from an answer that wasn't emailed is said as missing
   if (answer.emailed) return <p className={styles.line}>{t('admin.password.emailed', { name: person.name, email: person.email ?? '' })}</p>
   if (answer.temporaryPassword === null) return <p className={styles.line}>{t('admin.password.missing', { name: person.name })}</p>
   return (
     <>
       <p className={styles.line}>
-        {asked ? t('admin.password.notEmailed', { reason: whyNotEmailed(person, options), name: person.name }) : t('admin.password.give', { name: person.name })}
+        {asked ? t('admin.password.notEmailed', { reason: whyNotEmailed(answer.notEmailed), name: person.name }) : t('admin.password.give', { name: person.name })}
       </p>
       <PasswordText password={answer.temporaryPassword} />
       <p className={styles.note}>{t('admin.password.onlyHere')}</p>

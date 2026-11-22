@@ -172,7 +172,8 @@ public class AdminUsersResource {
 		String location = UriBuilder.fromPath(uri.getBaseUri().getRawPath()).path("v1/admin/users/{id}").build(id)
 				.toString();
 		return Response.status(Response.Status.CREATED).header(HttpHeaders.LOCATION, location)
-				.entity(new CreatedUser(UserView.of(created.user()), created.temporaryPassword(), created.emailed()))
+				.entity(new CreatedUser(UserView.of(created.user()), created.temporaryPassword(), created.emailed(),
+						PeopleView.notEmailed(created.notEmailed())))
 				.build();
 	}
 
@@ -282,7 +283,8 @@ public class AdminUsersResource {
 		User actor = caller();
 		ResetResult reset = run("Can't reset the password of user #" + id,
 				() -> service().resetPassword(id, body.emailPassword(), actor));
-		return new TemporaryPassword(reset.temporaryPassword(), reset.emailed());
+		return new TemporaryPassword(reset.temporaryPassword(), reset.emailed(),
+				PeopleView.notEmailed(reset.notEmailed()));
 	}
 
 	/**

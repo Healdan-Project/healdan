@@ -28,8 +28,9 @@ function sameGroups(one: readonly A['GroupBrief'][], other: readonly A['GroupBri
 
 /**
  * A person's groups, on their page (spec 8.7): each group they're in, groups added from a search and any removed, and
- * Save, which sends the groups they're to be in (`PUT /users/{id}/groups`), or Discard Changes. Save asks first when it
- * adds someone to `admin`, saying they'll read every document. What can't be taken away has no Remove and says why: Everyone
+ * Save, or Discard Changes. Save reads their groups again and sends them with what was added here and without what was
+ * removed (`PUT /users/{id}/groups`), so a change another administrator made meanwhile, such as taking them out of
+ * `admin`, stays. Save asks first when it adds someone to `admin`, saying they'll read every document. What can't be taken away has no Remove and says why: Everyone
  * for an account that isn't read-only, `guest` for one that is, and `admin` while the server would refuse it
  * (`refusals.leaveAdmin`). A read-only account is offered no group to add. For an account linked to a sign-in provider,
  * each group the provider's group map names says the map sets it again at their next sign-in. The server's refusal is
@@ -41,6 +42,8 @@ export function GroupsEditor({ person }: { person: A['User'] }) {
   const queryClient = useQueryClient()
   // The groups being changed; null while they're the server's
   const [draft, setDraft] = useState<A['GroupBrief'][] | null>(null)
+  // Their groups when the change began, which Save works out what was added and removed from
+  const [from, setFrom] = useState<readonly A['GroupBrief'][]>(person.groups)
   const [mapped, setMapped] = useState(new Map<number, string[]>())
   const [asking, setAsking] = useState(false)
   const [failure, setFailure] = useState<unknown>()
@@ -93,6 +96,7 @@ export function GroupsEditor({ person }: { person: A['User'] }) {
   }
 
   function change(next: A['GroupBrief'][]) {
+    if (draft === null) setFrom(person.groups)
     setDraft(next)
     setFailure(undefined)
   }
@@ -104,7 +108,7 @@ export function GroupsEditor({ person }: { person: A['User'] }) {
 
   /** Save: adding them to `admin` asks first */
   function save() {
-    const joins = groups.some(isAdminGroup) && !person.groups.some(isAdminGroup)
+    const joins = groups.some(isAdminGroup) && !from.some(isAdminGroup)
     if (joins) setAsking(true)
     else void send()
   }
@@ -113,7 +117,14 @@ export function GroupsEditor({ person }: { person: A['User'] }) {
     setBusy(true)
     setFailure(undefined)
     try {
-      const saved = await api.send<A['User']>('PUT', apiPath`/v1/admin/users/${person.id}/groups`, { groupIds: groups.map((group) => group.id) } satisfies A['UserGroups'])
+      // Their groups as they are now, not as this page last read them: one another administrator took away meanwhile
+      // isn't put back, and one they added isn't taken away, unless it was added or removed here
+      const now = (await api.get<A['User']>(apiPath`/v1/admin/users/${person.id}`)).groups
+      const has = (list: readonly A['GroupBrief'][], id: number) => list.some((group) => group.id === id)
+      const kept = now.filter((group) => has(groups, group.id) || !has(from, group.id))
+      const added = groups.filter((group) => !has(from, group.id) && !has(now, group.id))
+      const groupIds = [...kept, ...added].map((group) => group.id)
+      const saved = await api.send<A['User']>('PUT', apiPath`/v1/admin/users/${person.id}/groups`, { groupIds } satisfies A['UserGroups'])
       // A read still on its way, as on a return to the window, began before the save, so it's called off rather than land after it
       await queryClient.cancelQueries({ queryKey: peopleKeys.user(person.id), exact: true })
       peopleChanged(queryClient, saved)

@@ -70,10 +70,12 @@ import com.logicaldoc.util.spring.Context;
  * <p>
  * <b>The guards:</b> the {@code admin} account is never disabled or taken out of the {@code admin} group, nobody
  * disables or takes themselves out of it, and no change made here leaves the tenant without an enabled administrator.
- * Every change that could lower their count holds {@link #ADMIN_CHANGES}, runs in a transaction of its own, refuses a
- * caller whose own account is no longer enabled, counts them after its write and commits before it lets go, so two
- * administrators taking each other out at once leave one. Edit, Enable, Reset Password and a group's delete hold it
- * too, so this app's stores of a person take turns and none puts back groups another has just changed.
+ * Every change that could lower their count holds {@link #ADMIN_CHANGES}, runs in a transaction of its own, counts
+ * them after its write and commits before it lets go, so two administrators taking each other out at once leave one.
+ * New User, Edit, Enable, Reset Password and a group's delete hold it too, so this app's stores of a person take turns,
+ * none puts back groups another has just changed, and nobody is made in a group as it's deleted. Every change refuses
+ * a caller whose own account, as stored, is no longer enabled ({@link #YOUR_ACCOUNT_DISABLED}), inside its lock where
+ * it holds one, so an administrator disabled while their change waited its turn changes nothing.
  * <p>
  * <b>Signing out:</b> Disable and Reset Password revoke the person's device tokens in their store, through
  * {@code TokenUserListener}, and once they commit close every open session on this server that the person opened, as
@@ -98,7 +100,10 @@ public class UserAdministration {
 	 */
 	static final Object ADMIN_CHANGES = new Object();
 
-	/** New User holds it until it has committed, so two accounts can't take one username in two cases */
+	/**
+	 * New User holds it until it has committed, so two accounts can't take one username in two cases; it takes
+	 * {@link #ADMIN_CHANGES} inside it, never the other way round
+	 */
 	static final Object NEW_USERNAMES = new Object();
 
 	/** Nothing, the default of {@link #whileLocked} */
@@ -310,8 +315,11 @@ public class UserAdministration {
 
 		long id;
 		try {
+			// ADMIN_CHANGES too, inside it, so a group's delete and this take turns: nobody joins a group as it's deleted
 			synchronized (NEW_USERNAMES) {
+				synchronized (ADMIN_CHANGES) {
 				id = inTransaction(() -> {
+					requireEnabledAdmin(actor);
 					if (taken(form.username()))
 						throw new FieldRefusal(List.of(new FieldRefusal.Field("username", FieldRefusal.TAKEN, TAKEN)));
 					// Again where they're added: a group deleted meanwhile is still read, and would be joined
@@ -349,6 +357,7 @@ public class UserAdministration {
 					whileLocked.run();
 					return user.getId();
 				});
+				}
 			}
 		} catch (RuntimeException | PersistenceException e) {
 			// Another route made the username meanwhile, and LogicalDOC's unique index refused this one: its
@@ -385,6 +394,7 @@ public class UserAdministration {
 			throw new IllegalArgumentException("An edit changes no groups");
 		synchronized (ADMIN_CHANGES) {
 			return inTransaction(() -> {
+				requireEnabledAdmin(actor);
 				User user = changeable(id, actor.getTenantId());
 				UserForm form = UserForm.check(draft, user.getTenantId(), user, this::taken);
 				String language = StringUtils.isBlank(user.getLanguage())
@@ -480,6 +490,7 @@ public class UserAdministration {
 		requireAdmin(actor);
 		synchronized (ADMIN_CHANGES) {
 			return inTransaction(() -> {
+				requireEnabledAdmin(actor);
 				User user = changeable(id, actor.getTenantId());
 				if (user.isEnabled())
 					return false;
@@ -515,6 +526,7 @@ public class UserAdministration {
 		User user;
 		synchronized (ADMIN_CHANGES) {
 			user = inTransaction(() -> {
+				requireEnabledAdmin(actor);
 				User current = changeable(id, actor.getTenantId());
 				checkResettable(current, actor);
 				setPassword(current, password);
@@ -544,7 +556,7 @@ public class UserAdministration {
 	 *         an error at data layer
 	 */
 	public SignedOut signOut(long id, User actor) throws PersistenceException {
-		requireAdmin(actor);
+		requireEnabledAdmin(actor);
 		User user = changeable(id, actor.getTenantId());
 		// The devices their page shows; every token of theirs is revoked, expired and idle ones too
 		int devices = ApiTokens.get().list(id).size();
@@ -569,7 +581,7 @@ public class UserAdministration {
 	 *         an error at data layer
 	 */
 	public boolean clearBlock(long id, User actor) throws PersistenceException {
-		requireAdmin(actor);
+		requireEnabledAdmin(actor);
 		return inTransaction(() -> {
 			User user = changeable(id, actor.getTenantId());
 			Counter counter = reads.counters(PeopleReads.throttleAccount(user.getUsername()))
@@ -627,7 +639,7 @@ public class UserAdministration {
 	 *         an error at data layer
 	 */
 	public boolean revokeDevice(long id, long tokenId, User actor) throws PersistenceException {
-		requireAdmin(actor);
+		requireEnabledAdmin(actor);
 		User user = changeable(id, actor.getTenantId());
 		ApiToken token = ApiTokens.get().list(id).stream().filter(t -> t.getId() == tokenId).findFirst()
 				.orElse(null);
@@ -754,8 +766,8 @@ public class UserAdministration {
 	}
 
 	/**
-	 * Inside {@link #ADMIN_CHANGES}: {@link #requireAdmin}, and the caller's own account, as stored now, must still be
-	 * enabled, so an administrator disabled while their change waited its turn changes nothing
+	 * {@link #requireAdmin}, and the caller's own account, as stored now, must still be enabled; a change that holds a
+	 * lock asks inside it, so an administrator disabled while their change waited its turn changes nothing
 	 *
 	 * @throws HealdanRuleException {@link #ONLY_ADMINS}, or {@link #YOUR_ACCOUNT_DISABLED} for a caller whose stored
 	 *         account is disabled or deleted; a seed's caller too

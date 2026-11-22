@@ -248,6 +248,7 @@ public class GroupAdministration {
 		try {
 			synchronized (GROUP_NAMES) {
 				id = people.inTransaction(() -> {
+					people.requireEnabledAdmin(actor);
 					if (reads.groupNameTaken(tenantId, form.name(), 0))
 						throw taken();
 					Group group = new Group();
@@ -301,6 +302,7 @@ public class GroupAdministration {
 		try {
 			synchronized (GROUP_NAMES) {
 				return people.inTransaction(() -> {
+					people.requireEnabledAdmin(actor);
 					GroupRecord now = existing(id, tenantId);
 					if (!form.name().equals(now.name()) && reads.groupNameTaken(tenantId, form.name(), id))
 						throw taken();
@@ -346,6 +348,7 @@ public class GroupAdministration {
 		long tenantId = actor.getTenantId();
 		synchronized (UserAdministration.ADMIN_CHANGES) {
 			people.inTransaction(() -> {
+				people.requireEnabledAdmin(actor);
 				// Read where it's deleted: a provider's map could name it meanwhile, or another route rename it
 				GroupRecord now = existing(id, tenantId);
 				if (FIXED.contains(now.name()))

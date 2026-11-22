@@ -170,7 +170,7 @@ export function NewUserDialog({ onCreated, onClose }: NewUserDialogProps) {
       // Closed only by Done: Esc and a click outside do nothing, as this is the password's only showing (P4-R38)
       <Dialog title={t('admin.newUser.created', { name: user.name })} isOpen onOpenChange={() => undefined}>
         <div className={formStyles.form}>
-          <PasswordShown person={user} answer={made.answer} asked={made.asked} options={options} />
+          <PasswordShown person={user} answer={made.answer} asked={made.asked} />
           <div className={formStyles.buttons}>
             {/* The form went as this came, so the focus is put inside: on Copy, or here when nothing is shown */}
             <Button variant="default" autoFocus={made.answer.temporaryPassword === null} onPress={finish}>

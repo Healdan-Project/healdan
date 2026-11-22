@@ -289,6 +289,7 @@ public class AdminUsersResourceTest extends ApiTestCase {
 		// Shown, as it wasn't asked to be emailed
 		assertEquals(PeopleFixtures.STRONG.get(0), created.path("temporaryPassword").textValue());
 		assertFalse(created.path("emailed").booleanValue());
+		assertEquals("not-asked", created.path("notEmailed").textValue());
 		User stored = UserDAO.get().findById(id);
 		assertEquals(User.Type.DEFAULT, stored.getType());
 		assertTrue(stored.isEnabled());
@@ -300,6 +301,7 @@ public class AdminUsersResourceTest extends ApiTestCase {
 		created = post(USERS).webSession(web).json(newUser("amy", "amy@firm.example", true)).send().json();
 		assertTrue(created.path("temporaryPassword").isNull());
 		assertTrue(created.path("emailed").booleanValue());
+		assertTrue(created.path("notEmailed").isNull());
 		assertEquals(1, people.emails.size());
 		assertEquals(PeopleFixtures.STRONG.get(1), emailedPassword(people.emails.get(0)));
 
@@ -307,6 +309,7 @@ public class AdminUsersResourceTest extends ApiTestCase {
 		created = post(USERS).webSession(web).json(newUser("bea", null, true)).send().json();
 		assertEquals(PeopleFixtures.STRONG.get(2), created.path("temporaryPassword").textValue());
 		assertFalse(created.path("emailed").booleanValue());
+		assertEquals("no-email", created.path("notEmailed").textValue());
 
 		// A language and a time zone the options offer
 		user = post(USERS).webSession(web).json(newUser("cy", null, false).with("language", "en")
@@ -583,6 +586,7 @@ public class AdminUsersResourceTest extends ApiTestCase {
 		assertEquals(response.toString(), 200, response.status());
 		assertEquals(PeopleFixtures.STRONG.get(0), response.json().path("temporaryPassword").textValue());
 		assertFalse(response.json().path("emailed").booleanValue());
+		assertEquals("not-asked", response.json().path("notEmailed").textValue());
 		// Signed out everywhere, and the password has to change at the next sign-in
 		assertEquals(401, get("/api/v1/me").webSession(carolWeb).send().status());
 		assertEquals(401, get("/api/v1/me").token(carolToken).send().status());
@@ -805,10 +809,13 @@ public class AdminUsersResourceTest extends ApiTestCase {
 		assertEquals("Charter", latest.path("matter").path("name").textValue());
 		assertNotNull(latest.path("since").textValue());
 		assertTrue(latest.path("device").isNull());
+		assertTrue(latest.path("deviceId").isNull());
 		assertTrue(latest.path("app").isNull());
 		JsonNode first = held.get(1);
 		assertEquals(docNumber(brief), first.path("docNumber").asLong());
 		assertEquals("Laptop", first.path("device").textValue());
+		// The computer's id, which the holder's own release names as elsewhere
+		assertEquals("mac-1", first.path("deviceId").textValue());
 		assertEquals("Word", first.path("app").textValue());
 
 		assertEquals(2, get(one(carol)).webSession(web).send().json().path("checkedOut").asLong());
