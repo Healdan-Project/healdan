@@ -8,6 +8,7 @@ import { createQueryClient, createSignedOut } from '@healdan/shell'
 import { createAccess, guardApi } from '../access'
 import { App } from '../App'
 import { ADMIN_BASE } from '../addresses'
+import { auditListsStale } from '../monitoring/queries'
 import { createAdminRouter } from '../router'
 import { fakeApi, type FakeApi, type Routes } from './fakeApi'
 
@@ -29,6 +30,6 @@ export async function renderApp(path = '/', routes: Routes = {}): Promise<Render
   const router = createAdminRouter(createMemoryHistory({ initialEntries: [ADMIN_BASE + path] }))
   // The router resolves its first address asynchronously; wait, so the first render already shows the view.
   await router.load()
-  const view = render(<App api={guardApi(api, access, signedOut)} access={access} queryClient={queryClient} signedOut={signedOut} router={router} />)
+  const view = render(<App api={guardApi(api, access, signedOut, () => auditListsStale(queryClient))} access={access} queryClient={queryClient} signedOut={signedOut} router={router} />)
   return { api, router, view, queryClient }
 }

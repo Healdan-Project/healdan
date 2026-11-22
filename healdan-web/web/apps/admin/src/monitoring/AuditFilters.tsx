@@ -41,6 +41,31 @@ export function KindsFilter({ offered, value, onChange }: KindsFilterProps) {
   )
 }
 
+export interface DaysFilterProps {
+  /** The first and the last day, as 2026-11-02 */
+  from?: string
+  to?: string
+  onChange: (next: { from?: string; to?: string }) => void
+}
+
+/**
+ * From Date and To Date, the first and the last day, in the browser's time zone. A To Date before the From Date keeps no
+ * row, which the To Date says, and its calendar offers no day before the From Date.
+ */
+export function DaysFilter({ from, to, onChange }: DaysFilterProps) {
+  const backwards = from !== undefined && to !== undefined && to < from
+  return (
+    <>
+      <div className={styles.day}>
+        <DatePicker label={t('admin.audit.from')} value={from} onChange={(next) => onChange({ from: next })} />
+      </div>
+      <div className={styles.day}>
+        <DatePicker label={t('admin.audit.to')} value={to} min={from} error={backwards ? t('admin.audit.toBeforeFrom') : undefined} onChange={(next) => onChange({ to: next })} />
+      </div>
+    </>
+  )
+}
+
 /**
  * The doc # the words box holds, as a safe integer: a bare number, or one after `#`, as each row's Detail writes a doc #
  * (`# 10388`); anything else is words
@@ -134,12 +159,7 @@ export function AuditFilters({ search, onChange }: AuditFiltersProps) {
             }}
           />
         </div>
-        <div className={styles.day}>
-          <DatePicker label={t('admin.audit.from')} value={search.from} onChange={(from) => onChange({ from })} />
-        </div>
-        <div className={styles.day}>
-          <DatePicker label={t('admin.audit.to')} value={search.to} onChange={(to) => onChange({ to })} />
-        </div>
+        <DaysFilter from={search.from} to={search.to} onChange={onChange} />
         <div ref={wordsBox} className={`${styles.filter} ${styles.words}`}>
           <TextField label={t('admin.audit.text')} value={words.text} onChange={words.type} />
         </div>

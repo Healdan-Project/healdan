@@ -413,9 +413,8 @@ export function useLogLines(name: string | undefined, level: LogLevel, q: string
   const session = useRef<Session | undefined>(undefined)
   useEffect(() => {
     if (name === undefined) return undefined
-    const opened: Session = openSession(api, name, level, q, following.current, (next) =>
-      setShown((now) => (now.key === opened.key ? { key: now.key, view: next } : now)),
-    )
+    const shownFor = keyOf(name, level, q)
+    const opened = openSession(api, name, level, q, following.current, (next) => setShown((now) => (now.key === shownFor ? { key: now.key, view: next } : now)))
     session.current = opened
     return () => {
       opened.stop()

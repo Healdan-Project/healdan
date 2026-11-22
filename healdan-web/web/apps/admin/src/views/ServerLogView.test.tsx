@@ -8,7 +8,8 @@ import { FOLLOW_MS, MAX_KEPT, formatLogTime } from '../monitoring/useLogLines'
 import monitoringCss from '../monitoring/Monitoring.module.css?raw'
 import { TYPING_DELAY_MS } from '../pickers/typing'
 import { expectNoAxeViolations } from '../test/axe'
-import { fakeLog, logEntries, logLine, logRoutes, problem, type Routes } from '../test/fakeApi'
+import { fakeLog, logEntries, logInfos, logLine, logRoutes, problem, type Routes } from '../test/fakeApi'
+import { answerFrame, downloadFrames } from '../test/frames'
 import { hidePage, returnToPage } from '../test/visibility'
 import { renderApp } from '../test/renderApp'
 import { slowAnswer } from '../test/slowAnswer'
@@ -168,14 +169,62 @@ describe("The Server Log's choices", () => {
     expect(reads(api, 'Nope')).toEqual([])
   })
 
-  it('offers Download, a link to the zip of the log shown', async () => {
-    await openLog()
-    const link = screen.getByRole('link', { name: 'Download' })
-    expect(link.getAttribute('href')).toBe('/api/v1/admin/logs/DMS/file')
-    expect(link.hasAttribute('download')).toBe(true)
+  it('downloads the zip of the log shown through a hidden frame, once the logs have been asked for through the app, never by a link', async () => {
+    const { api } = await openLog()
+    expect(screen.queryByRole('link', { name: 'Download' })).toBeNull()
+    const listed = api.callsTo('GET /v1/admin/logs').length
+    fireEvent.click(screen.getByRole('button', { name: 'Download' }))
+    await settle()
+    expect(api.callsTo('GET /v1/admin/logs')).toHaveLength(listed + 1)
+    expect(downloadFrames().map((frame) => frame.getAttribute('src'))).toEqual(['/api/v1/admin/logs/DMS/file'])
+    expect(document.querySelector('a[download]')).toBeNull()
+
     fireEvent.change(screen.getByRole('combobox', { name: 'Log' }), { target: { value: 'IndexerTask' } })
     await settle()
-    expect(screen.getByRole('link', { name: 'Download' }).getAttribute('href')).toBe('/api/v1/admin/logs/IndexerTask/file')
+    fireEvent.click(screen.getByRole('button', { name: 'Download' }))
+    await settle()
+    expect(downloadFrames().map((frame) => frame.getAttribute('src'))).toEqual(['/api/v1/admin/logs/DMS/file', '/api/v1/admin/logs/IndexerTask/file'])
+  })
+
+  it.each([
+    [401, 'unauthenticated', "You've been signed out."],
+    [403, 'admins-only', "You don't have access to Healdan Admin."],
+  ])("downloads nothing when the app's own call is refused %i, and the app says so in place of the screen", async (status, code, heading) => {
+    let refusing = false
+    await openLog('/server-log', { 'GET /v1/admin/logs': () => (refusing ? problem(status, code) : logInfos) })
+    refusing = true
+    fireEvent.click(screen.getByRole('button', { name: 'Download' }))
+    await settle()
+    expect(screen.getByRole('heading', { level: 1, name: heading })).toBeTruthy()
+    expect(downloadFrames()).toEqual([])
+  })
+
+  it('says beside Download what the server answered in place of the file', async () => {
+    await openLog()
+    fireEvent.click(screen.getByRole('button', { name: 'Download' }))
+    await settle()
+    act(() => answerFrame(downloadFrames()[0]!, JSON.stringify({ status: 404, code: 'not-found', detail: 'No log called DMS.' })))
+    expect(screen.getByRole('alert').textContent).toBe("Not found, or you can't see it.")
+    // Pressed again, it says nothing until there's something to say
+    fireEvent.click(screen.getByRole('button', { name: 'Download' }))
+    await settle()
+    expect(screen.queryByRole('alert')).toBeNull()
+    // Nor is one log's refusal said of another
+    // The first frame went once it had loaded the refusal
+    act(() => answerFrame(downloadFrames()[0]!, JSON.stringify({ status: 404, code: 'not-found', detail: 'No log called DMS.' })))
+    expect(screen.getByRole('alert')).toBeTruthy()
+    fireEvent.change(screen.getByRole('combobox', { name: 'Log' }), { target: { value: 'IndexerTask' } })
+    await settle()
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('reports a refusal for anyone but administrators that the frame met as the app does every other', async () => {
+    await openLog()
+    fireEvent.click(screen.getByRole('button', { name: 'Download' }))
+    await settle()
+    act(() => answerFrame(downloadFrames()[0]!, JSON.stringify({ status: 403, code: 'admins-only', detail: 'Only administrators can do that.' })))
+    await settle()
+    expect(screen.getByRole('heading', { level: 1, name: "You don't have access to Healdan Admin." })).toBeTruthy()
   })
 
   it("shows why the logs couldn't be listed, with Try Again", async () => {
@@ -238,6 +287,17 @@ describe("The Server Log's lines", () => {
     expect(rule('continuation')).toMatch(/overflow-wrap:\s*anywhere/)
     expect(rule('lines')).toMatch(/overflow:\s*auto/)
     expect(rule('lines')).toMatch(/min-width:\s*0/)
+  })
+
+  it('show an entry of a log that writes no level or source by its time and message alone, as an entry, not a stack line', async () => {
+    await openLog('/server-log', logRoutes([logLine('', { level: null, source: null, message: 'Digest sent to 4 people' })]))
+    const [entry] = entries()
+    expect(entry!.hasAttribute('data-continues')).toBe(false)
+    expect(entry!.querySelector('time')?.getAttribute('datetime')).toBe('2026-11-19T10:41:07Z')
+    expect(entry!.querySelector('[data-level]')).toBeNull()
+    expect(entry!.querySelector('[title]')).toBeNull()
+    expect(shown()).toEqual(['Digest sent to 4 people'])
+    expect(entry!.textContent).toBe(`${formatLogTime('2026-11-19T10:41:07Z')}Digest sent to 4 people`)
   })
 
   it('show a level they have no words for as the log writes it, and the rest of the box as ever', async () => {

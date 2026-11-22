@@ -13,6 +13,7 @@ import { TYPING_DELAY_MS } from '../pickers/typing'
 import { expectNoAxeViolations } from '../test/axe'
 import { auditPage, auditRoutes, auditRow, auditRows, auditTrail, problem, type FakeApi, type Routes } from '../test/fakeApi'
 import { bringObservedIntoView } from '../test/intersection'
+import { answerFrame, downloadFrames, removeDownloadFrames } from '../test/frames'
 import { renderApp } from '../test/renderApp'
 import { auditSearch } from './AuditView'
 
@@ -37,6 +38,7 @@ const pause = () => act(() => new Promise((resolve) => setTimeout(resolve, TYPIN
 /** What each request for the list asked */
 const asked = (api: FakeApi) => api.callsTo('GET /v1/admin/audit').map((call) => call.query)
 const STALE = "Couldn't refresh this, so it shows what was read last."
+const NONE_BACK = `Nothing found back to ${formatDateTime('2026-11-01T00:00:00Z')}. Show More reads further back.`
 /** A moment for anything the list would ask by itself to have been asked */
 const settle = () => act(() => new Promise((resolve) => setTimeout(resolve, 50)))
 
@@ -67,8 +69,17 @@ describe('The Audit Trail', () => {
   })
 
   it('reads its kinds, each repeated, the person, the matter, the doc #, the days and the words from the address', async () => {
-    const { router } = await renderApp('/audit?kind=folder&kind=document&user=6&matter=11&doc=10388&from=2026-11-01&to=2026-11-19&q=%20192.0.2%20', auditRoutes())
-    expect(router.state.matches.at(-1)?.search).toMatchObject({ kind: ['document', 'folder'], user: 6, matter: 11, doc: 10388, from: '2026-11-01', to: '2026-11-19', q: '192.0.2' })
+    const { router } = await renderApp('/audit?kind=folder&kind=document&user=6&matter=11&doc=10388&from=2026-11-01&to=2026-11-19', auditRoutes())
+    expect(router.state.matches.at(-1)?.search).toMatchObject({ kind: ['document', 'folder'], user: 6, matter: 11, doc: 10388, from: '2026-11-01', to: '2026-11-19' })
+    const { router: other } = await renderApp('/audit?q=%20192.0.2%20', auditRoutes())
+    expect(other.state.matches.at(-1)?.search).toMatchObject({ q: '192.0.2' })
+  })
+
+  it('takes a doc # and words in one address as the doc # alone, which its one box shows and which alone is sent', async () => {
+    expect(auditSearch({ doc: '10388', q: 'abc' })).toEqual({ doc: 10388 })
+    const { api } = await openAudit('/audit?doc=10388&q=abc')
+    expect(words().value).toBe('10388')
+    expect(asked(api)).toEqual([{ docNumber: 10388, zone: ZONE, limit: AUDIT_PAGE_SIZE }])
   })
 
   it('reads one kind as a list of one', async () => {
@@ -100,9 +111,12 @@ describe("The Audit Trail's list", () => {
         '1001 – Saltmarsh Shipping Ltd · description: (none) → Shipping and charters · name: Saltmarsh Shipping → Saltmarsh Shipping Ltd',
         '192.0.2.9',
       ],
-      // A row that names no one, and one with no address
-      [formatDateTime('2026-11-19T09:47:00Z'), '', 'Sign-In', 'Failed to sign in', '', '192.0.2.21'],
-      [formatDateTime('2026-11-19T09:12:00Z'), 'Jamie Clarke', 'User', 'Changed their password', '', ''],
+      // A failed sign-in for a username no account has names no one, and what was typed isn't answered
+      [formatDateTime('2026-11-19T09:47:00Z'), 'Not recorded', 'Sign-In', 'Failed to sign in', 'Unknown username', '192.0.2.21'],
+      // A change to another's account: Who made it, and the Detail names the account
+      [formatDateTime('2026-11-19T09:12:00Z'), 'Sam Okafor', 'User', 'Password changed', 'Jamie Clarke (jclarke): By sokafor in the Admin app', '192.0.2.9'],
+      // One whose row names no author, and no address
+      [formatDateTime('2026-11-19T08:50:00Z'), 'Not recorded', 'User', 'Account disabled', 'Ben Hollis (bhollis)', ''],
     ])
     // Every filter left out but the zone, and the page size
     expect(asked(api)).toEqual([{ zone: ZONE, limit: AUDIT_PAGE_SIZE }])
@@ -163,17 +177,28 @@ describe("The Audit Trail's list", () => {
       'description: (none) → Shipping and charters',
       'name: Saltmarsh Shipping → Saltmarsh Shipping Ltd',
     ])
-    // A row that names no one and keeps no detail or address says so, and has no changes
+    // A row that names no one says so, and has no changes
     await userEvent.click(rows()[5]!.querySelector('[role="rowheader"]')!)
     expect(facts()).toEqual([
       ['When', fullTime('2026-11-19T09:47:00Z')],
       ['Who', 'Not recorded'],
       ['Kind', 'Sign-In'],
       ['What', 'Failed to sign in'],
-      ['Detail', 'Not recorded'],
+      ['Detail', 'Unknown username'],
       ['From', '192.0.2.21'],
     ])
     expect(within(details()).queryByRole('list', { name: 'Changes' })).toBeNull()
+    // And one that keeps no address, nor who changed the account it names
+    await userEvent.click(rows()[7]!.querySelector('[role="rowheader"]')!)
+    expect(facts()).toEqual([
+      ['When', fullTime('2026-11-19T08:50:00Z')],
+      ['Who', 'Not recorded'],
+      ['Kind', 'User'],
+      ['What', 'Account disabled'],
+      ['Detail', 'Ben Hollis (bhollis)'],
+      ['From', 'Not recorded'],
+    ])
+    expect(details().textContent).not.toMatch(/null/)
   })
 
   it("offers the document or the folder a row names in Healdan, from the row's details, and nothing for a row that names neither", async () => {
@@ -246,11 +271,11 @@ describe("The Audit Trail's list", () => {
       '/audit?q=zzz',
       byCursor({ '': auditPage([], 'b'), b: auditPage([], 'c'), c: auditPage([], 'd'), d: auditPage([], 'e'), e: auditPage([], 'f'), f: auditPage([], 'g'), g: auditPage([], 'h'), h: auditPage([], 'i') }),
     )
-    // Offered once the first run has stopped, which says nothing has been found yet
-    await within(main()).findByText('Nothing found yet in what has been read. Show More reads further back.')
+    // Offered once the first run has stopped, which says nothing has been found back to where it read
+    await within(table()).findByText(NONE_BACK)
     await userEvent.click(within(main()).getByRole('button', { name: 'Show More' }))
     await waitFor(() => expect(asked(api).map((query) => query?.cursor)).toEqual([undefined, 'b', 'c', 'd', 'e', 'f', 'g', 'h']))
-    await within(main()).findByText('Nothing found yet in what has been read. Show More reads further back.')
+    await within(table()).findByText(NONE_BACK)
     act(() => bringObservedIntoView())
     await settle()
     expect(asked(api)).toHaveLength(8)
@@ -279,11 +304,59 @@ describe("The Audit Trail's list", () => {
     expect(asked(api).map((query) => query?.cursor)).toEqual([undefined, 'b', 'b'])
   })
 
-  it('says when nothing has been found yet in what was read, and Show More reads on', async () => {
-    await openAudit('/audit?q=zzz', byCursor({ '': auditPage([], 'b'), b: auditPage([], 'c'), c: auditPage([], 'd'), d: auditPage([], 'e'), e: auditPage([]) }))
-    expect(await within(main()).findByText('Nothing found yet in what has been read. Show More reads further back.')).toBeTruthy()
-    await userEvent.click(within(main()).getByRole('button', { name: 'Show More' }))
+  it('says how far back it has found nothing, and Show More reads on; at the end of an empty list the focus Show More had goes to the list', async () => {
+    await openAudit(
+      '/audit?q=zzz',
+      byCursor({ '': auditPage([], 'b', '2026-03-03T09:00:00Z'), b: auditPage([], 'c', '2025-12-01T09:00:00Z'), c: auditPage([], 'd', '2025-09-01T09:00:00Z'), d: auditPage([], 'e', '2025-03-03T09:00:00Z'), e: auditPage([]) }),
+    )
+    // How far back the last page read, not the first
+    expect(await within(table()).findByText(`Nothing found back to ${formatDateTime('2025-03-03T09:00:00Z')}. Show More reads further back.`)).toBeTruthy()
+    const more = within(main()).getByRole('button', { name: 'Show More' })
+    more.focus()
+    await userEvent.keyboard('{Enter}')
     expect(await within(main()).findByText('No rows match the filters.')).toBeTruthy()
+    expect(within(main()).queryByRole('button', { name: 'Show More' })).toBeNull()
+    await waitFor(() => expect(document.activeElement).toBe(table()))
+  })
+
+  it('says beside Show More how far back the rows shown reach, and nothing of it at the end', async () => {
+    await openAudit('/audit', byCursor({ '': auditPage(documents(1, AUDIT_PAGE_SIZE), 'b', '2026-11-12T08:30:00Z'), b: auditPage(documents(101, 1)) }))
+    const footer = within(main()).getByRole('button', { name: 'Show More' }).parentElement!
+    expect(within(footer).getByText(`Read back to ${formatDateTime('2026-11-12T08:30:00Z')}`)).toBeTruthy()
+    await userEvent.click(within(main()).getByRole('button', { name: 'Show More' }))
+    await within(main()).findByText('No older rows.')
+    expect(within(main()).queryByText(/^Read back to/)).toBeNull()
+  })
+
+  it('tells a screen reader how a run of Show More ended: so many more rows, nothing found back to a date, or the end', async () => {
+    await openAudit(
+      '/audit',
+      byCursor({
+        '': auditPage(documents(1, AUDIT_PAGE_SIZE), 'b'),
+        b: auditPage(documents(101, 2), 'c'),
+        c: auditPage([], 'd'),
+        d: auditPage([], 'e'),
+        e: auditPage([], 'f', '2026-10-01T00:00:00Z'),
+        f: auditPage([], 'g', '2026-09-01T00:00:00Z'),
+        g: auditPage([], 'h'),
+        h: auditPage([], 'i'),
+        i: auditPage([], 'j'),
+        j: auditPage([]),
+      }),
+    )
+    // What the page's live regions say: only the list's says anything here
+    const said = () => within(main()).getAllByRole('status').map((one) => one.textContent).filter(Boolean).join()
+    const more = () => within(main()).getByRole('button', { name: 'Show More' })
+    await waitFor(() => expect(rows()).toHaveLength(AUDIT_PAGE_SIZE))
+    expect(said()).toBe('')
+    await userEvent.click(more())
+    await waitFor(() => expect(said()).toBe('2 more rows'))
+    await waitFor(() => expect(more().hasAttribute('data-pending')).toBe(false))
+    await userEvent.click(more())
+    await waitFor(() => expect(said()).toBe(`Nothing found back to ${formatDateTime('2026-11-01T00:00:00Z')}. Show More reads further back.`))
+    await waitFor(() => expect(more().hasAttribute('data-pending')).toBe(false))
+    await userEvent.click(more())
+    await waitFor(() => expect(said()).toBe('No older rows.'))
   })
 
   it('says when nothing has been recorded, and otherwise when the filters keep nothing', async () => {
@@ -306,6 +379,33 @@ describe("The Audit Trail's list", () => {
     failing = false
     await userEvent.click(within(main()).getByRole('button', { name: 'Try Again' }))
     await waitFor(() => expect(screen.queryByText(STALE)).toBeNull())
+  })
+
+  it('asks again with Refresh, beside Export CSV, which holds while it reads and keeps the focus', async () => {
+    let added = false
+    const { api } = await openAudit('/audit', {
+      'GET /v1/admin/audit': ({ query }: { query?: Record<string, unknown> }) => auditTrail(query, added ? [auditRow({ id: 'a42', what: 'Changed a client' }), ...auditRows] : auditRows),
+    })
+    await waitFor(() => expect(rows()).toHaveLength(auditRows.length))
+    const actions = within(main()).getByRole('heading', { level: 1, name: 'Audit Trail' }).parentElement!
+    expect(within(actions).getAllByRole('button').map((button) => button.textContent)).toEqual(['Refresh', 'Export CSV'])
+    added = true
+    const refresh = within(actions).getByRole('button', { name: 'Refresh' })
+    await userEvent.click(refresh)
+    await waitFor(() => expect(rows()).toHaveLength(auditRows.length + 1))
+    expect(asked(api)).toHaveLength(2)
+    await waitFor(() => expect(refresh.hasAttribute('data-pending')).toBe(false))
+    expect(document.activeElement).toBe(refresh)
+  })
+
+  it('asks again each time it is shown, however fresh its last answer', async () => {
+    const { api, router } = await openAudit()
+    await waitFor(() => expect(asked(api)).toHaveLength(1))
+    act(() => router.history.push('/admin/jobs'))
+    await screen.findByRole('heading', { level: 1, name: 'Background Jobs' })
+    act(() => router.history.push('/admin/audit'))
+    await within(main()).findByRole('grid', { name: 'Audit Trail' })
+    await waitFor(() => expect(asked(api)).toHaveLength(2))
   })
 
   it('says why when the first read fails', async () => {
@@ -386,6 +486,18 @@ describe("The Audit Trail's filters", () => {
     await waitFor(() => expect(asked(api).at(-1)).toEqual({ from: '2026-11-01', to: '2026-11-19', zone: ZONE, limit: AUDIT_PAGE_SIZE }))
   })
 
+  it('says a To Date before the From Date keeps no row, and offers no day before the From Date', async () => {
+    const { view } = await openAudit('/audit?from=2026-11-10&to=2026-11-02')
+    const to = within(main()).getByRole('group', { name: 'To Date' })
+    expect(within(main()).getByText('The To Date is before the From Date, so no row can match.')).toBeTruthy()
+    expect(to.closest('[data-invalid]')).toBeTruthy()
+    view.unmount()
+    // In order, nothing is said
+    const { router } = await openAudit('/audit?from=2026-11-02&to=2026-11-10')
+    expect(router.state.location.search).toEqual({ from: '2026-11-02', to: '2026-11-10' })
+    expect(within(main()).queryByText('The To Date is before the From Date, so no row can match.')).toBeNull()
+  })
+
   it('sends a bare number typed in its words box as the doc #, and anything else as words, once the typing pauses', async () => {
     const { api, router } = await openAudit()
     await userEvent.type(words(), ' 10388 ')
@@ -431,15 +543,23 @@ describe("The Audit Trail's filters", () => {
 })
 
 describe('Export CSV', () => {
-  /** The export link's address, as the browser reads it */
+  /** The export's address, as the hidden frame was sent to it */
   const exported = () => {
-    const link = within(main()).getByRole('link', { name: 'Export CSV' })
-    expect(link.hasAttribute('download')).toBe(true)
-    return new URL(link.getAttribute('href')!, window.location.href)
+    const frames = downloadFrames()
+    expect(frames).toHaveLength(1)
+    return new URL(frames[0]!.getAttribute('src')!, window.location.href)
   }
+  const exportButton = () => within(main()).getByRole('button', { name: 'Export CSV' })
+  /** The checks of the list Export CSV asked before the file */
+  const checks = (api: FakeApi) => asked(api).filter((query) => query?.limit === 1)
 
-  it('is a link to the export, same origin, with the filters in force and the time zone, never the page size or a cursor', async () => {
-    await openAudit('/audit?kind=folder&kind=document&user=7&matter=12&doc=10388&from=2026-11-01&to=2026-11-19')
+  it('asks for the list with the filters in force first, then downloads the export through a hidden frame, same origin, never by a link', async () => {
+    const { api } = await openAudit('/audit?kind=folder&kind=document&user=7&matter=12&doc=10388&from=2026-11-01&to=2026-11-19')
+    expect(within(main()).queryByRole('link', { name: 'Export CSV' })).toBeNull()
+    await userEvent.click(exportButton())
+    await waitFor(() => expect(downloadFrames()).toHaveLength(1))
+    // The check: the list as it's shown, one row of it
+    expect(checks(api)).toEqual([{ kind: ['document', 'folder'], userId: 7, matterId: 12, docNumber: 10388, from: '2026-11-01', to: '2026-11-19', zone: ZONE, limit: 1 }])
     const url = exported()
     expect(url.origin).toBe(window.location.origin)
     expect(url.pathname).toBe('/api/v1/admin/audit/export')
@@ -453,19 +573,60 @@ describe('Export CSV', () => {
       ['to', '2026-11-19'],
       ['zone', ZONE],
     ])
+    expect(document.querySelector('a[download]')).toBeNull()
   })
 
-  it('follows the filters as they change, and carries no cursor once more rows have loaded', async () => {
+  it('downloads what the filters keep as they change, and carries no page size or cursor once more rows have loaded', async () => {
     await openAudit('/audit?q=reeve', byCursor({ '': auditPage(documents(1, AUDIT_PAGE_SIZE), 'b'), b: auditPage(documents(101, 1)) }))
+    await userEvent.click(await within(main()).findByRole('button', { name: 'Show More' }))
+    await within(main()).findByText('No older rows.')
+    await userEvent.click(exportButton())
+    await waitFor(() => expect(downloadFrames()).toHaveLength(1))
     expect([...exported().searchParams]).toEqual([
       ['zone', ZONE],
       ['q', 'reeve'],
     ])
-    await userEvent.click(await within(main()).findByRole('button', { name: 'Show More' }))
-    await within(main()).findByText('No older rows.')
+    removeDownloadFrames()
+    await userEvent.click(within(kinds()).getByRole('checkbox', { name: 'Sign-In' }))
+    await userEvent.click(exportButton())
+    await waitFor(() => expect(downloadFrames()).toHaveLength(1))
+    expect(exported().searchParams.getAll('kind')).toEqual(['sign-in'])
     expect(exported().searchParams.has('cursor')).toBe(false)
     expect(exported().searchParams.has('limit')).toBe(false)
-    await userEvent.click(within(kinds()).getByRole('checkbox', { name: 'Sign-In' }))
-    await waitFor(() => expect(exported().searchParams.getAll('kind')).toEqual(['sign-in']))
+  })
+
+  it('says beside it a filter the server refuses, such as a time zone it doesn\'t know, and downloads nothing', async () => {
+    const { api } = await openAudit('/audit', { 'GET /v1/admin/audit': ({ query }: { query?: Record<string, unknown> }) => (query?.limit === 1 ? problem(400, 'bad-request') : auditTrail(query)) })
+    await userEvent.click(exportButton())
+    expect((await within(main()).findByRole('alert')).textContent).toBe("That request wasn't valid.")
+    expect(checks(api)).toHaveLength(1)
+    expect(downloadFrames()).toEqual([])
+    // The rows stay as they were
+    expect(rows()).toHaveLength(auditRows.length)
+  })
+
+  it.each([
+    [401, 'unauthenticated', "You've been signed out."],
+    [403, 'admins-only', "You don't have access to Healdan Admin."],
+  ])('downloads nothing when its check is refused %i, and the app says so in place of the screen', async (status, code, heading) => {
+    await openAudit('/audit', { 'GET /v1/admin/audit': ({ query }: { query?: Record<string, unknown> }) => (query?.limit === 1 ? problem(status, code) : auditTrail(query)) })
+    await userEvent.click(exportButton())
+    expect(await screen.findByRole('heading', { level: 1, name: heading })).toBeTruthy()
+    expect(downloadFrames()).toEqual([])
+  })
+
+  it('says beside it what the server answered in place of the file, and a sign-out the frame met as the app does', async () => {
+    const { view } = await openAudit()
+    await userEvent.click(exportButton())
+    await waitFor(() => expect(downloadFrames()).toHaveLength(1))
+    act(() => answerFrame(downloadFrames()[0]!, '<h1>Bad Gateway</h1>'))
+    expect((await within(main()).findByRole('alert')).textContent).toBe('Something went wrong.')
+    await expectNoAxeViolations(view.container)
+
+    await userEvent.click(exportButton())
+    await waitFor(() => expect(downloadFrames()).toHaveLength(1))
+    expect(within(main()).queryByRole('alert')).toBeNull()
+    act(() => answerFrame(downloadFrames()[0]!, JSON.stringify({ status: 401, code: 'unauthenticated', detail: 'Sign in first.' })))
+    expect(await screen.findByRole('heading', { level: 1, name: "You've been signed out." })).toBeTruthy()
   })
 })

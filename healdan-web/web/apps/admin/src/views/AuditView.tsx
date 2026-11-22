@@ -4,11 +4,13 @@
 import { useNavigate } from '@tanstack/react-router'
 import type { adminComponents } from '@healdan/api'
 import { useApi } from '@healdan/shell'
-import { Icon } from '@healdan/ui'
+import { Button, Icon } from '@healdan/ui'
 import { routes, searchId } from '../addresses'
+import { useDownload } from '../download'
+import { Refusal } from '../forms/Refusal'
 import { AuditFilters } from '../monitoring/AuditFilters'
 import { AuditList } from '../monitoring/AuditList'
-import { auditExportHref, type AuditQuery } from '../monitoring/queries'
+import { auditCheck, auditExportHref, useAuditRefresh, type AuditQuery } from '../monitoring/queries'
 import { auditKinds, inKindOrder } from '../monitoring/text'
 import { typed } from '../pickers/typing'
 import { t } from '../strings'
@@ -48,18 +50,21 @@ function dayIn(value: unknown): string | undefined {
 /**
  * The address's parameters the Audit Trail reads; anything else, or anything that isn't what it should be, is left out.
  * The router reads a repeated `kind` as a list, and validates what it validated before too, so the ids may come as numbers.
+ * The doc # and the words are one box, which shows one of them, so an address with both, as only a hand-made one has,
+ * keeps the doc # alone: what filters is what the box shows.
  */
 export function auditSearch(search: Record<string, unknown>): AuditSearch {
   const listed: unknown[] = Array.isArray(search.kind) ? search.kind : [search.kind]
   const q = typeof search.q === 'string' ? typed(search.q) : ''
+  const doc = searchId(search.doc)
   return {
     kind: inKindOrder(listed.filter((one): one is string => typeof one === 'string')),
     user: searchId(search.user),
     matter: searchId(search.matter),
-    doc: searchId(search.doc),
+    doc,
     from: dayIn(search.from),
     to: dayIn(search.to),
-    q: q === '' ? undefined : q,
+    q: q === '' || doc !== undefined ? undefined : q,
   }
 }
 
@@ -71,13 +76,16 @@ function queryOf(search: AuditSearch): AuditQuery {
 /**
  * The Audit Trail, at /admin/audit (spec 8.8): what was done, newest first, from the server's histories and the
  * administration record, with its filters, every one in the address, so Back and a reload come back to the same list.
- * Export CSV downloads what the filters keep. The route hands in the address's parameters as `search`.
+ * Refresh asks for it again. Export CSV downloads what the filters keep, through a hidden frame once the list has been
+ * asked for one row with the same filters (useDownload). The route hands in the address's parameters as `search`.
  */
 export function AuditView({ search }: { search: AuditSearch }) {
   const api = useApi()
   const navigate = useNavigate({ from: routes.audit })
   const query = queryOf(search)
   const filtered = Object.values(query).some((value) => value !== undefined)
+  const { refresh, refreshing } = useAuditRefresh(query)
+  const download = useDownload(auditExportHref(api, query))
 
   /** The address with `change` made, kept in place of the one before: a filter isn't a step of its own */
   function change(next: Partial<AuditSearch>) {
@@ -89,13 +97,22 @@ export function AuditView({ search }: { search: AuditSearch }) {
       <div className={styles.head}>
         <h1 className={styles.title}>{t('admin.audit.title')}</h1>
         <div className={styles.actions}>
-          {/* A plain link, with the browser's own session, so the file comes as the server sends it, row by row */}
-          <a className={styles.export} href={auditExportHref(api, query)} download>
-            <Icon name="download" size={14} />
-            {t('admin.audit.export')}
-          </a>
+          <Button isPending={refreshing} onPress={refresh}>
+            <span className={styles.label}>
+              <Icon name="refresh" size={14} />
+              {t('admin.audit.refresh')}
+            </span>
+          </Button>
+          {/* With the browser's own session, so the file comes as the server sends it, row by row */}
+          <Button isPending={download.checking} onPress={() => void download.start(() => auditCheck(api, query))}>
+            <span className={styles.label}>
+              <Icon name="download" size={14} />
+              {t('admin.audit.export')}
+            </span>
+          </Button>
         </div>
       </div>
+      <Refusal failure={download.failure} />
       <AuditFilters search={search} onChange={change} />
       <AuditList query={query} filtered={filtered} label={t('admin.audit.title')} fill />
     </div>

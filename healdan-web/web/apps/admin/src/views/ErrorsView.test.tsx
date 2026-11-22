@@ -270,10 +270,11 @@ describe("A fault's details", () => {
     await waitFor(() => expect(document.activeElement).toBe(region))
   })
 
-  it('says so when the fault the address names is there no more', async () => {
+  it('says so when the fault the address names is there no more, taking no focus', async () => {
     await openErrors('/errors?id=99')
     const region = await screen.findByRole('region', { name: 'Error Details' })
     expect(await within(region).findByText("This error isn't there any more: the server deletes a resolved error once it hasn't been seen for 90 days.")).toBeTruthy()
+    expect(document.activeElement).toBe(document.body)
   })
 
   it("says the fault has gone when a re-read finds it no more, rather than that it couldn't refresh", async () => {

@@ -96,8 +96,9 @@ export function ErrorsView({ search }: { search: ErrorsSearch }) {
     wordsInput.current = element?.querySelector('input') ?? null
   }, [])
   useFocusWhenGone(!filtered, wordsInput)
-  // A fault found gone takes the details' buttons with it, so the focus they had goes to the details, which say so
-  useFocusWhenGone(search.id !== undefined && isGone(detail.error), region)
+  // A fault shown, then found gone, takes the details' buttons with it, so the focus they had goes to the details, which say
+  // so; one the address names that's gone from the start takes no focus
+  useFocusWhenGone(search.id !== undefined && isGone(detail.error) && detail.data !== undefined, region)
 
   useEffect(() => {
     if (search.id === undefined) {

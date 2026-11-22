@@ -24,6 +24,18 @@ export type CursorItem<P extends CursorPath> = AdminAnswer<P> extends CursorPage
 /** Such a list's filters, as its route takes them: never the cursor or the limit, which the list sends itself */
 export type CursorQuery<P extends CursorPath> = Omit<NonNullable<adminPaths[P]['get']['parameters']['query']>, 'cursor' | 'limit'>
 
+/** The rows, each id once, its first kept; the same array when none is repeated */
+function distinct<T>(rows: T[]): T[] {
+  const seen = new Set<unknown>()
+  const kept = rows.filter((row) => {
+    const id = (row as { id?: unknown }).id
+    if (seen.has(id)) return false
+    seen.add(id)
+    return true
+  })
+  return kept.length === rows.length ? rows : kept
+}
+
 /**
  * How many pages in a row the list asks for by itself after a page that came back short with a cursor (P5-R22), before
  * it stops and offers more: the server reads only so far into each source for a page, so a narrow filter's pages can be
@@ -31,9 +43,14 @@ export type CursorQuery<P extends CursorPath> = Omit<NonNullable<adminPaths[P]['
  */
 export const FOLLOW_SHORT_PAGES = 3
 
-export interface CursorListing<T> {
-  /** The rows, as far as they are loaded, in the server's order */
+export interface CursorListing<T, Page extends CursorPage<T> = CursorPage<T>> {
+  /** The rows, as far as they are loaded, in the server's order, each once: a row a later page gives again is left out */
   items: T[]
+  /**
+   * The last page, as the server gave it, for what it says beyond its rows (the Audit Trail's `readBackTo`); undefined
+   * until a page of these filters has come, and while the rows shown are the last question's
+   */
+  last: Page | undefined
   /**
    * More can be asked for, with showMore: the last page came with a cursor, and the list isn't asking for the next one
    * itself. False at the end, while the next page is on its way, and while the rows are an older question's.
@@ -66,21 +83,25 @@ export interface CursorListing<T> {
 /**
  * A list of the Admin app's that comes by cursor (P5-R22): TanStack Query's infinite query over the route, `pageSize`
  * rows at a time, each page after the first asked for with the cursor the last one gave. The last question's rows stay
- * while a new one loads, and the list is asked again on each return to the window, as usePagedList's lists are. A page
+ * while a new one loads, and the list is asked again each time it's shown and on a return to the window, as
+ * usePagedList's lists are on a return. A page
  * that comes back short with a cursor is followed by the next, asked for by the list itself, FOLLOW_SHORT_PAGES in a row
  * at most; then it stops, and `hasMore` offers the rest to Show More, which starts such a run again. A read that fails
  * keeps the rows shown and says so (`isError` with `isLoaded`). `query` is the list's filters; changing it starts afresh.
  */
-export function useCursorList<P extends CursorPath>(path: P, query: CursorQuery<P>, pageSize: number): CursorListing<CursorItem<P>> {
+export function useCursorList<P extends CursorPath>(path: P, query: CursorQuery<P>, pageSize: number): CursorListing<CursorItem<P>, AdminAnswer<P> & CursorPage<CursorItem<P>>> {
   const api = useApi()
   const queryKey = adminKey(path, query)
   const asked = useInfiniteQuery({
     queryKey,
     queryFn: ({ pageParam, signal }) =>
-      api.get<CursorPage<CursorItem<P>>>(path, { ...query, limit: pageSize, ...(pageParam === undefined ? {} : { cursor: pageParam }) } as Parameters<Api['get']>[1], { signal }),
+      api.get<AdminAnswer<P> & CursorPage<CursorItem<P>>>(path, { ...query, limit: pageSize, ...(pageParam === undefined ? {} : { cursor: pageParam }) } as Parameters<Api['get']>[1], { signal }),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (last) => last.nextCursor ?? undefined,
     placeholderData: keepPreviousData,
+    // Asked again whenever it's shown, however fresh (P5-R34); a return to the window keeps the 30-second rule a list of
+    // several pages has, as each re-read reads every page loaded
+    refetchOnMount: 'always',
     meta: ASK_ON_RETURN,
   })
 
@@ -103,7 +124,8 @@ export function useCursorList<P extends CursorPath>(path: P, query: CursorQuery<
   }, [follow, last, fetchNextPage])
 
   const hasMore = more && !follow && !asked.isFetchingNextPage
-  const items = useMemo(() => pages?.flatMap((one) => one.items) ?? [], [pages])
+  // Each row once, by its id: a cursor gives a row once, and the Table, whose keys are the ids, draws one given twice wrongly
+  const items = useMemo(() => distinct(pages?.flatMap((one) => one.items) ?? []), [pages])
   const showMore = () => {
     if (!hasMore || pages === undefined) return
     setRun({ question, start: pages.length })
@@ -112,6 +134,7 @@ export function useCursorList<P extends CursorPath>(path: P, query: CursorQuery<
   }
   return {
     items,
+    last: own ? last : undefined,
     hasMore,
     showMore,
     loadMoreOnScroll: () => {

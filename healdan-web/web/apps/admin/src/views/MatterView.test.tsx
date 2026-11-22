@@ -323,6 +323,31 @@ describe("A matter's Activity", () => {
     await waitFor(() => expect(within(activity()).getAllByRole('row').slice(1).map((row) => row.querySelectorAll('[role="gridcell"]')[2]?.textContent)).toEqual(['Downloaded']))
   })
 
+  it('keeps the days picked, which it sends and the Audit Trail is opened with, and says one in the wrong order', async () => {
+    const { api } = await openMatter('/matters/11?tab=activity', audit)
+    const panel = within(main()).getByRole('tabpanel', { name: 'Activity' })
+    await waitFor(() => expect(asked(api)).toHaveLength(1))
+    await userEvent.click(within(within(panel).getByRole('group', { name: 'From Date' })).getByRole('spinbutton', { name: /month/i }))
+    await userEvent.keyboard('11102026')
+    await waitFor(() => expect(asked(api).at(-1)).toEqual({ matterId: 11, from: '2026-11-10', zone: ZONE, limit: AUDIT_PAGE_SIZE }))
+    await userEvent.click(within(within(panel).getByRole('group', { name: 'To Date' })).getByRole('spinbutton', { name: /month/i }))
+    await userEvent.keyboard('11022026')
+    await waitFor(() => expect(asked(api).at(-1)).toEqual({ matterId: 11, from: '2026-11-10', to: '2026-11-02', zone: ZONE, limit: AUDIT_PAGE_SIZE }))
+    expect(within(panel).getByText('The To Date is before the From Date, so no row can match.')).toBeTruthy()
+    expect(within(panel).getByRole('link', { name: 'Open in the Audit Trail' }).getAttribute('href')).toBe('/admin/audit?matter=11&from=2026-11-10&to=2026-11-02')
+  })
+
+  it('asks again with Refresh, which holds while it reads', async () => {
+    const { api } = await openMatter('/matters/11?tab=activity', audit)
+    const panel = within(main()).getByRole('tabpanel', { name: 'Activity' })
+    await waitFor(() => expect(asked(api)).toHaveLength(1))
+    const refresh = within(panel).getByRole('button', { name: 'Refresh' })
+    await userEvent.click(refresh)
+    await waitFor(() => expect(asked(api)).toHaveLength(2))
+    await waitFor(() => expect(refresh.hasAttribute('data-pending')).toBe(false))
+    expect(document.activeElement).toBe(refresh)
+  })
+
   it('opens at Activity when the address names it', async () => {
     await openMatter('/matters/11?tab=activity', audit)
     expect(within(main()).getByRole('tab', { name: 'Activity' }).getAttribute('aria-selected')).toBe('true')

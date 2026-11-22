@@ -8,6 +8,7 @@ import { createQueryClient, createSignedOut, InsecureAddress } from '@healdan/sh
 import { setLabels } from '@healdan/ui'
 import { createAccess, guardApi } from './access'
 import { App } from './App'
+import { auditListsStale } from './monitoring/queries'
 import { createAdminRouter } from './router'
 
 /** How long the first draw waits for the server's word for a matter */
@@ -30,10 +31,10 @@ export async function start(root: HTMLElement, secure = window.isSecureContext):
   }
   const signedOut = createSignedOut()
   const access = createAccess()
-  // The one client the app has: guarded here, where it's made, so no screen, loader or router context can reach one that
-  // isn't (access.tsx)
-  const api = guardApi(createApi({ onSignedOut: signedOut.mark }), access, signedOut)
   const queryClient = createQueryClient()
+  // The one client the app has: guarded here, where it's made, so no screen, loader or router context can reach one that
+  // isn't (access.tsx); each change it sends that succeeds makes the audit lists stale, as the change is recorded (P5-R34)
+  const api = guardApi(createApi({ onSignedOut: signedOut.mark }), access, signedOut, () => auditListsStale(queryClient))
   const router = createAdminRouter()
   let gone = false
   const draw = () => {
