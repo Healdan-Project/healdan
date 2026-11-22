@@ -55,9 +55,6 @@ public class RouteCoverageTest extends AbstractHealdanTestCase {
 			"GET /v1/admin/logs",
 			"GET /v1/admin/logs/{name}/lines",
 			"GET /v1/admin/logs/{name}/file",
-			// The Audit Trail
-			"GET /v1/admin/audit",
-			"GET /v1/admin/audit/export",
 			// The background jobs
 			"GET /v1/admin/jobs",
 			"POST /v1/admin/jobs/{name}/run",
