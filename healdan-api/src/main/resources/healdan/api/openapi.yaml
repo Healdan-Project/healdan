@@ -1233,7 +1233,10 @@ paths:
         with a device token, and on the web session unless that session
         unlocked it in the Classic Interface). A document the caller can't read, or a version it
         doesn't have, is `404 not-found`. Viewing a preview isn't recorded
-        as a download, for a picture as for a PDF.
+        as a download, for a picture as for a PDF. Served, it is recorded in
+        the document's history as the caller's view of it (`event.viewed`),
+        once per person and document in half an hour; a `202`, a refusal, a
+        `404` and a `HEAD` record nothing.
 
         A conversion that isn't made yet is `202`, with `Retry-After` in
         seconds: ask again after that. A file with no preview, whether its
@@ -1391,6 +1394,11 @@ paths:
         its host which server the message is on. A signed (S/MIME) message
         shows its content as any other does; an encrypted one has no body.
 
+        Served, it is recorded in the email's history as the caller's view of
+        it (`event.viewed`), once per person and email in half an hour, with
+        `pictures=true` and an attachment shown in place counted as the same
+        view; a `HEAD` records nothing.
+
         The checks are those of `getDocumentMessage`.
       tags: [Emails]
       parameters:
@@ -1446,8 +1454,10 @@ paths:
         GIF, WebP, BMP or SVG), known by its type or, as many mailers send any
         file as `application/octet-stream`, by its name, is answered to show
         in place, as that type: the Preview permission is needed instead, the
-        answer is `Content-Disposition: inline`, and nothing is recorded. Any
-        other attachment, a TIFF or a HEIC included, is `404 no-preview`.
+        answer is `Content-Disposition: inline`, and it is recorded as the
+        caller's view of the email, as `getDocumentMessageBody` is, not as a
+        download. Any other attachment, a TIFF or a HEIC included, is
+        `404 no-preview`.
 
         Every answer is `X-Content-Type-Options: nosniff`, and an inline one is
         also `Content-Security-Policy: sandbox`, so that going to one directly,
