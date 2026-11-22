@@ -1614,12 +1614,14 @@ The routes:
 
 The Monitoring area's routes, for the Errors, Server Log, Audit Trail and Background Jobs screens. None takes a body
 but a schedule's, and none answers a problem beyond those above. A fault's message and stack, each log line and a
-job's error are answered as the server logged them, but for a user name and password written in a URL, which are cut:
-`https://user:secret@host` reads `https://host`. A URL's authority ends at the first `/`, `?`, `#`, whitespace, quote
-or angle bracket, so a password holding one of those isn't recognised as one. A log's download is its files as they
-are. Marking a fault resolved or unresolved is recorded inside its transaction, and a job's action straight after
-it, as a task's schedule is kept in the server's configuration; a change that changes nothing, and anything that
-only reads, a log's download and the export included, records nothing.
+job's error are answered as the server logged them, but for the user name and password of each URL written plainly in
+them, which are cut: `https://user:secret@host` reads `https://host`, and so does a URL that follows another's host
+directly, as in a list of hosts joined by commas. What isn't recognised stays as it was logged: a password that itself
+holds a raw `/`, `?`, `#`, a space, a quote or an angle bracket; a URL that is JSON-escaped or percent-encoded; and a
+URL cut short by a length limit before its `@`. So a client treats these answers as holding what the server logged. A
+log's download is its files as they are. Marking a fault resolved or unresolved is recorded inside its transaction,
+and a job's action straight after it, as a task's schedule is kept in the server's configuration; a change that
+changes nothing, and anything that only reads, a log's download and the export included, records nothing.
 
 - **`GET /v1/admin/errors`** is a page of faults (`ErrorList`), one row for each kind of fault logged at error level
   or above that was last seen in `window`, the one last seen first: `id`, `message` (the latest), `area`, `times` in
@@ -1627,9 +1629,9 @@ only reads, a log's download and the export included, records nothing.
   many times they were seen in the window. `window` is `1h`, `24h` (the default), `7d` or `30d`, counted by whole
   clock hours in UTC from the start of the hour the window begins in, so the last hour's counts are the hour now and
   the one before. `q`, read trimmed, in any case, with `%` and `_` taken as they are, keeps the faults whose latest
-  message or logger's name holds it, compared as stored, before a URL's user name and password are cut; `area` keeps
-  one area's faults; and `unresolved=true` those nobody has marked resolved since they were last seen. A `window`, an
-  `area` or an `unresolved` that isn't one of these is `400`.
+  message or logger's name holds it, compared as stored, before URLs' user names and passwords are cut; `area` keeps
+  one area's faults; and `unresolved=true` those nobody has marked resolved since they were last seen. A `window` or
+  an `area` that isn't one of these, and an `unresolved` that is neither `true` nor `false`, are `400`.
 - **`GET /v1/admin/errors/{id}`** is a fault (`ErrorDetail`): the row but for `times`, with its `level`, `logger`,
   latest `stack`, `total`, `resolvedBy` and `resolvedAt` (null unless it's resolved), `documents`, those its latest
   message names (each `id`, with `docNumber` and `fileName`, null for a document with no doc # or no longer there),
@@ -1647,8 +1649,11 @@ only reads, a log's download and the export included, records nothing.
   sends is read as a file's name or path.
 - **`GET /v1/admin/logs/{name}/lines`** is at most 200 entries (`LogLines`), oldest first, of the log's current file
   and the files it rolled over to, read as one. Each entry has its `position`, `time`, `level`, `source`, `message`
-  and `continuation`, the lines after it, such as a stack's; a line that starts no entry at the start of what was
-  read is an entry of its own, with no time, level or source, and a line is cut at 10,000 characters. Positions are
+  and `continuation`, the lines after it, such as a stack's. An entry starts with its time, as the server's logging
+  writes it; the main log and most others then write the level, the source and the message, and a few the level and
+  the message, or the message alone, whose entries have no `source`, or neither `level` nor `source`. A line that
+  starts no entry at the start of what was read is an entry of its own, with no time, level or source, and a line is
+  cut at 10,000 characters. Positions are
   opaque strings. With neither `before` nor `after` the answer is the newest entries; with `before`, the newest
   before it, going back into older files, until `atStart`; with `after`, the oldest at it or after it, in the current
   file, until `atEnd`, or, when its file has rolled over since, the current file's first entries, with `rolled`.
@@ -1657,30 +1662,50 @@ only reads, a log's download and the export included, records nothing.
   entries, or none, before its end: ask again from its `before` or `after`. Both `before` and `after`, a position the
   route didn't give, or another `level`, is `400`.
 - **`GET /v1/admin/logs/{name}/file`** is the log's files as they are, zipped, each under its own name, as an
-  attachment named after the log's file and the time, in UTC, such as `dms-20261122-104107.zip`.
-- **`GET /v1/admin/audit`** is a page of the Audit Trail (`AuditPage`, `items` and `nextCursor`), newest first, from
+  attachment named after the log's file and the time, in UTC, such as `dms-20261122-104107.zip`. It's `no-store`, as
+  the files hold what the server logged, and a `HEAD` answers the headers and reads no file.
+- **`GET /v1/admin/audit`** is a page of the Audit Trail (`AuditPage`: `items`, `nextCursor` and `readBackTo`), newest
+  first, from
   LogicalDOC's history of documents, folders and accounts, the administration record, and the record of storage
   backends' recovery keys shown and entered, a showing through the Admin app being one row, the administration
-  record's. A row (`AuditRow`) has `id`, `when`, `who` (the person's name now, or the username the row kept), `kind`
-  (`sign-in`, `document`, `folder`, `user` or `administration`), `event` (the stored key) and `what` (its words, in US
-  English), `detail` (one line), `from` (the address), `docNumber` and `folderId` where it names one, and an
-  administration row's `changes`, each `{ "before", "after" }`, or `{ "secret": true }` with no value. The filters all
+  record's. A row (`AuditRow`) has `id`, `when`, `who` (the person's name now, or, where no account has the row's
+  user, the person as the row kept them: their name at the time in LogicalDOC's history, their username in Healdan's
+  records), `kind` (`sign-in`, `document`, `folder`, `user` or `administration`), `event` (the stored key) and `what`
+  (its words, in US English, true whoever did it), `detail` (one line), `from` (the address), `docNumber` and
+  `folderId` where it names one, and an administration row's `changes`, each `{ "before", "after" }`, or
+  `{ "secret": true }` with no value. On a `user` row, `who` is the person who made the change, where the row names
+  them, as a change made in the Admin app does, and null where it doesn't, and `detail` is the account, as the
+  administration record names a person, then, for an account created, changed, disabled, enabled or deleted, a
+  password changed, an API key made, a sign-in as another account, a change of who can sign in as it, or a legal
+  notice confirmed, the note LogicalDOC kept, cut to 300 characters, as
+  `Sam Okafor (sokafor): By admin in the Admin app`. A failed sign-in for a username no account has has `who` null and
+  the detail `Unknown username`: what was typed is never answered, exported or compared. The filters all
   apply together: `kind`, repeated; `userId`, the rows the person did and those about them, which a person's Activity
   tab is; `matterId`, the document and folder rows of the matter's folders, those in the Trash included, and the
   administration rows aimed at the matter or at a folder or search folder in it, which a matter's Activity tab is;
   `docNumber`; `from` and `to`, days in `zone` (the server's without it); and `q`, on a file name, a folder's path, a
-  target's name, an address or the username a row kept. A page holds at most `limit` rows, 200 at most, and where no
-  index serves the filter it reads each source only so far, so it can hold fewer, or none, and still have a
-  `nextCursor`, which goes back as `cursor`, with the same filters, for the rows after it. It's null once every source
-  has been read to its end, and there's no total. A `kind`, a `zone`, a day, a `limit` or a `cursor` that isn't one of
-  these is `400`; an id or a doc # that names nothing keeps no row, and so does a `to` before `from`.
+  target's name, an address, or the person as the row kept them (their username, and in LogicalDOC's history their
+  name at the time), never the name `who` gives. A page holds at most `limit` rows, 200 at most, and where no index
+  serves the filter it reads each source only so far, so it can hold fewer, or none, and still have a `nextCursor`,
+  which goes back as `cursor`, with the same filters, for the rows after it. It's null once every source has been read
+  to its end, and there's no total. `readBackTo` says how far back the reading has reached: every row the filters keep
+  that's newer has been given, on this page or an earlier one, and the next page's rows are no newer; it's null when
+  `nextCursor` is. A `kind`, a `zone`, a `limit` or a `cursor` that isn't one of these, a `userId`, `matterId` or
+  `docNumber` that isn't a whole number from 0 up, and a day that isn't one of the years 0001 to 9999 written as
+  `2026-11-22`, are `400`; an id or a doc # that names nothing keeps no row, `0` included, and so does a `to` before
+  `from`.
 - **`GET /v1/admin/audit/export`** is the rows the same filters keep, newest first, as CSV (`text/csv;charset=utf-8`),
   streamed: UTF-8 with a byte order mark, its lines ending in CR LF, with the columns Time (UTC, ISO 8601, to the
   millisecond), Who, Kind, What, Detail, From and Changes (`name: before → after`, `(none)` for no value, and a secret
   as `name: changed`). A cell that starts with `=`, `+`, `-`, `@`, a tab or a CR starts with `'` before it, and a cell
-  holding a comma, a double quote, a CR or an LF is then quoted. It stops at 100,000 rows, with a last line that says
-  so. Its filters are checked before anything is sent, as the page's are, and it's named after the day, in `zone`, as
-  `audit-trail-2026-11-22.csv`.
+  holding a comma, a double quote, a CR or an LF is then quoted. It's named after the day, in `zone`, as
+  `audit-trail-2026-11-22.csv`, and is `no-store`. Its filters are checked, as the page's are, and its first page of
+  rows read, before anything is sent, so a first page that can't be read is a `500` problem; then the column names go
+  out at once, and the rows as each page is read. It stops at 100,000 rows, with a last line that says so, and one that
+  can't finish says so in its last line, a cell of its own: "Stopped before the end: the server couldn't read the
+  rest. Export again." when a later page can't be read, and "Stopped before the end: only an administrator can export
+  the Audit Trail." when, as the next page is read, the person exporting is no longer an administrator, which is asked
+  at each page. A `HEAD` answers the headers once the filters are checked, and reads no row.
 - **`GET /v1/admin/jobs`** is every job (`Job`), as a plain array, Healdan's first, in a fixed order, then
   LogicalDOC's six tasks (`logicalDocTask`), each with its `name`, `label`, `lastStart`, `lastEnd`, `result`, `error`,
   `nextRun`, `overdue`, `enabled` and `running`, what it allows now, `canRun`, `canStop` and `switchable`, and a task's
@@ -1693,16 +1718,19 @@ only reads, a log's download and the export included, records nothing.
   may not show it running yet. Stop asks a task's run to stop, at its next check. Enable and Disable save whether a
   task runs on its schedule, so they last across a restart. None of Healdan's jobs is stopped, enabled or disabled
   here. What a job doesn't allow now is `409 refused`, with a sentence that says why, and a name the list doesn't have
-  is `404`.
+  is `404`, whose sentence doesn't repeat the name.
 - **`PUT /v1/admin/jobs/{name}/schedule`** with `{ "mode", "intervalSeconds", "cron" }` saves a task's schedule, as the
   Classic Interface's Scheduled Tasks saves it, and answers the job with its next run: `simple`, every 1 to 31,536,000
   seconds, or `cron`, an expression in Quartz's form, in the server's time zone. Its other settings stay, and so does
-  whether it's enabled. A body that isn't the object is `400`; then the job's `404`; then `422 validation`, naming
-  `mode`, `intervalSeconds` or `cron` (`required`, `invalid` or `out-of-range`), the other mode's member sent with a
-  value among them; and last `409 refused` for one of Healdan's jobs, which keep their own schedules.
+  whether it's enabled. A body that isn't the object, a member it doesn't take, an `intervalSeconds` that isn't a whole
+  number, and a `cron` that isn't text are `400`; then the job's `404`; then `422 validation`, naming `mode`,
+  `intervalSeconds` or `cron` (`required`, `invalid` or `out-of-range`), a `mode` of any other value or type
+  `invalid`, and the other mode's member sent with a value among them; and last `409 refused` for one of Healdan's
+  jobs, which keep their own schedules.
 - **What's recorded:** `job.run-requested`, `job.stop-requested`, `job.enabled`, `job.disabled` and
   `job.schedule-changed`, with the schedule before and after as `every 1800 seconds` or `cron 0 0 3 * * ?`, each aimed
-  at the job by its name.
+  at the job by its name. The Dashboard's jobs, and so the Admin app's left pane, follow each of them, and a run that
+  ends otherwise than the one before, at their next read.
 
 ## Healdan's Own Client
 

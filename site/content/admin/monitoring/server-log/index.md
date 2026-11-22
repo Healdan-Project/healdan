@@ -29,13 +29,15 @@ The entries show in a box of their own, the oldest at the top and the newest at 
 second, in your browser's time zone, with its day for one before today; its level in words, such as **Warn** or
 **Error**; its source, the class and line of code that logged it, such as `Mover:322`, whose whole name shows when you
 point at it; and its message, with the lines that follow it, such as a stack trace, under it. A line that starts no
-entry, as the rest of a stack can be, shows indented, on its own. A line longer than 10,000 characters is cut there:
+entry, as the rest of a stack can be, shows indented, on its own. A few logs write no level, or neither a level nor a
+source: their entries show the time and the message alone. A line longer than 10,000 characters is cut there:
 **Download** has it whole.
 
 Above the box:
 
 - **Level:** **Everything**, which the page starts on, **Warnings and Errors**, or **Errors**. Lines that start no
-  entry, such as those at the very start of the oldest file, show only under Everything.
+  entry, such as those at the very start of the oldest file, and the entries of a log that writes no level, show only
+  under Everything.
 - **Search the Log** keeps the entries whose message, source or following lines hold what you type, in any case. It
   looks through the lines as the page shows them, where a user name and password written in a URL have been cut (see
   [below](#a-user-name-and-password-in-a-url)), and through a source by its whole name, such as
@@ -64,19 +66,24 @@ Show Earlier pauses it the same way, leaving out the newest, which **Follow** re
 or search after such a pause follows again; a pause you chose stays.
 
 If a read of the new entries fails, the page keeps what it shows and says "Couldn't read the newest lines, so this shows
-what was read last. Healdan keeps trying.", and it does, every 3 seconds.
+what was read last. Healdan keeps trying.", and it does, waiting twice as long after each read that fails, up to a
+minute, and every 3 seconds again once one is answered. Should the server no longer know the log, or the place it was
+read to, following stops, and the page says "The server no longer knows this log, or the place it was read to, so
+following has stopped. Follow starts again from the newest lines."
 
 When the log rolls over to a new file while you're following it, the page says "The log rolled over to a new file, so
 this starts again at its top. Show Earlier reads the lines before it.", and carries on from the start of the new file.
-What was written to the older file in the meantime is there when you go back.
+What was written to the older file in the meantime is there when you go back. The note goes once it's no longer so:
+when Show Earlier reads the lines before it, when you press **Follow**, or when the new file's first entries leave the
+page.
 
 ## Going Back
 
 Scroll to the top of the box, or press **Show Earlier** there, to read earlier entries, back through the older files.
 Your place in the box is kept as they come. A read that finds few entries goes on back by itself a few times, as with a
 level or a search, then waits for Show Earlier again. At the start of the oldest file, the box says "This is the start
-of the log: it holds nothing older." If a read of earlier entries fails, it says "Couldn't read the earlier lines.",
-and Show Earlier tries again.
+of the log: it holds nothing older.", and takes the focus Show Earlier had. If a read of earlier entries fails, it
+says "Couldn't read the earlier lines.", and Show Earlier tries again.
 
 ## Download
 
@@ -84,13 +91,18 @@ and Show Earlier tries again.
 file and the older ones, each under its own name. The zip is named after the log's file and the time it was made, in
 UTC, such as `dms-20261122-104107.zip`. Downloading a log isn't recorded.
 
+**Download** first asks Healdan for the logs, and only then downloads the file, so a refusal is said on the page,
+beside the buttons, as is one Healdan answers in the file's place; should your session have ended, or you no longer be
+an administrator, the Admin app says so in place of the screen.
+
 For a zip of the logs with the server's settings and environment, for whoever helps you with a problem, use
 **Download the logs** on the Classic Interface's
 [System Information](../../system/system-information/#downloading-the-logs).
 
 ## A User Name and Password in a URL
 
-As on the Errors screen, a URL in a line shows without a user name and password written before its host:
-`https://user:password@host` shows as `https://host`, and the search finds what shows. The files themselves aren't
-changed, so **Download** has them as the server wrote them. See
-[A User Name and Password in a URL](../errors/#a-user-name-and-password-in-a-url) for what's recognised.
+As on the Errors screen, a URL written plainly in a line shows without the user name and password written before its
+host: `https://user:password@host` shows as `https://host`, and the search finds what shows. Not every way of writing
+one is recognised, so take a line as holding what the server logged: see
+[A User Name and Password in a URL](../errors/#a-user-name-and-password-in-a-url) for what isn't. The files themselves
+aren't changed, so **Download** has them as the server wrote them.

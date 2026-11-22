@@ -245,7 +245,9 @@ What the screens from Phase 2 on share (the spec's section 7.2):
   the window (`ASK_ON_RETURN`), with the summary's `figuresAt`, and the Errors list's `errors`, from its last page.
 - **Cursor lists.** `lists/useCursorList(path, query, pageSize)` is a list that comes by cursor, the Audit Trail and
   the Activity tabs: an infinite query by each answer's `nextCursor`, sent back as `cursor`, which keeps the last
-  question's rows while a new one loads and asks again at each return to the window, as `usePagedList` does. The
+  question's rows while a new one loads, asks again at each return to the window, as `usePagedList` does, and asks
+  again each time it's shown (`refetchOnMount: 'always'`), however fresh its last answer; it gives the last page as
+  the server gave it (`last`), and drops a row a later page gives again (`distinct`). The
   server reads each source only so far for a page, so a page can come back short, or empty, with a cursor: the list
   then asks for the next by itself, `FOLLOW_SHORT_PAGES` (3) pages in a row at most after the page that started the
   run, then stops, and `hasMore` offers the rest to **Show More**, which starts a run again. A full page, a null
@@ -357,7 +359,8 @@ What the screens from Phase 2 on share (the spec's section 7.2):
     with a row's details in a region of their own below it, as the list's rows keep their height; the open fault is
     `?id=`. **Mark Resolved** and **Reopen** are one button whose words follow the fault, so the focus stays on it, and
     `errorChanged` puts the answer in place and invalidates the list and the Dashboard's query, which the left pane's
-    count reads.
+    count reads. A `404` on either makes the fault's own query stale, so its details say it has gone, and the focus
+    the button had goes to them.
   - **The Server Log** (`useLogLines.ts`, `LogLines.tsx`, `logQueries.ts`): `useLogLines(name, level, q)` reads the
     newest entries, then, while following, the page is visible and the person hasn't paused, what's new every
     `FOLLOW_MS` (3 seconds) from the last answer's `after`, at once again while an answer isn't `atEnd`, `QUICK_READS`
@@ -366,18 +369,35 @@ What the screens from Phase 2 on share (the spec's section 7.2):
     `AbortController`, and a pause, the page hidden, leaving the page, or a new log, level or words cancels the one on
     its way and drops its answer. It keeps `MAX_KEPT` (1,000) entries, one per `position`: following drops the oldest
     while the box is at its end, and with the reader further up pauses instead (`pausedToKeep`), as **Show Earlier**
-    past the cap does, so the lines being read stay; a new log or filter after such a pause follows again. `rolled`
-    replaces the entries with the new file's. The box (`LogLines`) is a named region that's a Tab stop, not a live
-    region: at its end it keeps to its end, and further up the first entry in view keeps its place, so new lines never
-    move the reader or take the focus.
+    past the cap does, so the lines being read stay; a new log or filter after such a pause follows again. A follow
+    that fails waits twice as long each time (`FOLLOW_MS` × 2 to the failures in a row, `FOLLOW_MOST_MS`, a minute, at
+    most), back to 3 seconds at the first answer, and one answered `400` or `404`, a position or a log the server no
+    longer knows, ends the follow with `followLost`'s note, after which **Follow** starts afresh from the newest
+    lines. `rolled` replaces the entries with the new file's, and its note goes once Show Earlier reads before it, on
+    Follow, and once the new file's top leaves the kept entries. The session's view is kept with the log, level and
+    words it's of, so the box never draws an old log's lines for a new one. **Download** is a button: `useDownload`
+    (`download.ts`) first asks `GET /v1/admin/logs` through the guarded client, then sends the shared
+    `launchDownload`'s frame to the log's file, and says beside the buttons, with `forms/Refusal`, what either
+    refused, while a `401` or a `403 admins-only`, from the check or in the frame, is the app's own Signed Out or
+    no-access page. The box (`LogLines`) is a named region that's a Tab stop, not a live region: at its end it keeps
+    to its end, and further up the first entry in view keeps its place, so new lines never move the reader or take the
+    focus.
   - **The Audit Trail** (`AuditList.tsx`, `AuditFilters.tsx`, `ActivityPanel.tsx`, `queries.ts`, `text.ts`): one list,
     the screen's and both Activity tabs', through `useCursorList`, 100 rows a time, with the browser's `zone`; every
     cell plain text, an administration row's changes after its detail, and a row's details in a region under the list,
-    with **Open Document in Healdan** or **Open Folder in Healdan**, as no link is inside a row. **Export CSV** is a
-    plain link to `/api/v1/admin/audit/export` with the filters and `zone`, never `limit` or `cursor`. A person or a
-    matter the address names by id is read through its page's query, and shown as "Person 7" when it can't be. An
-    Activity tab is the list with `{ matterId }` or `{ userId }` fixed, Kind ticks of its own (a matter's Document,
-    Folder and Administration), no export, and **Open in the Audit Trail**. A matter's Activity tab leaves the
+    with **Open Document in Healdan** or **Open Folder in Healdan**, as no link is inside a row. A row with no `who`
+    says "Not recorded" in its Who cell. **Export CSV** is a button through `useDownload`: `auditCheck` asks
+    `GET /v1/admin/audit` with the same filters and `limit=1`, then the frame goes to `/api/v1/admin/audit/export`
+    with the filters and `zone`, never `limit` or `cursor` (`auditExportHref`). **Refresh** (`useAuditRefresh`) reads
+    the list again, held while it reads. Every change the app sends that succeeds makes the audit lists stale
+    (`guardApi`'s `onChange`, which `main.tsx` gives `auditListsStale`), so a list on screen, or the next shown, has
+    the change. An empty list still looking says how far back it has read, from the last page's `readBackTo` ("Nothing
+    found back to …"), and a list with rows says it beside **Show More** ("Read back to …"); a visually hidden status
+    says how a run of Show More ended. A person or a matter the address names by id is read through its page's query,
+    and shown as "Person 7" when it can't be, and an address with a doc # and words keeps the doc # alone. An Activity
+    tab is the list with `{ matterId }` or `{ userId }` fixed, Kind ticks of its own (a matter's Document, Folder and
+    Administration), **From Date** and **To Date** (`DaysFilter`, which the screen shares, and which says when To Date
+    is before From Date), **Refresh**, no export, and **Open in the Audit Trail**. A matter's Activity tab leaves the
     Workspace tab mounted, so moving to it raises no Leave question, and a person's page is **Overview** and
     **Activity**, the Overview kept mounted once opened, so a change to their groups survives a visit to Activity.
   - **Background Jobs** (`jobQueries.ts`, `jobText.ts`, `ScheduleDialog.tsx`, `useKeptFocus.ts`): a plain table of
@@ -387,9 +407,10 @@ What the screens from Phase 2 on share (the spec's section 7.2):
     that turns one into the other never leaves the wrong one under the focus, and `useKeptFocus` puts the focus, when
     the button that had it goes, on the button that says it follows it (`data-follows`: Stop after Run Now), else on
     the job's name, and back on a row's button after a dialog opened from it closes. A row's refusal stays only while
-    the job is as it was when the button was pressed. The schedule dialog takes a whole number of seconds, minutes or
-    hours, checked as the server checks it in seconds, or a cron expression, which only the server checks beyond its
-    being typed.
+    the job is as it was when the button was pressed: a `409` or `404` makes the list stale and waits for its read
+    (`jobsStale`) before the refusal shows, so the row shows the job as the refusal found it. The schedule dialog
+    takes a whole number of seconds, minutes or hours, checked as the server checks it in seconds, or a cron
+    expression, which only the server checks beyond its being typed.
   - **Their words and fixtures** are in sections of their own of the catalogue (`strings/en-US.ts`, the strings and the
     plurals) and of `test/fakeApi.ts`, one for Errors and the Server Log, one for the Audit Trail and the Activity
     tabs, and one for Background Jobs, each under a comment naming it, with each screen's routes in a function of its
@@ -638,17 +659,21 @@ view.
 `actions/` holds what a person does to a document, and every place that offers it goes through it.
 
 - **`launch.ts`** is the one place the page goes to an address. `launch` clicks a transient `<a>`, so a `healdan:`
-  link goes to the helper without leaving the page. `launchDownload` sends a hidden `<iframe>` to a file's address:
-  a plain navigation the web session carries, which the answer's own `Content-Disposition` makes a download and
-  names. No script reads the bytes, and no blob is made. jsdom can't navigate, so `test/setup.ts` replaces both with
-  mocks for every test, and a test that cares imports them and reads their calls.
-  - **A download is never a link with the `download` attribute.** WebKit, Safari's included, sends such a link's
-    request with the session's cookie but with no `Sec-Fetch-Site`, `Sec-Fetch-Mode` or `Sec-Fetch-Dest` header, so
-    the web session's route refuses it (`401`, see [Two Ways In](../api/#two-ways-in)) and Safari saves the refusal
-    under the file's name.
-    Chromium and Firefox send the headers. Without the attribute a link's navigation carries them in every browser,
-    but a refusal's page would then take the app's place, so the navigation is a hidden frame's
-    (`Sec-Fetch-Dest: iframe`), which `AppServlet`'s policy allows (`frame-src 'self'`).
+  link goes to the helper without leaving the page. `launchDownload`, which both apps share from `@healdan/shell`
+  (`packages/shell/src/download.ts`) and `launch.ts` re-exports, sends a hidden `<iframe>` to a file's address: a
+  plain navigation the web session carries, which the answer's own `Content-Disposition` makes a download and names.
+  No script reads the bytes, and no blob is made. A `401` in the frame goes to its `onSignedOut`, and any other
+  refusal to its `onRefused` when the app gives one, or else to a toast. jsdom can't navigate, so `test/setup.ts`
+  replaces both with mocks for every test, and a test that cares imports them and reads their calls.
+  - **A download is never a link with the `download` attribute, in either app.** WebKit, Safari's included, sends such
+    a link's request with the session's cookie but with no `Sec-Fetch-Site`, `Sec-Fetch-Mode` or `Sec-Fetch-Dest`
+    header, so the web session's route refuses it (`401`, see [Two Ways In](../api/#two-ways-in)) and Safari saves the
+    refusal under the file's name. Chromium and Firefox send the headers. Without the attribute a link's navigation
+    carries them in every browser, but a refusal's page would then take the app's place, so the navigation is a hidden
+    frame's (`Sec-Fetch-Dest: iframe`), which `AppServlet`'s and `AdminAppServlet`'s policies allow
+    (`frame-src 'self'`). The Admin app's two downloads, the Server Log's **Download** and the Audit Trail's **Export
+    CSV**, are buttons that go through `download.ts`' `useDownload` (see Monitoring, under [Forms, Lists and
+    Refusals](#forms-lists-and-refusals)).
   - **A frame is a download's own,** so two started together don't stop each other. It's removed after an hour
     (`FRAME_KEPT`): a download that has begun doesn't need it, in Chromium, WebKit or Firefox, but taking it away
     stops one the server hasn't begun to answer, and says nothing, and a cloud file that isn't in the read cache is

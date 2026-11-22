@@ -97,8 +97,10 @@ afterwards.
 
 ## The Nightly Job
 
-Every night at 02:47, server time, a job destroys what has been **removed for longer than Removed Items Kept** days. It
-never runs sooner than 10 minutes after the server starts. Set the days on the **Healdan Settings** page, from 1 to
+Every night at 02:47, server time, a job destroys what has been **removed for longer than Removed Items Kept** days. Its
+nightly run never comes sooner than 10 minutes after the server starts. **Run Now**, for the Trash Destroyer on the
+Admin app's [Background Jobs](../monitoring/background-jobs/), runs it at once, and it still destroys only what's due.
+Set the days on the **Healdan Settings** page, from 1 to
 365, 30 to begin with: see [Healdan Settings](../healdan-settings/). A change applies to everything already removed, not
 only to what is removed after it, because the days are the job's cut-off, not a date written when an item is removed.
 

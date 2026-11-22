@@ -208,6 +208,11 @@ weight: 13
   and [Monitoring](../../admin/monitoring/).
 - **For the `admin` group only.** A group given Administration screens through the Classic Interface's menus doesn't
   get the Admin app, and keeps using those screens there.
+- **The Audit Trail names the account acted as.** What someone does in a session opened as another account, as an
+  [allowed impersonator](../../user/getting-started/your-profile-and-password/#allowed-impersonators), is listed under
+  that account, with nothing of who signed in. A change to an account whose row doesn't name who made it shows "Not
+  recorded" under Who. See the Admin Guide's
+  [Audit Trail](../../admin/monitoring/audit-trail/#what-isnt-recorded).
 - **As the User app,** it needs a [secure address](#the-user-app) and a host name of its own, is made for current
   browsers, works on a tablet but not a phone, and is in US English.
 

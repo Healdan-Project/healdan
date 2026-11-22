@@ -76,9 +76,8 @@ An entry shows a count where something there needs attention, as Needs Attention
 many storage backends can't be reached or are failing; **Errors**, how many unresolved errors the server logged in the
 last 24 hours, each kind of fault counting once; and **Background Jobs**, how many jobs failed or are overdue. The
 counts are asked for when the Admin app opens and each time you come back to its window, and every 30 seconds while the
-Dashboard is showing. Resolving or reopening a fault asks for them again too, and the Errors count follows; an action
-on a job does as well, and its count can take a minute or two to follow: see
-[Counts in the Left Pane](../monitoring/#counts-in-the-left-pane).
+Dashboard is showing. Resolving or reopening a fault, and each action on a job, asks for them again too, and the count
+follows: see [Counts in the Left Pane](../monitoring/#counts-in-the-left-pane).
 
 On a window narrower than 1,024 pixels, the left pane folds away behind the **☰** (Navigation) button in the top bar,
 which opens it over the page. Esc or choosing a link closes it again. The Admin app is designed for a window 1,280

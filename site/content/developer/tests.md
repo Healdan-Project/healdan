@@ -271,15 +271,16 @@ start them; `DashboardServiceTest` calls `forget()`, which drops what the Dashbo
   several backends and Stores, the ten tiles in order and those that need attention, a part that fails leaving the
   rest whole, a source that can't be read unchecked, a slow one still being worked out, storage backends off, the
   database's tile on PostgreSQL, Sign-In and Outgoing Email, a fault marked resolved, or unresolved again, counted at
-  the next read with no `forget()` (`testAFaultMarkedResolvedIsCountedAtTheNextRead`), and a second read coming from
-  what's kept. `DashboardScreensTest` pins where the links go: each shipped screen's Admin address, the Dashboard,
-  Clients, Matters, Workspace Templates, Stores, Backends, Users, Errors, Server Log, Audit Trail and Background Jobs,
-  the Classic Interface for every other, and stuck files linking to Stores, or to Backends when only files with no
-  Store are stuck, as `DashboardServiceTest` does too. `CachedTest` checks what's kept: one ask per period however
-  many read, the last answer while it's asked again, none older than two periods, a failure kept like an answer,
-  `forget()`, a change it's told of read at the next ask, and a clock set back. `WordsTest` checks the tiles' words,
-  and `ProviderClientTest` that `answers` fetches a provider's discovery document afresh and remembers a failure for
-  30 seconds.
+  the next read with no `forget()` (`testAFaultMarkedResolvedIsCountedAtTheNextRead`), and so a job action or a run
+  that ends otherwise than the one before (`testAJobActionOrARunThatEndsIsCountedAtTheNextRead`), and a second read
+  coming from what's kept. `DashboardScreensTest` pins where the links go: each shipped screen's Admin address, the
+  Dashboard, Clients, Matters, Workspace Templates, Stores, Backends, Users, Errors (the unresolved errors' link with
+  `?unresolved=true`), Server Log, Audit Trail and Background Jobs, the Classic Interface for every other, and stuck
+  files linking to Stores, or to Backends when only files with no Store are stuck, as `DashboardServiceTest` does too.
+  `CachedTest` checks what's kept: one ask per period however many read, the last answer while it's asked again, none
+  older than two periods, a failure kept like an answer, `forget()`, a change it's told of read at the next ask, and a
+  clock set back. `WordsTest` checks the tiles' words, and `ProviderClientTest` that `answers` fetches a provider's
+  discovery document afresh and remembers a failure for 30 seconds.
 - **`UsageSummaryTest`** checks the Usage: nothing before the first summary, the totals, 30 days of documents,
   storage by Store with the backends the storage port names and a port that fails, the busiest matters, each matter's
   figures, the stamps read trimmed, the people signed in, reading the summary running no query (counted on a
@@ -429,7 +430,9 @@ start them; `DashboardServiceTest` calls `forget()`, which drops what the Dashbo
 - **`DocumentViewsTest`** checks the views: an older file recorded under the version that made it, entries past the
   half hour dropped, the memory held to its cap (20,001 claims), a failed write warned of (the line pinned with
   `LogCapture`) and not remembered, and a real statement failing inside the write leaving the caller's transaction to
-  go on and commit. `PreviewResourceTest` and `MessageResourceTest`, in `healdan-api`, check the routes: a preview
+  go on and commit; an `Error` in the write, such as a missing class, warned of and not failing the read
+  (`testAnErrorInTheWriteDoesntFailTheRead`), and the virtual machine's own going on up. `PreviewResourceTest` and
+  `MessageResourceTest`, in `healdan-api`, check the routes: a preview
   served records one row, with its user, document, folder, path, version, session and address, once per person and
   document in half an hour, to the nanosecond at the window's edge; a `202`, a `404 no-preview`, a `403`, a `404`, an
   unknown version, a `HEAD` and a `503` record none; the thumbnail, the properties, the versions, the document and a
@@ -439,15 +442,20 @@ start them; `DashboardServiceTest` calls `forget()`, which drops what the Dashbo
   only the test moves it (`passTime`), makes the writes fail (`failWrites`), and puts both back (`reset`).
 - **`UrlCredentialsTest`** checks the cut: a user with and without a password, an email address outside a URL and an
   `@` in a path or query kept, several URLs in a line, schemes, a password with a colon and escapes, an IPv6 host, the
-  last `@` ending the user part, what ends an authority, and long lines of schemes and of `@`s.
-- **`ErrorReviewTest`** checks resolving and reopening: who is recorded; a fault already in the state asked for changed
-  and recorded nothing; no such fault; the record named by the message with its credentials cut, fitted to its column;
-  a non-administrator refused first; and the change and its record one transaction, a record that can't be written
-  rolling the change back. `ErrorStoreTest` adds the list's count of the errors on every page, and whether a resolve or
-  a reopen changed the fault. `AdminErrorsResourceTest`, in `healdan-api`, checks the routes: the windows counted from
-  the hours (the last hour leaving out an error of the same fault five hours old), the filters and paging, the `400`s,
-  the credentials cut in the list, the details, the stack and the record, a fault's documents and its log, `404`s,
-  resolve and reopen recorded with who and from where, and every route for administrators on the web session only.
+  last `@` ending the user part, what ends an authority, a URL right after another's host, as in a list of hosts
+  joined by commas (`testAUrlRightAfterAnothersHost`), as another's authority and in another's query, a comma or a
+  bracket after one, the three limits each pinned as left as it was (a password holding what ends an authority, a URL
+  escaped or encoded, one cut short before its `@`: `testAUrlCutShortBeforeItsAtIsntRecognised` and its two
+  neighbours), and long lines of schemes, of `@`s and of 100,000 hosts joined by commas.
+- **`ErrorReviewTest`** checks resolving and reopening: who is recorded; a fault already in the state asked for
+  changed and recorded nothing; no such fault; the record named by the message with its credentials cut, fitted to its
+  column; a non-administrator refused first; and the change and its record one transaction, a record that can't be
+  written rolling the change back. `ErrorStoreTest` adds the list's count of the errors on every page, whether a
+  resolve or a reopen changed the fault, and a fault's documents, another tenant's named by nothing.
+  `AdminErrorsResourceTest`, in `healdan-api`, checks the routes: the windows counted from the hours (the last hour
+  leaving out an error of the same fault five hours old), the filters and paging, the `400`s, the credentials cut in
+  the list, the details, the stack and the record, a fault's documents and its log, `404`s, resolve and reopen
+  recorded with who and from where, and every route for administrators on the web session only.
 - **`LogFilesTest`** checks the Server Log over the test `log.xml` (below): the list's order and labels, sizes with the
   rolled-over files, the `_WEB` copies and the empty logs left out, and the main log with no file; a name only ever one
   of the logs'; the newest entries and those before; forward over more than 200, with a level and without, and a
@@ -458,7 +466,11 @@ start them; `DashboardServiceTest` calls `forget()`, which drops what the Dashbo
   back across the rolled-over files, ordered by their numbers under either `fileIndex`, whatever their files' times; a
   carriage return or a line separator in a message; following across a roll-over; a `before` whose file rolled over or
   has gone; a position's file found by what it holds, not its name; a file that can't be read; the zip, its name, and
-  nothing left open after it; and the log a logger writes to, and none when the configuration can't be read.
+  nothing left open after it; the log a logger writes to, and none when the configuration can't be read; and every
+  pattern the server's own `log.xml` writes with (`testEveryShippedPatternStartsEntries`): it reads
+  `logicaldoc-webapp/src/main/resources/log.xml`, formats events with each `RollingFile`'s pattern through log4j's
+  own `PatternLayout`, and finds each an entry with its time, its level and source or none where the pattern writes
+  none, a stack as its continuation, and the level and text filters and paging back keeping whole entries.
   `LogPositionTest` checks a position's one spelling. `AdminLogsResourceTest`, in `healdan-api`, checks the routes:
   back and forward, the `400`s, a name only ever one of the logs' (a path, an encoded `..`, a NUL, the file's own name
   and `DMS_WEB` among those refused), the download's headers, a `HEAD` writing no body and opening nothing, a file that
@@ -483,37 +495,54 @@ start them; `DashboardServiceTest` calls `forget()`, which drops what the Dashbo
   and a person's rows coming in one page through their indexes behind more rows than the window; `who` read now; a
   secret's change with no value; a detail that isn't JSON, its warning pinned; a recovery key shown through the Admin
   app as one row; another tenant's rows; a non-administrator refused; `forEach`'s most; and a destroyed document's
-  administration rows and Trash record. Its plans are PostgreSQL's own.
+  administration rows and Trash record. Since the final review it also checks the text filter on rows the writers
+  make, the login and the name a row kept and never a name read now or what was typed at a failed sign-in
+  (`testTheTextFilter`); a User row naming who made the change, its account and note, and no message's or search's
+  text (`testAnAccountsRowNamesWhoMadeTheChange`); a failed sign-in for a username no account has naming nobody, its
+  typed text in no row or cell, and a `userId` of 0 keeping nothing (`testAFailedSignInForAUsernameNoAccountHas`); and
+  how far back each page has read (`testAPageSaysHowFarBackItRead`). Its plans are PostgreSQL's own.
   `testTheUnfilteredPageUsesEachTablesPrimaryKey` explains each source's unfiltered first page on 2,000 rows a table
-  with sequential scans off, and finds the table's key read backwards with no sort. Another puts a person's, a
-  matter's and a doc #'s rows among the oldest 1% of 40,000 a table, takes each statement a page sends from the `sent`
-  seam, the window's end included, and runs it twice with `explain (analyze)`, once as it's sent, under a custom plan,
-  and once prepared on one connection under `plan_cache_mode = force_generic_plan`: under both, the rows its filters
-  removed are no more than a window for each window it reads and the value's own rows, and each read uses its index
-  (39,600 of 40,000 were removed before the read had two steps). `scanPerSource` is a seam a test sets low.
-  `AuditCsvTest` checks each guarded character, guarding before quoting, quotes and new lines, the Changes column, the
-  stopped line, the whole file, and hostile text from real records in every column, parsed back as a spreadsheet
-  would, no cell starting a formula. `AuditWordsTest` and `AuditCursorTest` check the words and the cursor's one
-  spelling. `AdminAuditResourceTest`, in `healdan-api`, checks a page against the contract, paging by `nextCursor`,
-  every filter through the route, a day's rows in `Asia/Tokyo`, the `400`s, the export's headers, byte order mark,
-  line ends, guarding and quoting, that reading and exporting record nothing, 100,001 rows stopping at 100,000 with
-  the last line, and the refusals of a non-administrator and of a device token.
+  with sequential scans off, and finds the table's key read backwards with no sort.
+  `testEveryStatementKeepsItsBoundUnderACustomPlanAndAGenericOne` puts a person's, a matter's and a doc #'s rows among
+  the oldest 1% of 40,000 a table, takes each statement a page sends from the `sent` seam, the window's end included,
+  and runs it twice with `explain (analyze)`, once as it's sent, under a custom plan, and once prepared on one
+  connection under `plan_cache_mode = force_generic_plan`: under both, the rows its filters removed are no more than a
+  window for each window it reads and the value's own rows, and each read uses its index (39,600 of 40,000 were
+  removed before the read had two steps). `scanPerSource` is a seam a test sets low. `AuditCsvTest` checks each
+  guarded character, guarding before quoting, quotes and new lines, the Changes column, the stopped line, the whole
+  file, hostile text from real records in every column, parsed back as a spreadsheet would, no cell starting a
+  formula, the header going out alone and each page after it (`testTheHeaderAndEachPageGoOutAtOnce`, on a writer that
+  records each flush), and an export that can't finish, or whose reader is no longer an administrator, ending with its
+  line. `AuditTestHooks`, in `healdan-core`'s test-jar, fails a page of a read or acts at one (`failPage`, `onPage`,
+  `pages`, `reset`), through the feed's `paged` seam, which is told of each page's cursor before its statements.
+  `AuditWordsTest` finds every action the modules record, reading their sources for each `AdminEvent` they make
+  (`testTheRecordedActionsAreFound`), and checks each has words, an account's true whoever made it and a job's
+  requests read as requests; `AuditCursorTest` checks the cursor's one spelling. `AdminAuditResourceTest`, in
+  `healdan-api`, checks a page against the contract, paging by `nextCursor`, every filter through the route, a day's
+  rows in `Asia/Tokyo`, the `400`s (days outside the years 0001 to 9999 among them) and the first and the last days
+  answered, the export's headers (`no-store` among them), byte order mark, line ends, guarding and quoting, that
+  reading and exporting record nothing, 100,001 rows stopping at 100,000 with the last line, a first page that can't
+  be read answered `500` before anything is sent, a later one ending the file with its line, a reader taken out of
+  `admin` as the first page is read, a `HEAD` that begins no page, and the refusals of a non-administrator and of a
+  device token.
 - **`JobControlTest`** checks the five actions: a task's Run Now off the caller's thread, a second refused while the
-  first one's thread is starting, and none while scheduled tasks are off; a disabled task refused; Stop; Healdan's jobs
-  neither stopped, switched nor scheduled, and a job that runs by itself refused; the Trash destroyer's Run Now
+  first one's thread is starting, and none while scheduled tasks are off; a disabled task refused; Stop; Healdan's
+  jobs neither stopped, switched nor scheduled, and a job that runs by itself refused; the Trash destroyer's Run Now
   reporting as a scheduled run, its next run as it was; Enable and Disable; simple and cron schedules, saved and
   recorded, the same again recording nothing, and each field's `422`; a save that fails changing nothing
-  (`testAFailedSaveChangesNothing`, through the `saver` seam); an unknown job; and a non-administrator refused every
-  action first. `JobRunsTest` checks a run asked for now on a daemon thread of its own, none beside another or beside a
-  scheduled run, a scheduled run waiting for one asked for now, one interrupted while it waits running nothing, and
-  `stop()`. `TrashStartupTest` and `StorageJobsTest` check the Trash destroyer's and the storage jobs' Run Now,
-  reporting as their scheduled runs do, off the caller's thread, a failure saying why, a scheduled run of each waiting
-  for a Run Now (`testEachScheduledRunWaitsForARunNow`), the mover only while its coordinator runs, and none where
-  storage isn't in use. `AdminJobsResourceTest`, in `healdan-api`, checks the routes: the list against the contract, a
-  job's error without a URL's credentials, Run Now and Stop of a task, none while scheduled tasks are off, the Trash
-  destroyer's Run Now, what Healdan's jobs don't allow, Enable and Disable, the schedule and what's refused of it, an
-  unknown job, and a non-administrator's refusal. Every test that changes Index Optimizer's schedule or its enabled
-  flag puts it back after, and those that switch scheduled tasks off put the run level back, in memory only.
+  (`testAFailedSaveChangesNothing`, through the `saver` seam); an unknown job; a non-administrator refused every
+  action first; and the Dashboard's change count moved by each action that changed a job and a run's end, never by a
+  no-op or a refusal (`testAnActionThatChangedAJobMovesTheChangesOn`). `JobRunsTest` checks a run asked for now on a
+  daemon thread of its own, none beside another or beside a scheduled run, a scheduled run waiting for one asked for
+  now, one interrupted while it waits running nothing, and `stop()`. `TrashStartupTest` and `StorageJobsTest` check
+  the Trash destroyer's and the storage jobs' Run Now, reporting as their scheduled runs do, off the caller's thread,
+  a failure saying why, a scheduled run of each waiting for a Run Now (`testEachScheduledRunWaitsForARunNow`), the
+  mover only while its coordinator runs, and none where storage isn't in use. `AdminJobsResourceTest`, in
+  `healdan-api`, checks the routes: the list against the contract, a job's error without a URL's credentials, Run Now
+  and Stop of a task, none while scheduled tasks are off, the Trash destroyer's Run Now, what Healdan's jobs don't
+  allow, Enable and Disable, the schedule and what's refused of it, an unknown job, and a non-administrator's refusal.
+  Every test that changes Index Optimizer's schedule or its enabled flag puts it back after, and those that switch
+  scheduled tasks off put the run level back, in memory only.
 - **A task of the tests' own.** `HeldTask`, in `healdan-core`'s test-jar, is a scheduled task run by LogicalDOC's
   `Task.run` as any task is, which waits until the test releases it (`release`), so a test can see it running and stop
   it, and which can hold the thread that runs it before its run begins (`holdTheStart`, `letStart`), so the task stays
@@ -617,7 +646,8 @@ build out (see [Building from Source](../building-from-source/#commands)).
 - **`AdminAppServletTest`** extends `AbstractHealdanTestCase`, from `healdan-core`'s test-jar, so it runs on the test
   database, with real people signed in to real web sessions: the check under test is the one the server makes. It
   checks the spec's table (signed out, signed in without `admin`, and an administrator, for a page and for a file),
-  that a file that's there and one that isn't get the same refusal, the policy's text, the caching, `GET` and `HEAD`
+  that a file that's there and one that isn't get the same refusal, the policy's text (the User app's with only the
+  worker taken away, `frame-src 'self'` kept for the downloads' frame), the caching, `GET` and `HEAD`
   only, an administrator taken out of `admin` refused at the next load, a check that fails answering `503` to try
   again with the return path kept, and a server built without the apps.
 - Like the API's tests, they take `healdan-core`'s test `context.properties`, which the build copies in, and
@@ -1157,29 +1187,51 @@ Tests](#the-web-modules-tests) are Maven's). [The Web App](../the-web-app/) says
     which steps 5f and 8 check. As its backends share one folder per browser, and each run first removes what an
     earlier one left there, run one `test-web.sh` at a time against a stack: two at once could remove each other's
     backend.
+  - `admin-monitoring.spec.ts` walks Phase 5's Monitoring screens (Admin app spec §8.8). As `admin`, with names of its
+    own run, it makes a group and renames it, and finds the change in the Audit Trail by **Administration** and its
+    words: one row, saying the old and the new name on its one line, every row 34 pixels high however long its Detail,
+    and **Row Details** listing the change. In a second browser context `webuser` selects one of two PDFs it filed in
+    a folder of its own inside the shared `E2E` folder, which shows its details and asks for no `/preview`, and reads
+    the other in Quick Look twice, once after a reload; the Audit Trail kept to each doc # then has one Viewed row, by
+    `webuser`, for the one read, and none for the other. The Server Log on the Main Log follows the lines that
+    documents filed through the API make the server write (LogicalDOC's `Before listener` lines, at info), staying at
+    its end, and, read halfway up, keeps the entry at its top where it was; paused, it reads nothing while two of the
+    follow's turns pass, and catches up on **Follow**; and its download answers `200` with a zip. Errors answers each
+    window, **Area**, **Unresolved Only** and words no fault holds, opens the first fault's details when there is one
+    (none resolved), and shares the page between the list and the details at 1,280 × 800 and 768 pixels. Background
+    Jobs lists Healdan's jobs and LogicalDOC's tasks, and **Schedule…** opens on Tags Processor and is cancelled, with
+    no request that writes. Matter 1.1's **Activity** lists its rows, and `webuser`'s, with **Document** ticked, has
+    the view. It changes nothing global: it resolves or reopens no fault, as the Dashboard's counts are other specs',
+    runs, stops, switches or reschedules no job, as step 9 relies on the Indexer's 5 seconds, only reads `webuser`'s
+    account and matter 1.1, and makes the server log no error; its group and documents stay on the stack, one of each
+    per browser per run.
   - `admin-a11y.spec.ts` runs axe on the Admin app as `admin`, in the light theme and again in the dark one, as
-    `a11y.spec.ts` does: the Dashboard once its ten tiles and Usage's figures are drawn (it waits for Usage's chart, so
-    a summary that failed fails it), the find's list for the smoke fixture's client and matter, the Help menu, the
-    person menu, at 768 × 1024 the Dashboard (with no sideways scroll) and the left pane opened over it (Esc closes it,
-    and the focus goes back to **☰**), Phase 2's screens (the Clients list, the Matters list, a matter's page on its
-    Overview and Workspace tabs, and Workspace Templates, with the smoke fixture's client 1 and matter 1.1, which it
-    only reads, so it needs the smoke overlay), Phase 3's (the Stores list, the smoke fixture's Store `Smoke` on its
-    three tabs, the Backends list with the storage settings, and `Smoke Garage`'s page, which it only reads too, with
-    **Change Backend** on `Smoke`, **Add Backend** and `Smoke Garage`'s **Key History**, each closed with no request
-    that writes, and the Stores and Backends lists at 768 × 1024), Phase 4's (the Users list, a person's page, the
-    Groups list and a group's page, with **New User** and the temporary password it shows, **Reset Password**'s question
-    and the password it shows, **Disable**'s question, cancelled, **New Group**, and **Add Member** with its list of
-    people open, cancelled), and last the signed-out screen. Phase 4's dialogs are opened on a person and a group it
-    makes in each theme, with names of its own run, so it changes nothing global. A check that follows the press of a
-    button that goes pending (**Create User**, **Reset Password**, **Create Group**) first waits for React Aria's
-    announcement of the button to go: a node in its live region that names the button by `aria-labelledby` and stays
-    7 seconds, after the button has gone with its form, which axe would otherwise find naming nothing. This is where the
-    Dashboard's colour contrast is checked. The find's list is checked with the whole page around it, as the User app's
-    search box's is: `@healdan/ui`'s `ComboBox` draws the list right after the box, inside the find's search landmark,
-    and keeps the page around it shown to a screen reader while it's open (The Web App page's The Search Box and Search
-    Results), so nothing hidden holds a link (axe's `aria-hidden-focus`). `e2e/helpers.ts`'s `expectListUnder` then
-    checks that the list's layer covers the window and the list starts at the find's left edge, 4 pixels below it, as
-    wide as the box, though the find's field is positioned and padded.
+    `a11y.spec.ts` does: the Dashboard once its ten tiles and Usage's figures are drawn (it waits for Usage's chart,
+    so a summary that failed fails it), the find's list for the smoke fixture's client and matter, the Help menu, the
+    person menu, at 768 × 1024 the Dashboard (with no sideways scroll) and the left pane opened over it (Esc closes
+    it, and the focus goes back to **☰**), Phase 2's screens (the Clients list, the Matters list, a matter's page on
+    its Overview and Workspace tabs, and Workspace Templates, with the smoke fixture's client 1 and matter 1.1, which
+    it only reads, so it needs the smoke overlay), Phase 3's (the Stores list, the smoke fixture's Store `Smoke` on
+    its three tabs, the Backends list with the storage settings, and `Smoke Garage`'s page, which it only reads too,
+    with **Change Backend** on `Smoke`, **Add Backend** and `Smoke Garage`'s **Key History**, each closed with no
+    request that writes, and the Stores and Backends lists at 768 × 1024), Phase 4's (the Users list, a person's page,
+    the Groups list and a group's page, with **New User** and the temporary password it shows, **Reset Password**'s
+    question and the password it shows, **Disable**'s question, cancelled, **New Group**, and **Add Member** with its
+    list of people open, cancelled), Phase 5's (Errors and the first fault's details, when there is one, the Server
+    Log following and paused, the Audit Trail with a row's details and its **Person** and **Matter** lists open,
+    Background Jobs with Tags Processor's **Schedule…** and **Disable** question, both cancelled, and the **Activity**
+    tabs of matter 1.1 and of the person it made in the theme, with a listener failing it on any request that writes;
+    and the Errors and Audit Trail lists at 768 × 1024 too), and last the signed-out screen. Phase 4's dialogs are
+    opened on a person and a group it makes in each theme, with names of its own run, so it changes nothing global. A
+    check that follows the press of a button that goes pending (**Create User**, **Reset Password**, **Create Group**)
+    first waits for React Aria's announcement of the button to go: a node in its live region that names the button by
+    `aria-labelledby` and stays 7 seconds, after the button has gone with its form, which axe would otherwise find
+    naming nothing. This is where the Dashboard's colour contrast is checked. The find's list is checked with the
+    whole page around it, as the User app's search box's is: `@healdan/ui`'s `ComboBox` draws the list right after the
+    box, inside the find's search landmark, and keeps the page around it shown to a screen reader while it's open (The
+    Web App page's The Search Box and Search Results), so nothing hidden holds a link (axe's `aria-hidden-focus`).
+    `e2e/helpers.ts`'s `expectListUnder` then checks that the list's layer covers the window and the list starts at
+    the find's left edge, 4 pixels below it, as wide as the box, though the find's field is positioned and padded.
   - `resizing.spec.ts` files a document into a folder of its own inside `E2E`, and through the page drags the left
     pane's divider with the mouse and checks the pane's width, its value and that the list's Title column narrowed (the
     virtualiser measured the narrower list); reloads and finds the width kept; moves it by keys; checks that a window

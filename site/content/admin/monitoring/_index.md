@@ -21,17 +21,17 @@ logged, its log files, the Audit Trail of who did what, and the background jobs.
 **Errors** shows how many unresolved errors the server logged in the last 24 hours, each kind of fault counting once,
 and **Background Jobs** how many jobs failed when they last ran or are overdue, as the Dashboard's Needs Attention
 counts them. As with **Backends**, the counts are asked for when the Admin app opens and each time you come back to its
-window, and every 30 seconds while the Dashboard is showing. Marking a fault resolved or reopening it asks for them
-again at once, and the Errors count follows. Each action on a job asks for them again too, but the server works out
-the jobs' figures afresh only once a minute, so the Background Jobs count can take a minute or two to follow, as can a
-new fault in the Errors count: each shows the next time the counts are asked for after that.
+window, and every 30 seconds while the Dashboard is showing. Marking a fault resolved or reopening it, and each action
+on a job, asks for them again at once, and the count follows; so does a job whose run ends failed, or succeeds after
+failing, the next time they're asked for. A new fault can take a minute or two to show, as the server works out the
+errors afresh once a minute.
 
 ## From the Dashboard
 
 The Dashboard's links open these screens:
 
-- in Needs Attention, the unresolved errors open **Errors**, and the previews given up on, a job that failed and a job
-  that hasn't run when it should have open **Background Jobs**;
+- in Needs Attention, the unresolved errors open **Errors** with **Unresolved Only** ticked, and the previews given up
+  on, a job that failed and a job that hasn't run when it should have open **Background Jobs**;
 - in Server Health, the **Server**, **Database** and **Memory** tiles open **Server Log**, and the **Previews** and
   **Background Jobs** tiles open **Background Jobs**.
 

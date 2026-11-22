@@ -85,7 +85,8 @@ Under them are:
 
 A fault the server has deleted since, as it deletes a resolved fault that hasn't happened for 90 days, says so in
 place of its details: "This error isn't there any more: the server deletes a resolved error once it hasn't been seen
-for 90 days."
+for 90 days." So does one that **Mark Resolved** or **Reopen** finds deleted meanwhile, and the focus the button had
+goes to the details.
 
 ## Resolving a Fault
 
@@ -120,11 +121,17 @@ isn't offered for a fault whose lines are in none of the logs the Server Log lis
 
 ## A User Name and Password in a URL
 
-Where a message or a stack holds a URL with a user name, or a user name and password, written before its host, as in
-`https://user:password@host`, the Errors screen shows it without them, as `https://host`. So do the
-[Server Log](../server-log/)'s lines and the errors [Background Jobs](../background-jobs/) shows. Only what's written
-plainly as such a URL is recognised: a password with a character such as `/`, `?` or `#` in it, or a URL written some
-other way, isn't, and shows as it was logged. Anything else in a message shows as it was logged too, and so does an
-email address, which isn't a URL.
+Where a message or a stack holds a URL written plainly with a user name, or a user name and password, before its
+host, as in `https://user:password@host`, the Errors screen shows it without them, as `https://host`, and so too a URL
+that follows another's host directly, as in a list of hosts joined by commas. So do the
+[Server Log](../server-log/)'s lines and the errors [Background Jobs](../background-jobs/) shows. What isn't recognised
+shows as it was logged:
+
+- a password that itself holds a `/`, `?`, `#`, a space, a quote or an angle bracket, written as it is;
+- a URL escaped, as in JSON, or percent-encoded;
+- a URL cut short before its `@`, as a message is when it's longer than Healdan keeps.
+
+So take what these screens show as holding what the server logged. Anything else in a message shows as it was logged
+too, and so does an email address, which isn't a URL.
 
 The log files themselves aren't changed: the Server Log's **Download** has them as the server wrote them.

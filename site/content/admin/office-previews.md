@@ -18,7 +18,7 @@ PDF with LibreOffice, which is in the Docker image, for their previews and thumb
 - **Safely.** Conversion never runs a document's macros and never fetches anything over the network.
 - **Permissions** are those of PDF previews: Read and Download.
 - **Reading one is recorded.** Opening a preview in the User app, in Quick Look or the reading pane, is recorded in
-  the document's history as a view, once per person and half hour, and the thumbnail isn't: see
+  the document's history as a view, once per person and document in half an hour, and the thumbnail isn't: see
   [What Counts as Looking at a Document](../monitoring/audit-trail/#what-counts-as-looking-at-a-document).
 
 ## When a Preview Says "Not Available"

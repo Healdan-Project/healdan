@@ -64,8 +64,9 @@ LogicalDOC's tasks are described on [Scheduled Tasks](../../system/scheduled-tas
 ## What Each Job Allows
 
 Each row offers only what its job allows now. Should something change meanwhile, Healdan refuses and says why, such as
-"This job is running already.": under the job's row for **Run Now** and **Enable**, until the list shows the job has
-changed, and in the question for **Stop** and **Disable**.
+"This job is running already.", and the list is read again first, so the row shows the job as the refusal finds it:
+the reason is under the job's row for **Run Now** and **Enable**, until the list shows the job has changed, and in the
+question for **Stop** and **Disable**.
 
 - **Healdan's jobs:** **Run Now**, for the Trash Destroyer, the Storage Mover, the Storage Retests, the Storage Purge
   and the Storage Nightly Check, while it's switched on and isn't running. It runs at once, in the background, as a
@@ -109,7 +110,7 @@ are set there, and so does whether it's enabled.
 ## What Healdan Records
 
 Each action is recorded in the [Audit Trail](../audit-trail/), with who did it and when, its Detail the job's name on
-the server, such as `IndexerTask` or `trash-destroyer`: Run Now as "Ran a job" and Stop as "Stopped a job", once
-asked for, "Enabled a job", "Disabled a job", and "Changed a job's schedule", with the schedule before and after, such
-as `every 1800 seconds` and `cron 0 0 3 * * ?`. Enabling a task that's enabled already, disabling one that's disabled,
-or saving the schedule it has changes nothing, and isn't recorded.
+the server, such as `IndexerTask` or `trash-destroyer`: Run Now as "Asked a job to run" and Stop as "Asked a job to
+stop", once asked for, "Enabled a job", "Disabled a job", and "Changed a job's schedule", with the schedule before and
+after, such as `every 1800 seconds` and `cron 0 0 3 * * ?`. Enabling a task that's enabled already, disabling one
+that's disabled, or saving the schedule it has changes nothing, and isn't recorded.
