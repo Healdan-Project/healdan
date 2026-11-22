@@ -277,6 +277,42 @@ describe("A person's page", () => {
     expect(within(devices).getAllByRole('rowheader').map((cell) => cell.textContent)).toEqual(['Healdan Helper on MacBookComputer mac-7f3a', 'Healdan Helper on Office PCComputer win-22c1'])
   })
 
+  it('lets a name stored blank stay blank while another field changes, as the server keeps it (P4-R29, R31)', async () => {
+    let sent: unknown
+    const blank = userOf({ ...priyaRow, firstName: null, name: 'Nair' })
+    await openPerson(priyaRow.id, {
+      'GET /v1/admin/users/7': blank,
+      'PATCH /v1/admin/users/7': ({ body }: Sent) => {
+        sent = body
+        return userOf({ ...priyaRow, firstName: null, name: 'Nair', email: 'p.nair@example.test' })
+      },
+    })
+    await userEvent.click(action('Edit')!)
+    const dialog = await screen.findByRole('dialog', { name: 'Edit Nair' })
+    // Not needed, as it was blank when the dialog opened; the other name, which wasn't, still is
+    expect(within(dialog).getByRole('textbox', { name: 'First Name' }).getAttribute('aria-required')).toBeNull()
+    expect(within(dialog).getByRole('textbox', { name: 'Last Name' }).getAttribute('aria-required')).toBe('true')
+    const email = within(dialog).getByRole('textbox', { name: 'Email' })
+    await userEvent.clear(email)
+    await userEvent.type(email, 'p.nair@example.test')
+    const save = within(dialog).getByRole('button', { name: 'Save' })
+    expect(isDisabled(save)).toBe(false)
+    await userEvent.click(save)
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    // The blank name is left out, so it stays as it is
+    expect(sent).toEqual({ email: 'p.nair@example.test' } satisfies A['UserChange'])
+  })
+
+  it('still needs a name that was there when the dialog opened, once it is cleared', async () => {
+    await openPerson(priyaRow.id)
+    await userEvent.click(action('Edit')!)
+    const dialog = await screen.findByRole('dialog', { name: 'Edit Priya Nair' })
+    expect(within(dialog).getByRole('textbox', { name: 'First Name' }).getAttribute('aria-required')).toBe('true')
+    await userEvent.clear(within(dialog).getByRole('textbox', { name: 'First Name' }))
+    await userEvent.type(within(dialog).getByRole('textbox', { name: 'Email' }), 'x')
+    expect(isDisabled(within(dialog).getByRole('button', { name: 'Save' }))).toBe(true)
+  })
+
   it("keeps a language the options don't list as a choice, as it is", async () => {
     await openPerson(priyaRow.id, { 'GET /v1/admin/users/7': userOf(priyaRow, { language: 'fr' }) })
     expect(facts()).toContainEqual(['Language', 'fr'])

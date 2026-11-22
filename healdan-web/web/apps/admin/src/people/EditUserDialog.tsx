@@ -10,7 +10,7 @@ import { Refusal } from '../forms/Refusal'
 import { t } from '../strings'
 import { useRefusalFor } from '../strings/refusals'
 import formStyles from '../forms/Form.module.css'
-import { draftProblems, draftReady, PersonFields, serverProblems, type PersonDraft, type PersonField } from './PersonFields'
+import { draftProblems, draftReady, PersonFields, serverProblems, type BlankNames, type PersonDraft, type PersonField } from './PersonFields'
 import { peopleChanged, useUserOptions } from './queries'
 import { providerOf } from './text'
 
@@ -35,7 +35,8 @@ function changesOf(before: PersonDraft, after: PersonDraft): A['UserChange'] {
 }
 
 /**
- * Edit (spec 8.7; P4-R11): a person's names, email, language and time zone; their username never changes. Save sends only
+ * Edit (spec 8.7; P4-R11): a person's names, email, language and time zone; their username never changes. A name stored
+ * blank may stay blank, and one that wasn't is needed (P4-R29, R31). Save sends only
  * what changed since the dialog opened, so a language or a time zone the options don't list stays as it is unless
  * another is chosen. For an
  * account linked to a sign-in provider, the form says the provider may set the names and email again at its next
@@ -53,6 +54,9 @@ export function EditUserDialog({ person, onClose }: { person: A['User']; onClose
   // typed here, never the old value of a field someone else has changed meanwhile
   const [before] = useState(() => draftOf(person))
   const [draft, setDraft] = useState(before)
+  // A name stored blank may stay blank, as the server keeps it (P4-R29, R31: a provider's claims can leave one blank);
+  // one that wasn't blank when the dialog opened is still needed. Left blank, it's unchanged, so it isn't sent
+  const [blank] = useState<BlankNames>(() => ({ firstName: before.firstName.trim() === '', lastName: before.lastName.trim() === '' }))
   const [failure, setFailure] = useState<unknown>()
   const [busy, setBusy] = useState(false)
 
@@ -67,7 +71,7 @@ export function EditUserDialog({ person, onClose }: { person: A['User']; onClose
   }
   const refusal = failure !== undefined && !SHOWN.some((field) => server.has(field)) ? refusalFor(failure) : undefined
   const change = changesOf(before, draft)
-  const ready = draftReady(draft) && Object.keys(change).length > 0
+  const ready = draftReady(draft, blank) && Object.keys(change).length > 0
   const provider = providerOf(person)
 
   async function save() {
@@ -103,6 +107,7 @@ export function EditUserDialog({ person, onClose }: { person: A['User']; onClose
               options={options}
               errors={errors}
               autoFocus
+              blank={blank}
               onChange={(next) => {
                 setDraft(next)
                 // A change takes the last refusal away

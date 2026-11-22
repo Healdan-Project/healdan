@@ -54,9 +54,13 @@ export function draftProblems(draft: PersonDraft): Partial<Record<keyof PersonDr
   return problems
 }
 
-/** Whether the names the form needs are there and nothing it can see is wrong */
-export function draftReady(draft: PersonDraft): boolean {
-  return draft.firstName.trim() !== '' && draft.lastName.trim() !== '' && Object.keys(draftProblems(draft)).length === 0
+/** The names a form may leave blank: in Edit, one stored blank, which the server keeps as it is (P4-R29, R31) */
+export type BlankNames = Partial<Record<'firstName' | 'lastName', boolean>>
+
+/** Whether the names the form needs are there, but those it may leave blank, and nothing it can see is wrong */
+export function draftReady(draft: PersonDraft, blank: BlankNames = {}): boolean {
+  const named = (field: 'firstName' | 'lastName') => blank[field] === true || draft[field].trim() !== ''
+  return named('firstName') && named('lastName') && Object.keys(draftProblems(draft)).length === 0
 }
 
 /**
@@ -111,20 +115,22 @@ export interface PersonFieldsProps {
   errors: Partial<Record<PersonField, string>>
   /** The first name takes the focus as the form opens, as Edit's does */
   autoFocus?: boolean
+  /** The names it may leave blank, which aren't marked as needed */
+  blank?: BlankNames
 }
 
 /**
- * The fields New User and Edit share (spec 8.7): First Name and Last Name, which are needed, Email, Language, a menu of
- * the languages offered, and Time Zone. A language the person has that the options don't list stays, shown as its code,
+ * The fields New User and Edit share (spec 8.7): First Name and Last Name, which are needed but for one Edit found blank
+ * (`blank`), Email, Language, a menu of the languages offered, and Time Zone. A language the person has that the options don't list stays, shown as its code,
  * so a save never changes it unasked.
  */
-export function PersonFields({ draft, onChange, options, errors, autoFocus }: PersonFieldsProps) {
+export function PersonFields({ draft, onChange, options, errors, autoFocus, blank = {} }: PersonFieldsProps) {
   const set = (field: keyof PersonDraft, value: string) => onChange({ ...draft, [field]: value })
   return (
     <>
       <div className={styles.pair}>
-        <TextField label={t('admin.newUser.firstName')} required autoFocus={autoFocus} value={draft.firstName} error={errors.firstName} onChange={(value) => set('firstName', value)} />
-        <TextField label={t('admin.newUser.lastName')} required value={draft.lastName} error={errors.lastName} onChange={(value) => set('lastName', value)} />
+        <TextField label={t('admin.newUser.firstName')} required={blank.firstName !== true} autoFocus={autoFocus} value={draft.firstName} error={errors.firstName} onChange={(value) => set('firstName', value)} />
+        <TextField label={t('admin.newUser.lastName')} required={blank.lastName !== true} value={draft.lastName} error={errors.lastName} onChange={(value) => set('lastName', value)} />
       </div>
       <TextField label={t('admin.newUser.email')} value={draft.email} error={errors.email} onChange={(value) => set('email', value)} />
       <div className={styles.pair}>
