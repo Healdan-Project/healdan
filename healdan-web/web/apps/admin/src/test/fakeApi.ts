@@ -1060,6 +1060,15 @@ export function groupRoutes(): Routes {
   }
 }
 
+// Monitoring (Phase 5): the faults the server logged and its logs, what was done, and the background jobs, each screen's
+// fixtures in a section of its own.
+
+// Monitoring: Errors and the Server Log (Task 32b)
+
+// Monitoring: the Audit Trail and Activity (Task 32c)
+
+// Monitoring: Background Jobs (Task 32d)
+
 export interface Call {
   method: string
   path: string

@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
+import { idFrom } from '@healdan/shell'
+
 /** Where AdminAppServlet serves the app, the router's basepath. Only the root context is supported. */
 export const ADMIN_BASE = '/admin'
 
@@ -30,6 +32,14 @@ export const routes = {
   jobs: '/jobs',
   searchIndex: '/search-index',
 } as const
+
+/**
+ * An id or a doc # in a search parameter, as the address gives it (as text) or as the router validated it before (as a
+ * number), or undefined: @healdan/shell's idFrom reads it, digits only, no bigger than a safe integer.
+ */
+export function searchId(value: unknown): number | undefined {
+  return idFrom(typeof value === 'number' ? String(value) : typeof value === 'string' ? value : undefined)
+}
 
 /** A client's page, with ADMIN_BASE: the client's id, as one segment */
 export function clientHref(id: number): string {

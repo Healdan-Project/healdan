@@ -1099,6 +1099,27 @@ export const adminEnUS = {
   'admin.removeMember.confirm': 'Remove',
   'admin.removeMember.done': 'Took {name} out of {group}',
 
+  // Errors (spec 8.8): each kind of fault the server logged, grouped and kept until it's resolved
+  'admin.nav.errors': 'Errors',
+  'admin.errors.title': 'Errors',
+  // The Server Log (spec 8.8): the lines of the logs the server writes
+  'admin.nav.serverLog': 'Server Log',
+  'admin.serverLog.title': 'Server Log',
+
+  // Monitoring: Errors and the Server Log (Task 32b)
+
+  // The Audit Trail (spec 8.8): what was done, newest first
+  'admin.nav.audit': 'Audit Trail',
+  'admin.audit.title': 'Audit Trail',
+
+  // Monitoring: the Audit Trail and Activity (Task 32c)
+
+  // Background Jobs (spec 8.8): Healdan's jobs and LogicalDOC's tasks
+  'admin.nav.jobs': 'Background Jobs',
+  'admin.jobs.title': 'Background Jobs',
+
+  // Monitoring: Background Jobs (Task 32d)
+
   // The problems only the admin API answers, which the shared catalogue doesn't hold
   'problems.storage-unavailable': "This server doesn't have Healdan's storage module.",
   'problems.secret-key-missing': "Healdan's secret key file is missing.",
@@ -1189,6 +1210,12 @@ export const adminPlurals = {
     one: "A new key keeps the S3 secret you typed, and the {n} value sealed with the missing one can't be opened again: each sign-in provider's client secret and each other storage backend's S3 secret are entered again (those backends fail until then), and Healdan Helpers that signed in through a provider sign in again.",
     other: "A new key keeps the S3 secret you typed, and the {n} values sealed with the missing one can't be opened again: each sign-in provider's client secret and each other storage backend's S3 secret are entered again (those backends fail until then), and Healdan Helpers that signed in through a provider sign in again.",
   },
+
+  // Monitoring: Errors and the Server Log (Task 32b), their plurals
+
+  // Monitoring: the Audit Trail and Activity (Task 32c), their plurals
+
+  // Monitoring: Background Jobs (Task 32d), its plurals
 } as const satisfies Record<`admin.${string}`, PluralForms>
 
 export type AdminStringKey = keyof typeof adminEnUS
