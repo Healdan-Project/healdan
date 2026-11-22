@@ -76,6 +76,17 @@
   white-space: nowrap;
 }
 
+/* A name that opens the group's page */
+.link {
+  color: var(--hd-accent-text);
+}
+
+.link:focus-visible {
+  outline: var(--hd-focus-outline);
+  outline-offset: var(--hd-focus-offset);
+  border-radius: var(--hd-radius-small);
+}
+
 /* Why it can't be removed, where its Remove would be */
 .locked {
   flex: 0 1 auto;

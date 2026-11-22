@@ -987,6 +987,112 @@ export const adminEnUS = {
   'admin.userCheckouts.releaseConfirm': 'Release',
   'admin.userCheckouts.released': 'Released {title}',
 
+  // The Groups list (spec 8.7): every group but the people's own, with its description and members
+  'admin.nav.groups': 'Groups',
+  'admin.groups.title': 'Groups',
+  'admin.groups.new': 'New Group',
+  'admin.groups.filters': 'Filter Groups',
+  'admin.groups.text': 'Name',
+  'admin.groups.column.name': 'Group',
+  'admin.groups.column.description': 'Description',
+  'admin.groups.column.members': 'Members',
+  // After a fixed group's name: admin, guest, publisher and Everyone, never renamed or deleted
+  'admin.groups.fixed': 'Fixed',
+  // After the name of a group a sign-in provider's group map names
+  'admin.groups.mapped': 'Mapped by {providers}',
+  'admin.groups.none': 'There is no group yet.',
+  'admin.groups.noneMatch': 'No group matches these words.',
+
+  // A group's page (spec 8.7): its facts, its actions and its members
+  'admin.group.rename': 'Rename',
+  'admin.group.editDescription': 'Edit Description',
+  'admin.group.delete': 'Delete',
+  'admin.group.description': 'Description',
+  'admin.group.noDescription': 'None',
+  'admin.group.members': 'Members',
+  'admin.group.folders': 'Folders That Grant It',
+  'admin.group.mappedBy': 'Sign-In Providers',
+  'admin.group.fixed': '{name} is one of the fixed groups: it keeps its name and is never deleted. Its description can change.',
+  'admin.group.tooLongToDelete': 'Its name is too long for a deleted group to keep: rename it to {max} characters or fewer, then delete it.',
+  'admin.group.adminNote': 'Members of admin can use Healdan Admin and read every document, in every {matterLower} and Store.',
+  'admin.group.everyoneNote': 'Every account but a read-only one is in Everyone, so nobody is added to it or taken out of it here.',
+  'admin.group.guestNote': 'A read-only account is always in guest, and in no other group but its own.',
+  'admin.group.notFound.title': 'Group Not Found',
+  'admin.group.notFound.message': "There's no such group, or it has been deleted.",
+  'admin.group.notFound.groups': 'Go to Groups',
+
+  // A group's name and description, in New Group, Rename and Edit Description
+  'admin.groupName.taken': "There's already a group called {name}.",
+  'admin.groupName.takenOnServer': 'Another group has this name.',
+  'admin.groupName.tooLong': "A group's name can't be longer than {max} characters.",
+  'admin.groupName.ownGroup': "A group's name can't start with _user_, as a person's own group's does.",
+  'admin.groupName.control': "A group's name can't hold a control character.",
+  'admin.groupName.invalid': "A group's name can't start with _user_, or hold a control character or characters Healdan can't keep.",
+  'admin.groupDescription.tooLong': "A description can't be longer than {max} characters.",
+  'admin.groupDescription.control': "A description can't hold a control character or characters Healdan can't keep.",
+
+  // New Group
+  'admin.newGroup.title': 'New Group',
+  'admin.newGroup.name': 'Name',
+  'admin.newGroup.description': 'Description',
+  'admin.newGroup.note': "It has no members, and gives nobody anything until a folder's or a Store's access names it.",
+  'admin.newGroup.create': 'Create Group',
+  'admin.newGroup.done': 'Created {name}',
+
+  // Rename, and Edit Description
+  'admin.renameGroup.title': 'Rename {name}',
+  'admin.renameGroup.name': 'Name',
+  'admin.renameGroup.note': "Its members, and every folder, Store and sign-in provider's group map that names it, keep it under its new name.",
+  'admin.renameGroup.rename': 'Rename',
+  'admin.renameGroup.done': 'Renamed {before} to {after}',
+  'admin.groupDescription.title': 'Edit the Description of {name}',
+  'admin.groupDescription.label': 'Description',
+  'admin.groupDescription.save': 'Save',
+  'admin.groupDescription.done': 'Saved the description of {name}',
+
+  // Delete, which asks first and names what it affects
+  'admin.deleteGroup.title': 'Delete {name}?',
+  'admin.deleteGroup.nobody': 'Nobody is in it.',
+  'admin.deleteGroup.noFolders': 'No folder gives it a permission of its own.',
+  'admin.deleteGroup.final': "This can't be undone.",
+  'admin.deleteGroup.confirm': 'Delete Group',
+  'admin.deleteGroup.done': 'Deleted {name}',
+
+  // A group's members: a person's page from each, Add Member and Remove
+  'admin.groupMembers.list': 'Members of {name}',
+  'admin.groupMembers.filters': 'Filter Members',
+  'admin.groupMembers.text': 'Name, Username or Email',
+  'admin.groupMembers.add': 'Add Member',
+  'admin.groupMembers.none': 'Nobody is in this group.',
+  'admin.groupMembers.noneMatch': 'No member matches these words.',
+  'admin.groupMembers.name': 'Name',
+  'admin.groupMembers.username': 'Username',
+  'admin.groupMembers.status': 'Status',
+  'admin.groupMembers.actions': 'Actions',
+  'admin.groupMembers.remove': 'Remove',
+  'admin.groupMembers.removeName': 'Remove {name}',
+  'admin.groupMembers.more': 'Show More',
+  'admin.groupMembers.shown': '{shown} of {total} shown',
+  // Said in place of a member's Remove, as the server would refuse it
+  'admin.groupMembers.guest': 'A read-only account is always in guest.',
+  'admin.groupMembers.adminAccount': 'The admin account is always in admin.',
+  'admin.groupMembers.yourself': 'Another administrator can take you out of admin.',
+
+  // Add Member: a person found by name, added at once, but to admin, which asks first
+  'admin.addMember.title': 'Add a Member to {group}',
+  'admin.addMember.person': 'Person',
+  'admin.addMember.find': 'Find them by name or username. Only accounts that can sign in are offered.',
+  'admin.addMember.already': '{name} is in {group} already.',
+  'admin.addMember.add': 'Add',
+  'admin.addMember.done': 'Added {name} to {group}',
+
+  // Remove, which asks first
+  'admin.removeMember.title': 'Take {name} Out of {group}?',
+  'admin.removeMember.line': 'They lose what {group} gives them, unless another of their groups gives it too.',
+  'admin.removeMember.admin': 'They can no longer use Healdan Admin, nor read every document.',
+  'admin.removeMember.confirm': 'Remove',
+  'admin.removeMember.done': 'Took {name} out of {group}',
+
   // The problems only the admin API answers, which the shared catalogue doesn't hold
   'problems.storage-unavailable': "This server doesn't have Healdan's storage module.",
   'problems.secret-key-missing': "Healdan's secret key file is missing.",
@@ -1015,6 +1121,27 @@ export const adminPlurals = {
   'admin.clients.count': { one: '{n} Client', other: '{n} Clients' },
   // Beside the Users list's title
   'admin.users.count': { one: '{n} Person', other: '{n} People' },
+  // Beside the Groups list's title
+  'admin.groups.count': { one: '{n} Group', other: '{n} Groups' },
+  // A group a sign-in provider's group map names: on its page, why it isn't deleted, and in Add Member, by how many map it
+  'admin.group.mappedNote': {
+    one: "{providers}'s group map names {name}: someone who signs in through it is put in it, or taken out, at each sign-in there, so a change made here for them is set again at their next sign-in.",
+    other: 'The group maps of {providers} name {name}: someone who signs in through one of them is put in it, or taken out, at each sign-in there, so a change made here for them is set again at their next sign-in.',
+  },
+  'admin.group.mappedDelete': {
+    one: "{providers}'s group map names {name}, so it isn't deleted: take it out of the map first, on the Sign-In tab of Healdan Settings in the Classic Interface.",
+    other: "The group maps of {providers} name {name}, so it isn't deleted: take it out of each map first, on the Sign-In tab of Healdan Settings in the Classic Interface.",
+  },
+  'admin.addMember.mapped': {
+    one: "{providers}'s group map names {group}: for someone who signs in through it, their membership is set again at their next sign-in there.",
+    other: 'The group maps of {providers} name {group}: for someone who signs in through one of them, their membership is set again at their next sign-in there.',
+  },
+  // What a group's delete takes: its members, and the folders that give it a permission
+  'admin.deleteGroup.members': { one: 'Its {n} member is taken out of it, and loses what it gives them.', other: 'Its {n} members are taken out of it, and lose what it gives them.' },
+  'admin.deleteGroup.folders': {
+    one: "{n} folder gives it a permission of its own: once it's deleted, nobody gets that permission through it.",
+    other: "{n} folders give it a permission of their own: once it's deleted, nobody gets those permissions through it.",
+  },
   // What Sign Out Everywhere closed and revoked
   'admin.signOutUser.sessions': { one: '{n} session closed', other: '{n} sessions closed' },
   'admin.signOutUser.devices': { one: '{n} device signed out', other: '{n} devices signed out' },

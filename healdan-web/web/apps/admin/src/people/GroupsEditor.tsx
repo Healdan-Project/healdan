@@ -87,6 +87,8 @@ export function GroupsEditor({ person }: { person: A['User'] }) {
       locked,
       tag: admin ? <span className={styles.warning}>{t('admin.userGroups.readsEverything')}</span> : undefined,
       note: sets ? t('admin.userGroups.mapped', { provider: provider.label }) : undefined,
+      // Each opens the group's page, with its members
+      linked: true,
     }
   }
 

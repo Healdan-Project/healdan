@@ -989,6 +989,79 @@ export function peopleRoutes(): Routes {
   }
 }
 
+// Groups (Phase 4): the Groups list, a group's page and its members, from the people above: each group's members are the
+// people whose row names it, so the counts and the lists agree.
+
+/** LogicalDOC's `publisher`, one of the fixed groups, with nobody in it */
+export const publisherGroup: A['Group'] = group(9, 'publisher', null, { fixed: true })
+
+/** A person as a group's members list gives them */
+export function memberOf(row: A['UserRow']): A['GroupMember'] {
+  return { id: row.id, username: row.username, name: row.name, status: row.status, readOnly: row.readOnly }
+}
+
+/** The people in a group, by name, as GET /v1/admin/groups/{id}/members gives them */
+export function groupMembers(groupId: number, rows: A['UserRow'][] = userRows): A['GroupMember'][] {
+  return rows.filter((row) => row.groups.some((one) => one.id === groupId)).map(memberOf)
+}
+
+/** Every group, by name, as the Groups list gives them, each counting the people in it */
+export const groupRows: A['Group'][] = [adminGroup, everyone, feeEarners, guestGroup, partners, publisherGroup, trainees].map((one) => ({
+  ...one,
+  members: groupMembers(one.id).length,
+}))
+
+/** How many folders give each group a permission of its own */
+const GROUP_FOLDERS: Record<number, number> = { [everyone.id]: 14, [feeEarners.id]: 2, [guestGroup.id]: 1, [partners.id]: 6, [trainees.id]: 3 }
+
+/** A group, for its page: its row, with the folders that give it a permission */
+export function groupDetailOf(row: A['Group'], over: Partial<A['GroupDetail']> = {}): A['GroupDetail'] {
+  return { ...row, folders: GROUP_FOLDERS[row.id] ?? 0, ...over }
+}
+
+/** Each group, as its page gives it */
+export const groupDetails: Record<number, A['GroupDetail']> = Object.fromEntries(groupRows.map((row) => [row.id, groupDetailOf(row)]))
+
+/** A page of `rows` from the query's `offset`, `limit` at most, of those `q` keeps, by what `text` gives of each */
+function pageOf<T>(rows: T[], query: Record<string, unknown> | undefined, text: (row: T) => string[], limit: number) {
+  const q = String(query?.q ?? '').trim().toLowerCase()
+  const kept = q === '' ? rows : rows.filter((row) => text(row).some((one) => one.toLowerCase().includes(q)))
+  const offset = Number(query?.offset ?? 0)
+  const size = Number(query?.limit ?? limit)
+  return { items: kept.slice(offset, offset + size), offset, limit: size, total: kept.length }
+}
+
+/** GET /v1/admin/groups: the groups whose name holds `q`, in any case, a page from `offset` */
+export function groupList(query?: Record<string, unknown>, rows: A['Group'][] = groupRows): A['GroupList'] {
+  return pageOf(rows, query, (row) => [row.name], 50)
+}
+
+/** GET /v1/admin/groups/{id}/members: the members whose name or username holds `q`, a page from `offset` */
+export function memberList(query?: Record<string, unknown>, members: A['GroupMember'][] = []): A['GroupMemberList'] {
+  return pageOf(members, query, (member) => [member.name, member.username], 100)
+}
+
+/** GET /v1/users, the people picker's, over the people above: those who can sign in whose name or username holds `q` */
+export function peopleWhoSignIn(q: unknown): S['UserHitPage'] {
+  const words = String(q ?? '').toLowerCase()
+  const items = userRows
+    .filter((row) => row.status !== 'disabled' && (row.name.toLowerCase().includes(words) || row.username.includes(words)))
+    .map(({ id, username, name }) => ({ id, username, name }))
+  return { items, offset: 0, limit: 20, total: items.length }
+}
+
+/** What the Groups list and a group's page read, to spread over the defaults: the people's routes, every group and their members */
+export function groupRoutes(): Routes {
+  return {
+    ...peopleRoutes(),
+    'GET /v1/users': ({ query }: { query?: Record<string, unknown> }) => peopleWhoSignIn(query?.q),
+    'GET /v1/admin/groups': ({ query }: { query?: Record<string, unknown> }) => groupList(query),
+    'GET /v1/admin/groups/*': ({ params }: { params: string[] }) => groupDetails[Number(params[0])] ?? notFound(),
+    'GET /v1/admin/groups/*/members': ({ params, query }: { params: string[]; query?: Record<string, unknown> }) =>
+      groupDetails[Number(params[0])] ? memberList(query, groupMembers(Number(params[0]))) : notFound(),
+  }
+}
+
 export interface Call {
   method: string
   path: string

@@ -11,6 +11,8 @@ import { BackendView } from './views/BackendView'
 import { ClientView, clientSearch } from './views/ClientView'
 import { ClientsView, clientsSearch } from './views/ClientsView'
 import { DashboardView } from './views/DashboardView'
+import { GroupsView, groupsSearch } from './views/GroupsView'
+import { GroupView } from './views/GroupView'
 import { MattersView, mattersSearch } from './views/MattersView'
 import { MatterView, matterSearch } from './views/MatterView'
 import { StoresView } from './views/StoresView'
@@ -122,6 +124,25 @@ const userRoute = createRoute({
   },
 })
 
+// /groups: every group but the people's own, its words in the address (GroupsView); /groups/$id, a group's page with its
+// members (GroupView), which says itself when the id names no group
+const groupsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: routes.groups,
+  validateSearch: groupsSearch,
+  component: function GroupsRoute() {
+    return <GroupsView search={groupsRoute.useSearch()} />
+  },
+})
+
+const groupRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: routes.group,
+  component: function GroupRoute() {
+    return <GroupView id={groupRoute.useParams().id} />
+  },
+})
+
 const routeTree = rootRoute.addChildren([
   dashboardRoute,
   clientsRoute,
@@ -132,6 +153,8 @@ const routeTree = rootRoute.addChildren([
   templateRoute,
   usersRoute,
   userRoute,
+  groupsRoute,
+  groupRoute,
   storesRoute,
   storeRoute,
   backendsRoute,

@@ -1,9 +1,11 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
+import { Link } from '@tanstack/react-router'
 import { useEffect, useId, useRef, type ReactNode, type RefObject } from 'react'
 import type { adminComponents } from '@healdan/api'
 import { Button, Highlight, Icon, SearchPicker } from '@healdan/ui'
+import { routes } from '../addresses'
 import { t } from '../strings'
 import { useGroupPicker } from './useGroupPicker'
 import styles from './GroupsField.module.css'
@@ -23,6 +25,8 @@ export interface GroupsFieldItem {
   locked?: string
   /** Said under it: what else is true of it, as a sign-in provider's group map setting it again */
   note?: string
+  /** Its name links to the group's page, as a person's groups do; never a person's own group, which has none */
+  linked?: boolean
 }
 
 export interface GroupsFieldProps {
@@ -100,7 +104,13 @@ export function GroupsField({ label, listLabel, items, empty, onAdd, onRemove, h
                 <span className={styles.groupText}>
                   <span className={styles.groupName}>
                     <Icon name={item.person ? 'user' : 'usersGroup'} size={14} />
-                    <span className={styles.nameText}>{item.name}</span>
+                    {item.linked && !item.person ? (
+                      <Link to={routes.group} params={{ id: String(item.id) }} className={`${styles.nameText} ${styles.link}`}>
+                        {item.name}
+                      </Link>
+                    ) : (
+                      <span className={styles.nameText}>{item.name}</span>
+                    )}
                     {item.tag !== undefined && (
                       <>
                         {' '}

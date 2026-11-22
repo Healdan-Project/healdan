@@ -1,0 +1,39 @@
+/* SPDX-FileCopyrightText: 2026 The Healdan Project
+   SPDX-License-Identifier: LGPL-3.0-only */
+
+/* A group's page, as a person's is drawn (People.module.css): the notes under its facts, and its members' section, with
+   Add Member beside the heading, the words above the list and Show More under it. */
+
+.notes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hd-space-2);
+  max-width: 72ch;
+  margin: 0 0 var(--hd-space-5);
+}
+
+/* The section's heading, with Add Member at the end of its line */
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--hd-space-3);
+}
+
+.filter {
+  max-width: 320px;
+}
+
+/* How many are shown of how many, and Show More, under the list */
+.more {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--hd-space-3);
+}
+
+/* The members take the page's width, up to the sections' own */
+.members {
+  max-width: 1200px;
+}
