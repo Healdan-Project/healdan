@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
+import { readFileSync } from 'node:fs'
 import { expect, test, type APIRequestContext, type BrowserContext, type Locator, type Page, type Request } from '@playwright/test'
 import {
   ADMIN_PASSWORD,
@@ -10,6 +11,7 @@ import {
   authorized,
   call,
   deviceToken,
+  downloadBy,
   escaped,
   fileDocument,
   matterFolders,
@@ -18,18 +20,20 @@ import {
   specsFolder,
 } from './helpers'
 
-// Healdan Admin's Phase 5 end to end (admin spec 8.8 and 17.1), as the stack's admin. A group of this run's own is made and
-// renamed, and the Audit Trail finds the rename with the old and the new name, in its row and its details. webuser, in a
-// browser of their own, selects one PDF of this run's own and reads another in Quick Look, twice: the Audit Trail then has
-// one Viewed row for the one read and none for the one only selected. The Server Log follows the main log, keeping the
-// reader's place, while documents filed through the API make the server write lines of its own (LogicalDOC logs each
-// listener a filed file goes through, at info), stops when paused and catches up on Follow; its Download answers a zip.
-// The Errors screen loads with each window and filter; Background Jobs lists Healdan's jobs and LogicalDOC's tasks, and
-// Schedule… opens on one and is cancelled; matter 1.1's and webuser's Activity tabs list their rows, webuser's with the
-// view. It changes nothing global: no fault is resolved or reopened and no job is run, stopped, switched or rescheduled
-// (the Dashboard's counts and the Indexer's pace are other steps' and specs'), webuser's account and matter 1.1 are only
-// read, and its documents are in a folder of its own inside the shared E2E folder. Nothing it asks of the server is logged
-// as an error, which the Errors screen would count. Each browser runs it, so its names carry the project's.
+// Healdan Admin's Phase 5 end to end (admin spec 8.8 and 17.1), as the stack's admin. With the Audit Trail open, a group
+// of this run's own is made and renamed in a second tab, and Refresh finds the rename, with the old and the new name, in
+// its row and its details; Export CSV downloads the rows the filters keep. webuser, in a browser of their own, selects
+// one PDF of this run's own and reads another in Quick Look, twice: the Audit Trail then has one Viewed row for the one
+// read and none for the one only selected. The Server Log follows the main log, keeping the reader's place, while emails
+// filed through the API make the server write lines of its own (LogicalDOC logs each listener a filed file goes through,
+// at info, naming the document by its id, which the email's copies give), stops when paused and catches up on Follow;
+// its Download is a zip. The Errors screen loads with each window and filter; Background Jobs lists Healdan's jobs and
+// LogicalDOC's tasks, and Schedule… opens on one and is cancelled; matter 1.1's and webuser's Activity tabs list their
+// rows, webuser's with the view. It changes nothing global: no fault is resolved or reopened and no job is run, stopped,
+// switched or rescheduled (the Dashboard's counts and the Indexer's pace are other steps' and specs'), webuser's account
+// and matter 1.1 are only read, and its documents are in a folder of its own inside the shared E2E folder. Nothing it asks
+// of the server is logged as an error, which the Errors screen would count. Each browser runs it, so its names carry the
+// project's.
 test.describe.configure({ mode: 'serial' })
 
 const ADMIN = { username: ADMIN_USERNAME, password: ADMIN_PASSWORD }
@@ -68,8 +72,33 @@ async function tick(within: Locator, kind: string) {
   await expect(kinds.getByRole('checkbox', { name: kind })).toBeChecked()
 }
 
-/** A document of this run's own, filed through the API as webuser into the run's folder, as a source of the server's log lines */
-const fileText = (name: string) => fileDocument(api!, token, folderId, name, 'text/plain', Buffer.from(`The text of ${name}`))
+/**
+ * An email of this run's own, filed through the API as webuser into the run's folder, as a source of the server's log
+ * lines; its LogicalDOC id, which those lines name it by, as the address of its copy gives it (`frontend.jsp?docId=`)
+ */
+async function fileEmail(name: string): Promise<number> {
+  const messageId = `${name}@e2e.invalid`
+  const lines = [
+    'From: E2E <e2e@e2e.invalid>',
+    'To: E2E <e2e@e2e.invalid>',
+    `Subject: ${name}`,
+    'Date: Sun, 22 Nov 2026 10:00:00 +0000',
+    `Message-ID: <${messageId}>`,
+    'MIME-Version: 1.0',
+    'Content-Type: text/plain; charset="utf-8"',
+    '',
+    `The text of ${name}`,
+    '',
+  ]
+  await fileDocument(api!, token, folderId, `${name}.eml`, 'message/rfc822', Buffer.from(lines.join('\r\n')))
+  const found = await call<{ items: { copies: { address: string }[] }[] }>(
+    api!.get(`/api/v1/emails?messageId=${encodeURIComponent(messageId)}`, authorized(token)),
+    `the copies of ${name}`,
+  )
+  const id = /[?&]docId=(\d+)/.exec(found.items[0]?.copies[0]?.address ?? '')?.[1]
+  expect(id, `the id of ${name}`).toBeDefined()
+  return Number(id)
+}
 
 test.beforeAll(async ({ browser, playwright }, testInfo) => {
   expect(PASSWORD, 'WEBUSER_PASSWORD is set by docker/tests/test-web.sh').not.toBe('')
@@ -131,41 +160,61 @@ async function auditOfDocument(docNumber: number) {
   await expect(main(admin).locator('[aria-busy="true"]')).toHaveCount(0)
 }
 
-test('an administrative change of its own, found in the Audit Trail with the old and the new value', async () => {
-  await admin.goto('/admin/groups')
+test('an administrative change made in another tab, found in the Audit Trail by Refresh with its old and new value, and exported', async () => {
+  await admin.goto('/admin/audit')
   await expect(admin).toHaveURL(/\/login\.jsp/)
   await signIn(admin, ADMIN)
-  await expect(admin).toHaveURL(/\/admin\/groups$/)
+  await expect(admin).toHaveURL(/\/admin\/audit$/)
+  await expect(main(admin).getByRole('heading', { level: 1, name: 'Audit Trail' })).toBeVisible()
 
-  await test.step("the run's own group, made and renamed", async () => {
-    await main(admin).getByRole('button', { name: 'New Group' }).click()
-    const dialog = admin.getByRole('dialog', { name: 'New Group' })
-    await dialog.getByRole('textbox', { name: 'Name' }).fill(names.group)
-    const create = dialog.getByRole('button', { name: 'Create Group' })
-    // Once the name's look-up has found no group with it
-    await expect(create).toBeEnabled()
-    await create.click()
-    await expect(main(admin).getByRole('heading', { level: 1, name: names.group })).toBeVisible()
-
-    await main(admin).getByRole('button', { name: 'Rename', exact: true }).click()
-    const rename = admin.getByRole('dialog', { name: `Rename ${names.group}` })
-    await rename.getByRole('textbox', { name: 'Name' }).fill(names.renamed)
-    const button = rename.getByRole('button', { name: 'Rename', exact: true })
-    await expect(button).toBeEnabled()
-    await button.click()
-    await toast(admin, `Renamed ${names.group} to ${names.renamed}`)
-    await expect(main(admin).getByRole('heading', { level: 1, name: names.renamed })).toBeVisible()
-  })
-
-  await openAuditTrail()
-  // The administration record's rows, kept to those whose target's name holds this run's words: the group's create and rename
+  // The administration record's rows whose target's name holds this run's words, of which there's none yet. The page is
+  // marked, so a reload, which would take the mark away, can't pass for Refresh
   await tick(main(admin), 'Administration')
   await auditBox().fill(run)
   await expect(admin).toHaveURL(new RegExp(`[?&]q=${escaped(run)}(&|$)`))
   await expect(admin).toHaveURL(/[?&]kind=administration(&|$)/)
+  await expect(main(admin).getByText(/^(No rows match the filters\.|Nothing found back to )/)).toBeVisible()
+  await admin.evaluate(() => void ((window as unknown as { kept?: boolean }).kept = true))
+
+  await test.step("the run's own group, made and renamed in another tab", async () => {
+    const other = await adminContext!.newPage()
+    try {
+      await other.goto('/admin/groups')
+      await expect(other).toHaveURL(/\/admin\/groups$/)
+      await main(other).getByRole('button', { name: 'New Group' }).click()
+      const dialog = other.getByRole('dialog', { name: 'New Group' })
+      await dialog.getByRole('textbox', { name: 'Name' }).fill(names.group)
+      const create = dialog.getByRole('button', { name: 'Create Group' })
+      // Once the name's look-up has found no group with it
+      await expect(create).toBeEnabled()
+      await create.click()
+      await expect(main(other).getByRole('heading', { level: 1, name: names.group })).toBeVisible()
+
+      await main(other).getByRole('button', { name: 'Rename', exact: true }).click()
+      const rename = other.getByRole('dialog', { name: `Rename ${names.group}` })
+      await rename.getByRole('textbox', { name: 'Name' }).fill(names.renamed)
+      const button = rename.getByRole('button', { name: 'Rename', exact: true })
+      await expect(button).toBeEnabled()
+      await button.click()
+      await toast(other, `Renamed ${names.group} to ${names.renamed}`)
+      await expect(main(other).getByRole('heading', { level: 1, name: names.renamed })).toBeVisible()
+    } finally {
+      await other.close()
+    }
+  })
+
   const changed = saying(rowsOf(auditList()), 'Changed a group')
-  await expect(changed).toHaveCount(1)
-  await expect(saying(rowsOf(auditList()), 'Created a group')).toHaveCount(1)
+  await test.step('Refresh asks again, and the rows come with no reload', async () => {
+    // The list is as it was read, until it's asked again
+    await expect(changed).toHaveCount(0)
+    const refreshed = admin.waitForResponse((response) => new URL(response.url()).pathname === '/api/v1/admin/audit' && response.request().method() === 'GET')
+    await main(admin).getByRole('button', { name: 'Refresh', exact: true }).click()
+    expect((await refreshed).status(), "Refresh's answer").toBe(200)
+    await expect(changed).toHaveCount(1)
+    await expect(saying(rowsOf(auditList()), 'Created a group')).toHaveCount(1)
+    expect(await admin.evaluate(() => (window as unknown as { kept?: boolean }).kept), 'the page, not reloaded').toBe(true)
+  })
+
   await expect(changed.getByRole('gridcell', { name: 'Admin Admin', exact: true })).toBeVisible()
   await expect(changed.getByRole('gridcell', { name: 'Administration', exact: true })).toBeVisible()
   // The Detail: the group as it's named now, then its one changed field, old and new, all on the row's one line
@@ -186,6 +235,18 @@ test('an administrative change of its own, found in the Audit Trail with the old
   await expect(fact('What')).toHaveText('Changed a group')
   await expect(fact('Detail')).toHaveText(names.renamed)
   await expect(details.getByRole('list', { name: 'Changes' }).getByRole('listitem')).toHaveText([`name: ${names.group} → ${names.renamed}`])
+
+  await test.step('Export CSV is the rows the filters keep, as the server answered it', async () => {
+    // The server's answer is the file (200, a CSV), not a refusal saved under the file's name
+    const download = await downloadBy(admin, () => main(admin).getByRole('button', { name: 'Export CSV' }).click(), { type: /^text\/csv(;|$)/ })
+    expect(download.suggestedFilename()).toMatch(/^audit-trail-\d{4}-\d{2}-\d{2}\.csv$/)
+    const csv = readFileSync(await download.path(), 'utf-8')
+    expect(csv).toContain('Changed a group')
+    expect(csv).toContain('Created a group')
+    expect(csv).toContain(names.renamed)
+    // Administration rows only, as the filters keep
+    expect(csv).not.toContain('Signed in')
+  })
 })
 
 test('a PDF webuser reads in Quick Look is recorded as one view, however often, and one only selected as none', async () => {
@@ -258,24 +319,25 @@ test("the Server Log follows the main log, keeps the reader's place, stops when 
   /** The positions of the entries the box holds, oldest first */
   const positions = () => entries.evaluateAll((items) => items.map((item) => item.getAttribute('data-position') ?? ''))
   /**
-   * Whether an entry after the one at `position` says a filed file went through a listener: what a document filed after
-   * the box held that entry makes the server write
+   * Whether an entry after the one at `position` says the document with LogicalDOC's id `id` went through a listener as
+   * it was filed: what filing it makes the server write, `Before listener <class>: document=<id>, recordVersion=0`
    */
-  const loggedAfter = (position: string) =>
+  const loggedAfter = (position: string, id: number) =>
     entries.evaluateAll(
-      (items, after) => {
+      (items, [after, docId]) => {
         const at = items.findIndex((item) => item.getAttribute('data-position') === after)
-        return at >= 0 && items.slice(at + 1).some((item) => (item.textContent ?? '').includes('Before listener'))
+        const line = new RegExp(`Before listener [\\w.$]+: document=${docId},`)
+        return at >= 0 && items.slice(at + 1).some((item) => line.test(item.textContent ?? ''))
       },
-      position,
+      [position, id] as const,
     )
   const newest = async () => (await positions()).at(-1) ?? ''
 
   await test.step('at its end, a line the server writes after the page opened comes, and the box stays at its end', async () => {
     await expect.poll(fromEnd).toBeLessThanOrEqual(4)
     const last = await newest()
-    await fileText(`Logged ${run} 1.txt`)
-    await expect.poll(() => loggedAfter(last), { message: 'a line of the filing, after the newest when the page opened' }).toBe(true)
+    const id = await fileEmail(`logged-${run}-1`)
+    await expect.poll(() => loggedAfter(last, id), { message: 'a line of the filing, after the newest when the page opened' }).toBe(true)
     await expect.poll(fromEnd).toBeLessThanOrEqual(4)
   })
 
@@ -295,8 +357,8 @@ test("the Server Log follows the main log, keeps the reader's place, stops when 
     const before = await top()
     expect(before, 'an entry in view').not.toBeNull()
     const last = await newest()
-    await fileText(`Logged ${run} 2.txt`)
-    await expect.poll(() => loggedAfter(last), { message: 'a line of the filing, while read further up' }).toBe(true)
+    const id = await fileEmail(`logged-${run}-2`)
+    await expect.poll(() => loggedAfter(last, id), { message: 'a line of the filing, while read further up' }).toBe(true)
     const after = await box.evaluate((element, position) => {
       const item = [...element.querySelectorAll('li[data-position]')].find((one) => one.getAttribute('data-position') === position)
       return item ? Math.round(item.getBoundingClientRect().top - element.getBoundingClientRect().top) : null
@@ -324,25 +386,24 @@ test("the Server Log follows the main log, keeps the reader's place, stops when 
     admin.on('request', note)
     try {
       const last = await newest()
-      const held = await positions()
-      await fileText(`Logged ${run} 3.txt`)
-      // The server has written it: its newest lines, as a read of the log's end gives them, hold one the box hasn't
+      const id = await fileEmail(`logged-${run}-3`)
+      // The server has written them: its newest lines, as a read of the log's end gives them, name the email
       await expect
         .poll(async () => {
           const answer = await admin.evaluate(() =>
-            fetch('/api/v1/admin/logs/DMS/lines').then((response) => response.json() as Promise<{ lines: { position: string; message: string }[] }>),
+            fetch('/api/v1/admin/logs/DMS/lines').then((response) => response.json() as Promise<{ lines: { message: string }[] }>),
           )
-          return answer.lines.some((line) => line.message.includes('Before listener') && !held.includes(line.position))
+          return answer.lines.some((line) => line.message.startsWith('Before listener') && line.message.includes(`document=${id},`))
         }, { message: "the server has the filing's lines" })
         .toBe(true)
       // Two of the follow's turns (every 3 seconds) go by with no read and no new line: what can't come can only be waited for
       await admin.waitForTimeout(7_000)
       expect(follows, "no read of what's new while paused").toEqual([])
-      expect(await loggedAfter(last), 'no new line while paused').toBe(false)
+      expect(await loggedAfter(last, id), 'no line of the filing while paused').toBe(false)
 
       await main(admin).getByRole('button', { name: 'Follow', exact: true }).click()
       await expect(main(admin).getByRole('status').filter({ hasText: 'Following Live' })).toBeVisible()
-      await expect.poll(() => loggedAfter(last), { message: 'the line written while paused, once following again' }).toBe(true)
+      await expect.poll(() => loggedAfter(last, id), { message: 'the line written while paused, once following again' }).toBe(true)
       expect(follows.length, "Follow read what's new").toBeGreaterThan(0)
       await expect.poll(fromEnd).toBeLessThanOrEqual(4)
     } finally {
@@ -350,28 +411,65 @@ test("the Server Log follows the main log, keeps the reader's place, stops when 
     }
   })
 
-  await test.step("Download is the log's files, zipped", async () => {
-    const link = main(admin).getByRole('link', { name: 'Download' })
-    const href = await link.getAttribute('href')
-    expect(href).toBe('/api/v1/admin/logs/DMS/file')
-    // Its headers alone: the browser's own request, with the page's session
-    const answer = await admin.evaluate(
-      (url) => fetch(url, { method: 'HEAD' }).then((response) => ({ status: response.status, type: response.headers.get('content-type') })),
-      href!,
-    )
-    expect(answer.status, "Download's answer").toBe(200)
-    // The servlet container may name a charset after it, which a zip's bytes ignore
-    expect(answer.type, "Download's type").toMatch(/^application\/zip(;|$)/)
+  await test.step("Download is the log's files, zipped, as the server answered it", async () => {
+    // The server's answer is the file (200, a zip, after which the servlet container may name a charset, which a zip's
+    // bytes ignore), not a refusal saved under the file's name
+    const press = () => main(admin).getByRole('button', { name: 'Download', exact: true }).click()
+    const download = await downloadBy(admin, press, { type: /^application\/zip(;|$)/ })
+    expect(new URL(download.url()).pathname).toBe('/api/v1/admin/logs/DMS/file')
+    expect(download.suggestedFilename()).toMatch(/\.zip$/)
+  })
+
+  await test.step('Show Earlier, pressed until the start of a log, gives its focus to the lines', async () => {
+    // A log the first read doesn't reach the start of, and some presses do: of 200 to 3,000 entries, as a read gives 200.
+    // Which log that is on a stack depends on how long it has run (the Indexer's grows every 5 seconds in the browser
+    // tests), so each is tried, the main log last, and the test says which, or that none was; the logs are only read
+    const menu = main(admin).getByRole('combobox', { name: 'Log' })
+    const logs = await menu
+      .locator('option')
+      .evaluateAll((options) => options.map((option) => ({ name: (option as HTMLOptionElement).value, label: option.textContent ?? '' })))
+    const tried = [...logs.filter((log) => log.name !== 'DMS'), ...logs.filter((log) => log.name === 'DMS')]
+    let reached = ''
+    for (const log of tried) {
+      await menu.selectOption(log.name)
+      const lines = main(admin).getByRole('region', { name: `Lines of ${log.label}` })
+      const start = lines.getByText('This is the start of the log: it holds nothing older.')
+      const earlier = lines.getByRole('button', { name: 'Show Earlier' })
+      await expect(start.or(earlier)).toBeVisible()
+      if (await start.isVisible()) continue
+      // Pressed by the keyboard, as a person who doesn't point would, the focus staying on the button while there's more,
+      // fourteen times at most. Each read puts older entries first, past the 1,000 the box keeps too, when it drops the
+      // newest instead, so the oldest entry it holds says a read has come
+      const oldest = () => lines.locator('li[data-position]').first().getAttribute('data-position')
+      for (let press = 0; press < 14 && !(await start.isVisible()); press++) {
+        const before = await oldest()
+        await earlier.focus()
+        await admin.keyboard.press('Enter')
+        await expect
+          .poll(async () => (await start.isVisible()) || (await oldest()) !== before, { message: `Show Earlier's read of ${log.label}` })
+          .toBe(true)
+      }
+      if (!(await start.isVisible())) continue
+      // The button went with the start of the log, and its focus to the box of lines
+      await expect(lines).toBeFocused()
+      reached = log.label
+      break
+    }
+    const note = reached
+      ? `Show Earlier reached the start of ${reached}`
+      : `No log reached its start within fourteen presses of Show Earlier: ${tried.map((log) => log.label).join(', ')}`
+    // Said in the run's output too, as which log it was, if any, is the stack's
+    test.info().annotations.push({ type: 'note', description: note })
+    console.log(`admin-monitoring (${test.info().project.name}): ${note}`)
+    await menu.selectOption('DMS')
   })
 })
 
 test("Errors opens, and each window and filter is answered; a fault's details, when there is one, without resolving it", async () => {
-  await entry(admin, 'Errors').click()
-  await expect(admin).toHaveURL(/\/admin\/errors$/)
-  await expect(main(admin).getByRole('heading', { level: 1, name: 'Errors' })).toBeVisible()
   const list = main(admin).getByRole('grid', { name: 'Errors' })
   const filters = main(admin).getByRole('group', { name: 'Error Filters' })
-  /** The list's next answer whose parameters include `with` */
+  const faults = list.getByRole('row').filter({ has: admin.getByRole('rowheader') })
+  /** The list's next answer whose parameters include `wanted` */
   const asked = (wanted: Record<string, string>) =>
     admin.waitForResponse((response) => {
       const url = new URL(response.url())
@@ -381,8 +479,14 @@ test("Errors opens, and each window and filter is answered; a fault's details, w
   const drawn = async () => {
     await expect(main(admin).getByText('Loading…')).toHaveCount(0)
     await expect(main(admin).getByRole('button', { name: 'Try Again' })).toHaveCount(0)
-    await expect(list).toBeVisible()
+    await expect(faults.first().or(main(admin).getByText(/^No errors /))).toBeVisible()
   }
+  // The first answer, of the last 24 hours, as the screen opens
+  const first = asked({ window: '24h' })
+  await entry(admin, 'Errors').click()
+  await expect(admin).toHaveURL(/\/admin\/errors$/)
+  await expect(main(admin).getByRole('heading', { level: 1, name: 'Errors' })).toBeVisible()
+  expect((await first).status(), 'the 24 Hours window').toBe(200)
   await drawn()
 
   await test.step('each window', async () => {
@@ -414,10 +518,12 @@ test("Errors opens, and each window and filter is answered; a fault's details, w
     await expect(main(admin).getByText('No errors match these filters.')).toBeVisible()
     await filters.getByRole('button', { name: 'Clear Filters' }).click()
     await expect(admin).toHaveURL(/\/admin\/errors\?window=30d$/)
+    // The button goes with the filters, and its focus to the words' field
+    await expect(filters.getByRole('textbox', { name: 'Message or Logger' })).toBeFocused()
     await drawn()
   })
 
-  const faults = list.getByRole('row').filter({ has: admin.getByRole('rowheader') })
+  // drawn() has waited for the rows or for what the list says without any
   if ((await faults.count()) === 0) {
     test.info().annotations.push({ type: 'note', description: 'No fault in the last 30 days, so no details were opened' })
     return
@@ -471,16 +577,23 @@ test("Background Jobs lists Healdan's jobs and LogicalDOC's tasks; Schedule… o
       await expect(table.getByRole('rowheader', { name: job, exact: true })).toBeVisible()
     }
 
-    // Tags Processor's schedule, opened on what it has, then cancelled
-    await table.getByRole('button', { name: 'Schedule of Tags Processor' }).click()
+    // Tags Processor's schedule, whatever it is, as its row says it (the cells after its name: Last Run, Result, Next Run,
+    // Enabled, then Schedule), opened on what it has, then cancelled
+    const tags = table.getByRole('row').filter({ has: admin.getByRole('rowheader', { name: 'Tags Processor', exact: true }) })
+    const said = (await tags.getByRole('cell').nth(4).innerText()).trim()
+    const every = /^Every (?:([\d,]+) )?(second|minute|hour)s?$/.exec(said)
+    expect(every, `Tags Processor's schedule, "${said}", every so many seconds, minutes or hours`).not.toBeNull()
+    const schedule = table.getByRole('button', { name: 'Schedule of Tags Processor' })
+    await schedule.click()
     const dialog = admin.getByRole('dialog', { name: 'Schedule of Tags Processor' })
     await expect(dialog.getByRole('radio', { name: 'Every So Often' })).toBeChecked()
-    await expect(dialog.getByRole('textbox', { name: 'Every' })).toHaveValue('30')
-    await expect(dialog.getByRole('combobox', { name: 'Unit' })).toHaveValue('minutes')
+    await expect(dialog.getByRole('textbox', { name: 'Every' })).toHaveValue((every![1] ?? '1').replace(/,/g, ''))
+    await expect(dialog.getByRole('combobox', { name: 'Unit' })).toHaveValue(`${every![2]}s`)
     await dialog.getByRole('button', { name: 'Cancel' }).click()
     await expect(dialog).toBeHidden()
-    const tags = table.getByRole('row').filter({ has: admin.getByRole('rowheader', { name: 'Tags Processor', exact: true }) })
-    await expect(tags).toContainText('Every 30 minutes')
+    // The focus back on the button that opened it, and the schedule as it was
+    await expect(schedule).toBeFocused()
+    await expect(tags.getByRole('cell').nth(4)).toHaveText(said)
   } finally {
     admin.off('request', writes)
   }
@@ -508,10 +621,29 @@ test("matter 1.1's Activity lists its rows, and webuser's has the view", async (
   await expect(main(admin).getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true')
   await expect(main(admin).getByRole('region', { name: 'Details' })).toBeVisible()
   await main(admin).getByRole('tab', { name: 'Activity' }).click()
-  await tick(main(admin).getByRole('tabpanel', { name: 'Activity' }), 'Document')
+  const panel = main(admin).getByRole('tabpanel', { name: 'Activity' })
+  await tick(panel, 'Document')
+  // Its own days and Refresh, beside the way to the whole Audit Trail
+  await expect(panel.getByRole('group', { name: 'From Date' })).toBeVisible()
+  await expect(panel.getByRole('group', { name: 'To Date' })).toBeVisible()
+  await expect(panel.getByRole('button', { name: 'Refresh', exact: true })).toBeVisible()
+  // The newest of webuser's document rows: the view is among them
   const personActivity = main(admin).getByRole('grid', { name: 'Activity of User Web' })
   const views = saying(naming(rowsOf(personActivity), viewed), 'Viewed')
   await expect(views).toHaveCount(1)
   await expect(views).toContainText(names.viewed)
-  await expect(saying(naming(rowsOf(personActivity), selected), 'Viewed')).toHaveCount(0)
+
+  await test.step("the same, read to their end in the Audit Trail: webuser's document rows of each PDF", async () => {
+    const whole = panel.getByRole('link', { name: 'Open in the Audit Trail' })
+    await expect(whole).toHaveAttribute('href', /^\/admin\/audit\?(?=.*\bkind=document\b)(?=.*\buser=\d+\b)/)
+    await whole.click()
+    await expect(admin).toHaveURL(/\/admin\/audit\?/)
+    await expect(main(admin).getByRole('group', { name: 'Filters' }).getByRole('combobox', { name: 'Person' })).toHaveValue(/User Web/)
+    // Each doc # read through its index, so one request reads its rows to their end: the view of the one read, by webuser,
+    // and none of the one only selected
+    await auditOfDocument(viewed)
+    await expect(saying(naming(rowsOf(auditList()), viewed), 'Viewed')).toHaveCount(1)
+    await auditOfDocument(selected)
+    await expect(saying(rowsOf(auditList()), 'Viewed')).toHaveCount(0)
+  })
 })

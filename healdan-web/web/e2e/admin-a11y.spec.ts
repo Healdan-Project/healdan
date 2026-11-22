@@ -332,8 +332,9 @@ for (const scheme of ['light', 'dark'] as const) {
     // Phase 5's screens (admin spec 8.8), opened from the left pane, whose Errors and Background Jobs entries can carry their
     // counts: Errors with the first fault's details, when there is one, the Server Log following and paused, the Audit
     // Trail with a row's details and its Person and Matter lists open, Background Jobs with Tags Processor's Schedule… and
-    // Disable question, both cancelled, and the Activity tabs of matter 1.1 and of the person this theme made. It only reads:
-    // no request it makes may change anything
+    // Disable question, both cancelled, the focus back on the button each time, and the Activity tabs of matter 1.1, with a
+    // To Date before its From Date, and of the person this theme made. It only reads: no request it makes may change
+    // anything
     test('Errors, the Server Log, the Audit Trail, Background Jobs and the Activity tabs, with their dialogs', async () => {
       test.setTimeout(150_000)
       const pane = page.getByRole('navigation', { name: 'Navigation' })
@@ -382,6 +383,9 @@ for (const scheme of ['light', 'dark'] as const) {
           await expect(main().getByRole('heading', { level: 1, name: 'Audit Trail' })).toBeVisible()
           await expect(rows('Audit Trail').first()).toBeVisible()
           await expect(main().getByText('Loading…')).toHaveCount(0)
+          // Refresh and Export CSV, buttons beside the title
+          await expect(main().getByRole('button', { name: 'Refresh', exact: true })).toBeVisible()
+          await expect(main().getByRole('button', { name: 'Export CSV' })).toBeVisible()
           await check('the Audit Trail')
           await rows('Audit Trail').first().getByRole('rowheader').click()
           await expect(main().getByRole('region', { name: 'Row Details' })).toBeVisible()
@@ -411,19 +415,23 @@ for (const scheme of ['light', 'dark'] as const) {
           const table = main().getByRole('table', { name: 'Background Jobs' })
           await expect(table.getByRole('rowheader', { name: "LogicalDOC's Tasks" })).toBeVisible()
           await check('Background Jobs')
-          await table.getByRole('button', { name: 'Schedule of Tags Processor' }).click()
+          const opens = table.getByRole('button', { name: 'Schedule of Tags Processor' })
+          await opens.click()
           const schedule = page.getByRole('dialog', { name: 'Schedule of Tags Processor' })
           await expect(schedule.getByRole('radio', { name: 'Every So Often' })).toBeChecked()
           await check('Schedule…')
           await schedule.getByRole('button', { name: 'Cancel' }).click()
           await expect(schedule).toBeHidden()
-          await table.getByRole('button', { name: 'Disable Tags Processor' }).click()
+          // Each closed, its focus goes back to the button that opened it
+          await expect(opens).toBeFocused()
+          const disable = table.getByRole('button', { name: 'Disable Tags Processor' })
+          await disable.click()
           const question = page.getByRole('alertdialog', { name: 'Disable Tags Processor?' })
           await expect(question).toBeVisible()
           await check("Disable's question")
           await question.getByRole('button', { name: 'Cancel' }).click()
           await expect(question).toBeHidden()
-          await expect(table.getByRole('button', { name: 'Disable Tags Processor' })).toBeVisible()
+          await expect(disable).toBeFocused()
         })
 
         await test.step("matter 1.1's Activity, and the person's", async () => {
@@ -432,7 +440,18 @@ for (const scheme of ['light', 'dark'] as const) {
           await main().getByRole('tab', { name: 'Activity' }).click()
           await expect(rows('Activity of 1.1 Smoke Matter').first()).toBeVisible()
           await expect(main().getByText('Loading…')).toHaveCount(0)
+          const panel = main().getByRole('tabpanel', { name: 'Activity' })
+          await expect(panel.getByRole('button', { name: 'Refresh', exact: true })).toBeVisible()
           await check("a matter's Activity")
+          // Its own days, a To Date before the From Date, which the tab says can keep no row: typed into each date's parts,
+          // which go on to the next as each is filled. The days are the tab's own, and go with the page
+          for (const [field, typed] of [['From Date', '01022026'], ['To Date', '01012026']]) {
+            await panel.getByRole('group', { name: field }).getByRole('spinbutton', { name: new RegExp(`^month, ${field}`) }).click()
+            await page.keyboard.type(typed)
+          }
+          await expect(panel.getByText('The To Date is before the From Date, so no row can match.')).toBeVisible()
+          await expect(main().getByText('Loading…')).toHaveCount(0)
+          await check("a matter's Activity with a To Date before its From Date")
 
           await entry('Users').click()
           await main().getByRole('group', { name: 'Filter Users' }).getByRole('textbox', { name: 'Name, Username or Email' }).fill(own.username)
