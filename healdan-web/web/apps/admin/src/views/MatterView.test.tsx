@@ -7,7 +7,8 @@ import { describe, expect, it } from 'vitest'
 import { ApiError, type adminComponents } from '@healdan/api'
 import { formatDateTime, formatSize } from '@healdan/ui'
 import { expectNoAxeViolations } from '../test/axe'
-import { firmStore, helen, matterPage, matterRow, matterRows, problem, workspaceRoutes, type Routes } from '../test/fakeApi'
+import { AUDIT_PAGE_SIZE } from '../monitoring/queries'
+import { auditTrail, firmStore, helen, matterPage, matterRow, matterRows, problem, workspaceRoutes, type FakeApi, type Routes } from '../test/fakeApi'
 import { renderApp } from '../test/renderApp'
 
 type A = adminComponents['schemas']
@@ -52,6 +53,7 @@ describe("A matter's page", () => {
     expect(within(tabs).getAllByRole('tab').map((tab) => [tab.textContent, tab.getAttribute('aria-selected')])).toEqual([
       ['Overview', 'true'],
       ['Workspace', 'false'],
+      ['Activity', 'false'],
     ])
     // The Overview: the description, the facts and what's stuck or failing
     const overview = within(main()).getByRole('tabpanel', { name: 'Overview' })
@@ -112,7 +114,7 @@ describe("A matter's page", () => {
   })
 
   it("opens at the Overview for a tab it doesn't know", async () => {
-    await openMatter('/matters/11?tab=activity')
+    await openMatter('/matters/11?tab=nope')
     expect(within(main()).getByRole('tab', { name: 'Overview' }).getAttribute('aria-selected')).toBe('true')
   })
 
@@ -288,5 +290,67 @@ describe('Delete', () => {
     await userEvent.click(within(dialog).getByRole('button', { name: 'Move to Trash' }))
     expect((await within(dialog).findByRole('alert')).textContent).toBe('A document in it is checked out: Witness Statement.docx.')
     expect(router.state.location.pathname).toBe('/matters/11')
+  })
+})
+
+describe("A matter's Activity", () => {
+  const ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone
+  const asked = (api: FakeApi) => api.callsTo('GET /v1/admin/audit').map((call) => call.query)
+  const activity = () => within(main()).getByRole('grid', { name: `Activity of ${TITLE}` })
+  const audit: Routes = { 'GET /v1/admin/audit': ({ query }: { query?: Record<string, unknown> }) => auditTrail(query) }
+
+  it("is the Audit Trail with the matter fixed: only its kinds to choose, no export, the tab in the address", async () => {
+    const { api, router, view } = await openMatter('/matters/11', audit)
+    await userEvent.click(within(main()).getByRole('tab', { name: 'Activity' }))
+    await waitFor(() => expect(router.state.location.search).toEqual({ tab: 'activity' }))
+    const panel = within(main()).getByRole('tabpanel', { name: 'Activity' })
+    await waitFor(() => expect(within(activity()).getAllByRole('row').length).toBeGreaterThan(1))
+    expect(asked(api)).toEqual([{ matterId: 11, zone: ZONE, limit: AUDIT_PAGE_SIZE }])
+    // A matter has no sign-in or user rows, so only the kinds it can have are offered
+    const kinds = within(panel).getByRole('group', { name: 'Kind' })
+    expect(within(kinds).getAllByRole('checkbox').map((box) => box.closest('label')?.textContent)).toEqual(['Document', 'Folder', 'Administration'])
+    expect(within(panel).queryByRole('combobox')).toBeNull()
+    expect(within(panel).queryByRole('link', { name: 'Export CSV' })).toBeNull()
+    // The whole Audit Trail for the matter, where it can be exported
+    expect(within(panel).getByRole('link', { name: 'Open in the Audit Trail' }).getAttribute('href')).toBe('/admin/audit?matter=11')
+    await expectNoAxeViolations(view.container)
+
+    await userEvent.click(within(kinds).getByRole('checkbox', { name: 'Document' }))
+    await waitFor(() => expect(asked(api).at(-1)).toEqual({ matterId: 11, kind: ['document'], zone: ZONE, limit: AUDIT_PAGE_SIZE }))
+    expect(within(panel).getByRole('link', { name: 'Open in the Audit Trail' }).getAttribute('href')).toBe('/admin/audit?kind=document&matter=11')
+    // The kinds aren't the page's address
+    expect(router.state.location.search).toEqual({ tab: 'activity' })
+    await waitFor(() => expect(within(activity()).getAllByRole('row').slice(1).map((row) => row.querySelectorAll('[role="gridcell"]')[2]?.textContent)).toEqual(['Downloaded']))
+  })
+
+  it('opens at Activity when the address names it', async () => {
+    await openMatter('/matters/11?tab=activity', audit)
+    expect(within(main()).getByRole('tab', { name: 'Activity' }).getAttribute('aria-selected')).toBe('true')
+    expect(await within(main()).findByRole('grid', { name: `Activity of ${TITLE}` })).toBeTruthy()
+  })
+
+  it("keeps its last rows while a new read fails, saying it couldn't refresh", async () => {
+    let failing = false
+    await openMatter('/matters/11?tab=activity', { 'GET /v1/admin/audit': ({ query }: { query?: Record<string, unknown> }) => (failing ? problem(500, 'server-error') : auditTrail(query)) })
+    await waitFor(() => expect(within(activity()).getAllByRole('row').length).toBeGreaterThan(1))
+    failing = true
+    await act(async () => void window.dispatchEvent(new Event('focus')))
+    expect(await screen.findByText("Couldn't refresh this, so it shows what was read last.")).toBeTruthy()
+    expect(within(activity()).getAllByRole('row').length).toBeGreaterThan(1)
+  })
+
+  it('leaves the Workspace mounted, with its change unsaved, and asks no Leave question, going to Activity and back (P5-R24)', async () => {
+    const { router } = await openMatter('/matters/11?tab=workspace', audit)
+    const access = await within(main()).findByRole('table', { name: `Who Can Use ${LABEL}` })
+    await userEvent.selectOptions(within(access).getByRole('combobox', { name: 'Access for Everyone' }), 'read-only')
+    await userEvent.click(within(main()).getByRole('tab', { name: 'Activity' }))
+    await waitFor(() => expect(router.state.location.search).toEqual({ tab: 'activity' }))
+    expect(await within(main()).findByRole('grid', { name: `Activity of ${TITLE}` })).toBeTruthy()
+    expect(screen.queryByRole('alertdialog')).toBeNull()
+    await userEvent.click(within(main()).getByRole('tab', { name: 'Workspace' }))
+    const select = within(within(main()).getByRole('table', { name: `Who Can Use ${LABEL}` })).getByRole('combobox', { name: 'Access for Everyone' }) as HTMLSelectElement
+    // The same field, with the change it had
+    expect(select.options[select.selectedIndex]!.textContent).toBe('Read Only')
+    expect(screen.queryByRole('alertdialog')).toBeNull()
   })
 })

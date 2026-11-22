@@ -52,12 +52,16 @@ export function useUserList(query: UserListQuery): PagedListing<A['UserRow']> {
   return usePagedList('/v1/admin/users', query, USERS_PAGE)
 }
 
-/** A person, for their page. Each return to the window asks again however fresh it is (spec 7.2). */
-export function useUser(id: number) {
+/**
+ * A person, for their page, and to name the person a filter holds (the Audit Trail's); nothing is asked while `enabled` is
+ * false. Each return to the window asks again however fresh it is (spec 7.2).
+ */
+export function useUser(id: number, enabled = true) {
   const api = useApi()
   return useQuery({
     queryKey: peopleKeys.user(id),
     queryFn: ({ signal }) => api.get<A['User']>(apiPath`/v1/admin/users/${id}`, undefined, { signal }),
+    enabled,
     meta: ASK_ON_RETURN,
   })
 }

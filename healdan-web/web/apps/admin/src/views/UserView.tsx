@@ -2,16 +2,17 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { useQueryClient } from '@tanstack/react-query'
-import { Link } from '@tanstack/react-router'
+import { Link, useNavigate } from '@tanstack/react-router'
 import { useCallback, useId, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { ApiError, apiPath, type adminComponents } from '@healdan/api'
 import { ErrorPanel, idFrom, useApi, useMe } from '@healdan/shell'
-import { Button, formatDate, formatDateTime, Icon, StatusDot, toast, type IconName } from '@healdan/ui'
+import { Button, formatDate, formatDateTime, Icon, StatusDot, Tabs, toast, type IconName } from '@healdan/ui'
 import { routes } from '../addresses'
 import { Confirm } from '../dialogs/Confirm'
 import { useFocusWhenGone } from '../focus'
 import { Problems, type Problem } from '../forms/Problems'
 import { Refusal } from '../forms/Refusal'
+import { ActivityPanel } from '../monitoring/ActivityPanel'
 import { CheckoutsPanel } from '../people/CheckoutsPanel'
 import { DevicesPanel } from '../people/DevicesPanel'
 import { EditUserDialog } from '../people/EditUserDialog'
@@ -31,29 +32,43 @@ import pageStyles from './views.module.css'
 
 type A = adminComponents['schemas']
 
-/**
- * A person's page, at /admin/users/{id} (spec 8.7): their name and status; Edit, Reset Password (for a password account),
- * Sign Out Everywhere, Clear Sign-In Block (while blocked), and Disable or Enable; then their details, their groups, their
- * signed-in devices and what they hold (check-outs, and the matters they own, in the Matters list). An action the server
- * would refuse is greyed out, with the server's sentence under the actions (`refusals`), which describes it; its own
- * refusal still shows, for a change made meanwhile, until a dialog opens or the person's status changes. Disable and Sign
- * Out Everywhere ask first. Phase 5 adds an Activity tab (P4-R4). While a new read fails, the page and any dialog open on
- * it stay, with a note that it couldn't refresh (P4-R15). An address that names nobody, or a deleted or system account,
- * says so in the app's words.
- */
-export function UserView({ id }: { id: string }) {
-  const userId = idFrom(id)
-  return userId === undefined ? <UserNotFound /> : <UserPage id={userId} />
+/** A person's page's tabs: their Overview, and their Activity, the Audit Trail of what they did and what was done to them */
+export type UserTab = 'overview' | 'activity'
+
+/** What a person's page's address holds: the tab open, when it isn't the Overview */
+export interface UserSearch {
+  tab?: Exclude<UserTab, 'overview'>
 }
 
-function UserPage({ id }: { id: number }) {
+/** The address's parameters the page reads; a tab it doesn't know opens the Overview */
+export function userSearch(search: Record<string, unknown>): UserSearch {
+  return { tab: search.tab === 'activity' ? 'activity' : undefined }
+}
+
+/**
+ * A person's page, at /admin/users/{id} (spec 8.7): their name and status; Edit, Reset Password (for a password account),
+ * Sign Out Everywhere, Clear Sign-In Block (while blocked), and Disable or Enable; then, in the Overview tab, their
+ * details, their groups, their signed-in devices and what they hold (check-outs, and the matters they own, in the Matters
+ * list), and in the Activity tab what they did and what was done to them (P4-R4, P5-R10), the tab in the address. An
+ * action the server would refuse is greyed out, with the server's sentence under the actions (`refusals`), which describes
+ * it; its own refusal still shows, for a change made meanwhile, until a dialog opens or the person's status changes.
+ * Disable and Sign Out Everywhere ask first. While a new read fails, the page and any dialog open on it stay, with a note
+ * that it couldn't refresh (P4-R15). An address that names nobody, or a deleted or system account, says so in the app's
+ * words.
+ */
+export function UserView({ id, search = {} }: { id: string; search?: UserSearch }) {
+  const userId = idFrom(id)
+  return userId === undefined ? <UserNotFound /> : <UserPage id={userId} tab={search.tab ?? 'overview'} />
+}
+
+function UserPage({ id, tab }: { id: number; tab: UserTab }) {
   const asked = useUser(id)
   if (asked.isError && asked.error instanceof ApiError && asked.error.status === 404) return <UserNotFound />
   if (asked.data === undefined) {
     return <div className={page.page}>{asked.isError ? <ErrorPanel error={asked.error} onRetry={() => void asked.refetch()} /> : <p className={page.muted}>{t('common.loading')}</p>}</div>
   }
   // By its id, so another person's page, by Back or Forward too, starts afresh: no dialog or change carried over
-  return <Person key={asked.data.id} person={asked.data} stale={asked.isError} onRetry={() => void asked.refetch()} />
+  return <Person key={asked.data.id} person={asked.data} tab={tab} stale={asked.isError} onRetry={() => void asked.refetch()} />
 }
 
 type Open = 'edit' | 'reset' | 'disable' | 'signOut'
@@ -89,8 +104,13 @@ function signsInWith(person: A['User']): string {
   return person.passwordChanged === null ? t('admin.users.password') : t('admin.user.passwordSet', { when: formatDate(person.passwordChanged) })
 }
 
-function Person({ person, stale, onRetry }: { person: A['User']; stale: boolean; onRetry: () => void }) {
+function Person({ person, tab, stale, onRetry }: { person: A['User']; tab: UserTab; stale: boolean; onRetry: () => void }) {
   const api = useApi()
+  const navigate = useNavigate({ from: routes.user })
+  // Once opened, the Overview stays mounted behind Activity, with a change to their groups unsaved, or on its way, still
+  // there, as a matter's Workspace does; nothing of it is asked for until it's opened
+  const [overviewOpened, setOverviewOpened] = useState(tab === 'overview')
+  if (tab === 'overview' && !overviewOpened) setOverviewOpened(true)
   const queryClient = useQueryClient()
   const own = useMe().data?.id === person.id
   const options = useUserOptions().data
@@ -173,6 +193,11 @@ function Person({ person, stale, onRetry }: { person: A['User']; stale: boolean;
 
   const language = options?.languages.find((one) => one.code === person.language)?.name ?? person.language
 
+  function choose(next: string) {
+    // A tab isn't a step of its own, as an order isn't
+    void navigate({ to: routes.user, params: { id: String(person.id) }, search: next === 'activity' ? { tab: 'activity' } : {}, replace: true })
+  }
+
   return (
     <div className={page.page}>
       <nav aria-label={t('admin.crumbs.label')} className={clientStyles.crumbs}>
@@ -224,49 +249,64 @@ function Person({ person, stale, onRetry }: { person: A['User']; stale: boolean;
         </div>
       )}
       <Refusal failure={failure} />
-      <EditsContext.Provider value={report}>
-        <div className={styles.sections}>
-          <Section title={t('admin.user.details')}>
-            <dl className={styles.details}>
-              <dt>{t('admin.user.username')}</dt>
-              <dd>{person.username}</dd>
-              <dt>{t('admin.user.email')}</dt>
-              <dd>{person.email ?? t('admin.user.none')}</dd>
-              <dt>{t('admin.user.signsInWith')}</dt>
-              <dd>{signsInWith(person)}</dd>
-              <dt>{t('admin.user.language')}</dt>
-              <dd>{language}</dd>
-              <dt>{t('admin.user.timeZone')}</dt>
-              <dd>{person.timeZone ?? t('admin.user.none')}</dd>
-              <dt>{t('admin.user.created')}</dt>
-              <dd>{formatDate(person.created)}</dd>
-              <dt>{t('admin.user.lastSignIn')}</dt>
-              <dd>{person.lastSignIn === null ? t('admin.users.never') : formatDateTime(person.lastSignIn)}</dd>
-            </dl>
-            {person.readOnly && <p className={styles.note}>{t('admin.user.readOnly')}</p>}
-            {person.admin && <p className={styles.note}>{t('admin.user.isAdmin')}</p>}
-          </Section>
-          <Section title={t('admin.user.groups')}>
-            <GroupsEditor person={person} />
-          </Section>
-          <Section title={t('admin.user.devices')} heading={devicesHeading} wide>
-            <DevicesPanel person={person} heading={devicesHeading} />
-          </Section>
-          <Section title={t('admin.user.holds')} heading={holdsHeading} wide>
-            <CheckoutsPanel person={person} heading={holdsHeading} />
-            <p className={styles.line}>
-              {person.mattersOwned > 0 ? (
-                // The matters they own, in the Matters list, filtered by them as owner
-                <Link to={routes.matters} search={{ owner: person.id }} className={styles.link}>
-                  {t('admin.user.owns', { matters: mattersInSentence(person.mattersOwned) })}
-                </Link>
-              ) : (
-                t('admin.user.ownsNone')
-              )}
-            </p>
-          </Section>
-        </div>
-      </EditsContext.Provider>
+      <Tabs
+        label={t('admin.user.tabs')}
+        selected={tab}
+        onSelect={choose}
+        tabs={[
+          {
+            id: 'overview',
+            label: t('admin.user.tab.overview'),
+            keepMounted: overviewOpened,
+            content: (
+              <EditsContext.Provider value={report}>
+                <div className={styles.sections}>
+                  <Section title={t('admin.user.details')}>
+                    <dl className={styles.details}>
+                      <dt>{t('admin.user.username')}</dt>
+                      <dd>{person.username}</dd>
+                      <dt>{t('admin.user.email')}</dt>
+                      <dd>{person.email ?? t('admin.user.none')}</dd>
+                      <dt>{t('admin.user.signsInWith')}</dt>
+                      <dd>{signsInWith(person)}</dd>
+                      <dt>{t('admin.user.language')}</dt>
+                      <dd>{language}</dd>
+                      <dt>{t('admin.user.timeZone')}</dt>
+                      <dd>{person.timeZone ?? t('admin.user.none')}</dd>
+                      <dt>{t('admin.user.created')}</dt>
+                      <dd>{formatDate(person.created)}</dd>
+                      <dt>{t('admin.user.lastSignIn')}</dt>
+                      <dd>{person.lastSignIn === null ? t('admin.users.never') : formatDateTime(person.lastSignIn)}</dd>
+                    </dl>
+                    {person.readOnly && <p className={styles.note}>{t('admin.user.readOnly')}</p>}
+                    {person.admin && <p className={styles.note}>{t('admin.user.isAdmin')}</p>}
+                  </Section>
+                  <Section title={t('admin.user.groups')}>
+                    <GroupsEditor person={person} />
+                  </Section>
+                  <Section title={t('admin.user.devices')} heading={devicesHeading} wide>
+                    <DevicesPanel person={person} heading={devicesHeading} />
+                  </Section>
+                  <Section title={t('admin.user.holds')} heading={holdsHeading} wide>
+                    <CheckoutsPanel person={person} heading={holdsHeading} />
+                    <p className={styles.line}>
+                      {person.mattersOwned > 0 ? (
+                        // The matters they own, in the Matters list, filtered by them as owner
+                        <Link to={routes.matters} search={{ owner: person.id }} className={styles.link}>
+                          {t('admin.user.owns', { matters: mattersInSentence(person.mattersOwned) })}
+                        </Link>
+                      ) : (
+                        t('admin.user.ownsNone')
+                      )}
+                    </p>
+                  </Section>
+                </div>
+              </EditsContext.Provider>
+            ),
+          },
+          { id: 'activity', label: t('admin.user.tab.activity'), content: <ActivityPanel fixed={{ userId: person.id }} name={person.name} /> },
+        ]}
+      />
       <LeavePageQuestion standing={standing} name={person.name} changing={changing} />
       {open === 'edit' && <EditUserDialog person={person} onClose={close} />}
       {open === 'reset' && <ResetPasswordDialog person={person} onClose={close} />}

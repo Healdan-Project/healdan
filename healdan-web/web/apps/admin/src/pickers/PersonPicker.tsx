@@ -19,8 +19,14 @@ type S = components['schemas']
  *   Edit's Owner): `GET /v1/users`, which answers 20 at most.
  * - `all`: those too who have left (a disabled account), for a filter, as their matters stay theirs (the Matters list's
  *   Owner): the admin find's people (`GET /v1/admin/find`), 5 at most, each who has left saying so beside the username.
+ * - `users`: everyone the Users list lists, those who have left too, for a filter whose person may be one of many who
+ *   match (the Audit Trail's Person, P5-R23): `GET /v1/admin/users`, by name, PEOPLE_SEARCH_LIMIT at most, each who has
+ *   left saying so beside the username.
  */
-export type PersonAccounts = 'enabled' | 'all'
+export type PersonAccounts = 'enabled' | 'all' | 'users'
+
+/** The most people a search of the Users list offers: the first by name */
+export const PEOPLE_SEARCH_LIMIT = 20
 
 export interface PersonPickerProps {
   label: string
@@ -37,7 +43,7 @@ export type Person = A['PersonBrief'] & { enabled: boolean }
 
 /**
  * The people found for the words (a picker's settled, trimmed text; nothing is asked for none), from the source
- * `accounts` names; the other source is never asked. Workspace Editor's Add Person or Group asks it too.
+ * `accounts` names; the others are never asked. Workspace Editor's Add Person or Group asks it too.
  */
 export function usePeople(q: string, accounts: PersonAccounts): Person[] {
   const api = useApi()
@@ -51,7 +57,10 @@ export function usePeople(q: string, accounts: PersonAccounts): Person[] {
   })
   // The top bar's find asks the same, so a question asked there and here is asked once
   const everyone = useAdminQuery('/v1/admin/find', { query: { q }, enabled: accounts === 'all' && q !== '', keepPrevious: true, staleTime: 30_000 })
+  // Under the Users list's key, so a change to someone asks it again
+  const listed = useAdminQuery('/v1/admin/users', { query: { q, limit: PEOPLE_SEARCH_LIMIT }, enabled: accounts === 'users' && q !== '', keepPrevious: true, staleTime: 30_000 })
   if (accounts === 'enabled') return (canOwn.data?.items ?? []).map((person) => ({ ...person, enabled: true }))
+  if (accounts === 'users') return (listed.data?.items ?? []).map((row: A['UserRow']) => ({ id: row.id, username: row.username, name: row.name, enabled: row.status !== 'disabled' }))
   return everyone.data?.people ?? []
 }
 
