@@ -4193,7 +4193,8 @@ paths:
         - `q`, read with the whitespace at either end taken off, in any case,
           its `%` and `_` taken as they are, keeps the faults whose latest
           message, or the name of the logger they were logged through,
-          contains it. Without it, or blank, every fault.
+          contains it, each compared as stored, before any URL's user name
+          and password are taken out. Without it, or blank, every fault.
         - `area` keeps the faults of that area.
         - `unresolved` true keeps the faults nobody has marked resolved
           since they were last seen.
@@ -4211,6 +4212,7 @@ paths:
           schema:
             type: string
             enum: ['1h', '24h', '7d', '30d']
+            default: '24h'
         - name: q
           in: query
           required: false
@@ -4253,11 +4255,12 @@ paths:
       summary: A fault
       description: |
         A fault, for the details the Errors screen opens below its list
-        (Admin app spec section 8.8): what the list gives, and the level it
-        was logged at, the logger it was logged through, its latest stack,
-        the documents its latest message names, how many times it was seen
-        in all, who marked it resolved and when, and the log its logger
-        writes to, for **Show in Server Log**.
+        (Admin app spec section 8.8): what the list gives but `times`, which
+        counts a window, and the level it was logged at, the logger it was
+        logged through, its latest stack, the documents its latest message
+        names, how many times it was seen in all (`total`), who marked it
+        resolved and when, and the log its logger writes to, for
+        **Show in Server Log**.
 
         An id that names no fault, as after the server has deleted a
         resolved fault not seen for 90 days, is `404 not-found`.
@@ -4356,9 +4359,9 @@ paths:
         first whenever the configuration has it, labelled **Main Log**; then
         each other log whose file, or one of the files it rolled over to,
         holds anything, by label, ignoring case. The HTML copies of the logs
-        (the appenders whose names end `_WEB`) aren't listed. Each with its
-        current file's size and when it last changed. A short list, so not a
-        page.
+        (the appenders whose names end `_WEB`) aren't listed. Each with the
+        size of its files together and when its current file last changed. A
+        short list, so not a page.
       tags: [Monitoring]
       responses:
         '200':
@@ -4380,23 +4383,36 @@ paths:
       operationId: adminReadLog
       summary: Lines of a log
       description: |
-        At most 200 entries of the log's current file, for the Server Log
-        (Admin app spec section 8.8), in the file's order, oldest first. The
-        files it rolled over to, which hold its older lines, are in
-        `GET /v1/admin/logs/{name}/file`. A log whose file isn't there has
-        no entries.
+        At most 200 entries of the log, for the Server Log (Admin app spec
+        section 8.8), in the log's order, oldest first. A log is its current
+        file and the files it rolled over to, which hold its older lines,
+        read as one, from the oldest file to the newest, so it holds what
+        they hold: about 30 MB of the main log. A log with no file holds no
+        entries. `GET /v1/admin/logs/{name}/file` has the same files.
 
-        - With neither `before` nor `after`, the newest entries.
-        - `before`, a byte offset, gives the newest of the entries that start
-          before it: send an answer's `before` for the entries before those,
-          until `atStart`.
-        - `after` gives the oldest of the entries that start at that offset
-          or after it: send an answer's `after` to follow the log as it
-          grows, and each answer's `after` for the next.
-        - An offset past the end of the file means the log has rolled over to
-          a new file since it was given: then the answer is `rolled`, and
-          holds the new file's first entries for `after`, and its newest for
-          `before`.
+        Where a read starts is a position, a string the answers give: each
+        entry's `position`, and an answer's `before` and `after`. A position
+        names one of the log's files, by something of the file's own that
+        stays as the log rolls over, and a place in it. It holds nothing a
+        client reads, and nothing of it is ever read as a file's name or
+        path.
+
+        - With neither `before` nor `after`, the newest entries, ending at
+          the end of the current file, and going back into older files as
+          far as a read goes.
+        - `before` gives the newest of the entries before that position,
+          going on into the next older file at the start of one: send an
+          answer's `before` for the entries before those, until `atStart`,
+          the start of the oldest file there is. A `before` whose file has
+          gone, as the oldest file is deleted when the log rolls over again,
+          gives no entries, with `atStart`.
+        - `after` gives the oldest of the entries at that position or after
+          it: send an answer's `after` to follow the log as it grows, and
+          each answer's `after` for the next. When the position's file has
+          rolled over since, so it isn't the current file any more, the
+          answer is `rolled`, and holds the current file's first entries.
+          What was written to the older file after the position isn't given
+          again here: paging back reaches it.
         - `level` keeps the entries at that level or above: everything
           (`all`, the default), warnings and errors (`warn`), or errors
           (`error`); an entry with no level is kept only with `all`. `q`,
@@ -4408,21 +4424,22 @@ paths:
         with its time, level, source and message, and the lines after it
         that don't start one, such as a stack trace's, which are its
         `continuation`. Lines that start no entry at the start of what was
-        read, such as those at the start of the file, or, with `after`, the
-        rest of a stack an earlier answer ended in while it was still being
-        written, are entries of their own, a line each, with no time, level
-        or source. A read that goes back stops at an entry's start when it
-        finds one, so an entry's lines come together. A last line not yet
-        ended is left for the next read. A line longer than 10,000
-        characters is cut there.
+        read, such as those at the start of the oldest file, or, with
+        `after`, the rest of a stack an earlier answer ended in while it was
+        still being written, are entries of their own, a line each, with no
+        time, level or source. A read that goes back stops at an entry's
+        start when it finds one, so an entry's lines come together. A last
+        line not yet ended is left for the next read. A line longer than
+        10,000 characters is cut there.
 
-        A read looks through at most 5 MiB of the file, so with `level` or
+        A read looks through at most 5 MiB of the log, so with `level` or
         `q` it may give fewer than 200 entries, or none, before it reaches
-        the start of the file (`atStart`), or its end with `after`
-        (`atEnd`): ask again from the answer's `before` or `after`.
+        the start of the oldest file (`atStart`), or, with `after`, the end
+        of the current file (`atEnd`): ask again from the answer's `before`
+        or `after`.
 
-        - `400 bad-request` for both `before` and `after`, a negative offset,
-          or a `level` that isn't one of these.
+        - `400 bad-request` for both `before` and `after`, a position that
+          isn't one this route gives, or a `level` that isn't one of these.
         - `404 not-found` for a `name` that isn't one of the logs
           `GET /v1/admin/logs` lists.
       tags: [Monitoring]
@@ -4431,19 +4448,15 @@ paths:
         - name: before
           in: query
           required: false
-          description: The entries that start before this byte offset, as an answer's `before` gives it
+          description: The entries before this position, as an answer's `before` or an entry's `position` gives it
           schema:
-            type: integer
-            format: int64
-            minimum: 0
+            type: string
         - name: after
           in: query
           required: false
-          description: The entries that start at this byte offset or after it, as an answer's `after` gives it
+          description: The entries at this position or after it, as an answer's `after` or an entry's `position` gives it
           schema:
-            type: integer
-            format: int64
-            minimum: 0
+            type: string
         - name: level
           in: query
           required: false
@@ -4562,8 +4575,10 @@ paths:
           after the server's clock was put back, may be left out of a
           dated list.
         - `q`, read with the whitespace at either end taken off, in any
-          case, its `%` and `_` taken as they are, keeps the rows whose
-          person, file name, folder path, target or address contains it.
+          case, its `%` and `_` taken as they are, keeps the rows whose file
+          name, folder path, target's name, address, or username as the row
+          kept it, contains it. That's the username, not the name `who`
+          gives: `userId` is the filter for a person.
 
         A page holds at most `limit` rows, newest first, and reads only so
         far into each source, so a page whose filters keep few rows may
@@ -4627,21 +4642,24 @@ paths:
         line names the columns, Time, Who, Kind, What, Detail, From and
         Changes, then a line for each row:
 
-        - Time, the row's `when` in UTC in ISO 8601, such as
-          `2026-11-22T10:44:07.120Z`;
+        - Time, the row's `when` in UTC in ISO 8601, always with three
+          digits of milliseconds, such as `2026-11-22T10:44:07.120Z` or
+          `2026-11-22T10:44:07.000Z`;
         - Who, What, Detail and From, the row's `who`, `what`, `detail` and
           `from`, empty for null;
         - Kind, as the Audit Trail shows it: Sign-In, Document, Folder, User
           or Administration;
         - Changes, an administration row's `changes`, each on a line of its
-          own as `name: before → after`, a value that was none as `(none)`,
-          and a secret's as `name: changed`.
+          own within the cell, the lines parted by an LF, as
+          `name: before → after`, a value that was none as `(none)`, and a
+          secret's as `name: changed`.
 
-        A cell that holds a comma, a double quote, a CR or an LF is quoted,
-        its double quotes doubled. A cell, once composed, that starts with
-        `=`, `+`, `-`, `@`, a tab or a CR starts with `'` before it, so a
-        spreadsheet doesn't read it as a formula. With more than 100,000
-        rows, the newest 100,000 come, then a last line, whose one cell says
+        A cell, once composed and before it's quoted, that starts with `=`,
+        `+`, `-`, `@`, a tab or a CR starts with `'` before it, so a
+        spreadsheet doesn't read it as a formula. Then a cell that holds a
+        comma, a double quote, a CR or an LF is quoted, its double quotes
+        doubled. With more than 100,000 rows, the newest 100,000 come, then a
+        last line, whose one cell says
         `Stopped at 100,000 rows: narrow the filters to export the rest.`
 
         The filters are checked before anything is sent, and refused as
@@ -5161,7 +5179,7 @@ components:
       name: q
       in: query
       required: false
-      description: Part of a row's person, file name, folder path, target or address
+      description: Part of a row's file name, folder path, target's name, address, or username as the row kept it
       schema:
         type: string
   responses:
@@ -8277,7 +8295,9 @@ components:
           type: integer
           format: int64
           minimum: 0
-          description: Its current file's size, in bytes; 0 when the file isn't there
+          description: |
+            The size of its current file and the files it rolled over to,
+            together, in bytes; 0 when it has none
         modified:
           type: [string, 'null']
           format: date-time
@@ -8295,49 +8315,48 @@ components:
           items:
             $ref: '#/components/schemas/LogLine'
         before:
-          type: integer
-          format: int64
-          minimum: 0
+          type: string
           description: |
-            Where this read began, as a byte offset in the file: the start of
-            the earliest entry it looked at, kept or not, or of its earliest
-            line when it found no entry's start. Send it as `before` for the
-            entries before these.
+            Where this read began, as a position: the start of the earliest
+            entry it looked at, kept or not, or of its earliest line when it
+            found no entry's start. Send it as `before` for the entries before
+            these.
         after:
-          type: integer
-          format: int64
-          minimum: 0
+          type: string
           description: |
-            Where this read ended: the byte offset just past the last whole
-            line it looked at, the end of the file when it got there. Send
-            it as `after` for the entries after these, as they're written.
+            Where this read ended, as a position: when it stopped at 200
+            entries, the start of the entry after the last it gave;
+            otherwise just past the last whole line it looked at, the end of
+            the current file when it got there. Send it as `after` for the
+            entries after these, as they're written.
         atStart:
           type: boolean
           description: |
-            Whether the read reached the start of the file, so that `before`
-            is 0 and the file holds no older entries
+            Whether the read reached the start of the oldest file there is,
+            so the log holds no older entries
         atEnd:
           type: boolean
           description: |
-            Whether the read reached the end of the file as it was then, so
-            that the file held no newer entries
+            Whether the read reached the end of the current file as it was
+            then, so the log held no newer entries
         rolled:
           type: boolean
           description: |
-            Whether the offset sent was past the end of the file, as the log
-            has rolled over to a new file since, so the entries are the new
-            file's
+            Whether the `after` sent named a file that has rolled over since,
+            so the entries are the current file's from its start; false for
+            a read with `before`, or with neither
     LogLine:
       type: object
       description: An entry of a log
       additionalProperties: false
-      required: [offset, time, level, source, message, continuation]
+      required: [position, time, level, source, message, continuation]
       properties:
-        offset:
-          type: integer
-          format: int64
-          minimum: 0
-          description: Where its first line starts in the file, as a byte offset
+        position:
+          type: string
+          description: |
+            Where its first line starts in the log, as a position, which no
+            other entry of the log has, so a client can tell entries apart by
+            it
         time:
           type: [string, 'null']
           format: date-time
@@ -8469,11 +8488,11 @@ components:
           additionalProperties:
             $ref: '#/components/schemas/AuditChange'
           examples:
-            - name:
+            - accessKey:
+                secret: true
+              name:
                 before: Wasabi
                 after: Wasabi EU
-              secret:
-                secret: true
     AuditChange:
       description: |
         A field's change: its old and new value, each null for none; or, for
@@ -8592,7 +8611,7 @@ components:
         intervalSeconds:
           type: [integer, 'null']
           format: int64
-          minimum: 0
+          minimum: 1
           description: For `simple`, the seconds from one run's start to the next; null for `cron`
           examples: [1800]
         cron:
