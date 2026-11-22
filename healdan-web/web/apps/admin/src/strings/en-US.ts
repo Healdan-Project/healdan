@@ -1215,6 +1215,79 @@ export const adminEnUS = {
   'admin.jobs.title': 'Background Jobs',
 
   // Monitoring: Background Jobs (Task 32d)
+  'admin.jobs.about':
+    "What each job last did since the server started, and when it runs next. Healdan's jobs keep their own times; LogicalDOC's tasks run on the schedule set here, while they're enabled.",
+  'admin.jobs.none': 'The server lists no background jobs.',
+  // The list's columns, and its two groups
+  'admin.jobs.column.name': 'Job',
+  'admin.jobs.column.lastRun': 'Last Run',
+  'admin.jobs.column.result': 'Result',
+  'admin.jobs.column.nextRun': 'Next Run',
+  'admin.jobs.column.enabled': 'Enabled',
+  'admin.jobs.column.schedule': 'Schedule',
+  'admin.jobs.column.actions': 'Actions',
+  'admin.jobs.healdan': "Healdan's Jobs",
+  'admin.jobs.logicalDoc': "LogicalDOC's Tasks",
+  // A job's last run and next run, when it has none
+  'admin.jobs.never': 'Never',
+  'admin.jobs.noNextRun': 'None',
+  // After a next run that's long past
+  'admin.jobs.overdue': 'Overdue',
+  // How its last run ended, or that it's running
+  'admin.jobs.result.running': 'Running',
+  'admin.jobs.result.succeeded': 'Succeeded',
+  'admin.jobs.result.failed': 'Failed',
+  'admin.jobs.result.done': 'Done',
+  'admin.jobs.result.none': 'Not Run Yet',
+  // Under a job whose last run failed, the error it failed with, as the server logged it
+  'admin.jobs.lastError': 'Last Error',
+  'admin.jobs.enabled.yes': 'Yes',
+  'admin.jobs.enabled.no': 'No',
+  // One of Healdan's jobs that doesn't run on this server, as the storage jobs where storage backends are off
+  'admin.jobs.enabled.off': 'Off on This Server',
+  // Before a LogicalDOC task's cron expression, which follows as it is
+  'admin.jobs.cron': 'Cron:',
+  // A row's actions, each named with its job for a screen reader
+  'admin.jobs.run': 'Run Now',
+  'admin.jobs.runName': 'Run Now: {name}',
+  'admin.jobs.stop': 'Stop',
+  'admin.jobs.stopName': 'Stop {name}',
+  'admin.jobs.enable': 'Enable',
+  'admin.jobs.enableName': 'Enable {name}',
+  'admin.jobs.disable': 'Disable',
+  'admin.jobs.disableName': 'Disable {name}',
+  'admin.jobs.schedule': 'Schedule…',
+  'admin.jobs.scheduleName': 'Schedule of {name}',
+  'admin.jobs.runAsked': 'Asked {name} to run now',
+  'admin.jobs.stopAsked': 'Asked {name} to stop',
+  'admin.jobs.enabledDone': 'Enabled {name}',
+  'admin.jobs.disabledDone': 'Disabled {name}',
+  // Stop's and Disable's questions
+  'admin.jobs.stopTitle': 'Stop {name}?',
+  'admin.jobs.stopLine': "It stops at its next check, and shows as running until then. It runs again when its schedule next comes round, while it's enabled.",
+  'admin.jobs.disableTitle': 'Disable {name}?',
+  'admin.jobs.disableLine':
+    "It doesn't run on its schedule until it's enabled again, here or in the Classic Interface, after a restart too. A run already going on goes on to its end, unless it's stopped.",
+  // Schedule…: every so many seconds, minutes or hours, or a cron expression
+  'admin.schedule.title': 'Schedule of {name}',
+  'admin.schedule.mode': 'Runs',
+  'admin.schedule.mode.simple': 'Every So Often',
+  'admin.schedule.mode.cron': 'When a Cron Expression Says',
+  'admin.schedule.every': 'Every',
+  'admin.schedule.unit': 'Unit',
+  'admin.schedule.unit.seconds': 'Seconds',
+  'admin.schedule.unit.minutes': 'Minutes',
+  'admin.schedule.unit.hours': 'Hours',
+  'admin.schedule.everyNote': 'A whole number: as often as every second, and at least once a year. Each run counts from the start of the one before.',
+  'admin.schedule.everyRange': 'Type a whole number from 1 to {max}.',
+  'admin.schedule.cron': 'Cron Expression',
+  'admin.schedule.cronNote':
+    "In Quartz's form, in the server's time zone: seconds, minutes, hours, day of month, month and day of week, and a year if wanted. 0 0 3 * * ? runs it at three every morning.",
+  'admin.schedule.cronRequired': 'Type a cron expression.',
+  'admin.schedule.cronInvalid': "The server doesn't take that expression: it isn't in Quartz's form, or it never comes round again.",
+  'admin.schedule.keeps': "Its other settings, and whether it's enabled, stay as they are.",
+  'admin.schedule.save': 'Save',
+  'admin.schedule.saved': 'Saved the schedule of {name}',
 
   // The problems only the admin API answers, which the shared catalogue doesn't hold
   'problems.storage-unavailable': "This server doesn't have Healdan's storage module.",
@@ -1317,6 +1390,10 @@ export const adminPlurals = {
   // Monitoring: the Audit Trail and Activity (Task 32c), their plurals
 
   // Monitoring: Background Jobs (Task 32d), its plurals
+  // A LogicalDOC task's schedule, every so many seconds, minutes or hours, in the largest of them that fits it whole
+  'admin.jobs.every.seconds': { one: 'Every second', other: 'Every {n} seconds' },
+  'admin.jobs.every.minutes': { one: 'Every minute', other: 'Every {n} minutes' },
+  'admin.jobs.every.hours': { one: 'Every hour', other: 'Every {n} hours' },
 } as const satisfies Record<`admin.${string}`, PluralForms>
 
 export type AdminStringKey = keyof typeof adminEnUS

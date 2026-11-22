@@ -1251,6 +1251,180 @@ export function logRoutes(main: A['LogLine'][] = logEntries()): Routes {
 
 // Monitoring: Background Jobs (Task 32d)
 
+/**
+ * A job as GET /v1/admin/jobs gives it: LogicalDOC's Indexer, enabled and idle, its last run a success, every 30 minutes,
+ * unless `over` says otherwise
+ */
+export function jobOf(over: Partial<A['Job']> = {}): A['Job'] {
+  return {
+    name: 'IndexerTask',
+    label: 'Indexer',
+    logicalDocTask: true,
+    enabled: true,
+    running: false,
+    lastStart: '2026-11-19T10:30:00Z',
+    lastEnd: '2026-11-19T10:30:42Z',
+    result: 'succeeded',
+    error: null,
+    nextRun: '2026-11-19T11:00:00Z',
+    overdue: false,
+    canRun: true,
+    canStop: false,
+    switchable: true,
+    schedule: { mode: 'simple', intervalSeconds: 1800, cron: null },
+    ...over,
+  }
+}
+
+/** One of Healdan's jobs, `name` and `label` given: switched on, idle, never switched off or rescheduled here */
+export function jobOfHealdan(name: string, label: string, over: Partial<A['Job']> = {}): A['Job'] {
+  return jobOf({ name, label, logicalDocTask: false, switchable: false, schedule: null, canRun: false, ...over })
+}
+
+/**
+ * Every job, Healdan's eight in their order then LogicalDOC's six: none running, the Storage Retests' last run failed,
+ * the Storage Nightly Check not run yet, the Statistics Collector overdue and the Tags Processor disabled
+ */
+export const jobRows: A['Job'][] = [
+  jobOfHealdan('preview', 'Previews', { lastStart: '2026-11-19T10:41:00Z', lastEnd: '2026-11-19T10:41:02Z', nextRun: '2026-11-19T10:41:07Z' }),
+  jobOfHealdan('email-index', 'Email Index', { result: 'done', lastStart: '2026-11-13T08:00:00Z', lastEnd: '2026-11-13T08:04:00Z', nextRun: null }),
+  jobOfHealdan('trash-destroyer', 'Trash Destroyer', { canRun: true, lastStart: '2026-11-19T02:47:00Z', lastEnd: '2026-11-19T02:47:05Z', nextRun: '2026-11-20T02:47:00Z' }),
+  jobOfHealdan('storage-mover', 'Storage Mover', { canRun: true, lastStart: '2026-11-19T10:36:00Z', lastEnd: '2026-11-19T10:36:12Z', nextRun: '2026-11-19T10:41:00Z' }),
+  jobOfHealdan('storage-retest', 'Storage Retests', {
+    canRun: true,
+    result: 'failed',
+    error: "Wasabi EU can't be reached: connect timed out",
+    lastStart: '2026-11-19T10:40:00Z',
+    lastEnd: '2026-11-19T10:40:30Z',
+    nextRun: '2026-11-19T10:45:00Z',
+  }),
+  jobOfHealdan('storage-purge', 'Storage Purge', { canRun: true, lastStart: '2026-11-19T04:00:00Z', lastEnd: '2026-11-19T04:00:09Z', nextRun: '2026-11-20T04:00:00Z' }),
+  jobOfHealdan('storage-alert', 'Storage Alert', { lastStart: '2026-11-19T10:00:00Z', lastEnd: '2026-11-19T10:00:01Z', nextRun: '2026-11-19T11:00:00Z' }),
+  jobOfHealdan('storage-nightly-check', 'Storage Nightly Check', { canRun: true, result: null, lastStart: null, lastEnd: null, nextRun: '2026-11-20T03:15:00Z' }),
+  jobOf(),
+  jobOf({
+    name: 'IndexOptimizer',
+    label: 'Index Optimizer',
+    lastStart: '2026-11-19T02:30:00Z',
+    lastEnd: '2026-11-19T02:31:10Z',
+    nextRun: '2026-11-20T02:30:00Z',
+    schedule: { mode: 'cron', intervalSeconds: null, cron: '0 30 2 * * ?' },
+  }),
+  jobOf({
+    name: 'StatsCollector',
+    label: 'Statistics Collector',
+    lastStart: '2026-11-15T04:00:00Z',
+    lastEnd: '2026-11-15T04:00:42Z',
+    nextRun: '2026-11-16T04:00:00Z',
+    overdue: true,
+    schedule: { mode: 'simple', intervalSeconds: 86_400, cron: null },
+  }),
+  jobOf({ name: 'TagsProcessor', label: 'Tags Processor', enabled: false, canRun: false, result: null, lastStart: null, lastEnd: null, nextRun: null, schedule: { mode: 'simple', intervalSeconds: 3600, cron: null } }),
+  jobOf({
+    name: 'DigestProcessor',
+    label: 'Digest Processor',
+    lastStart: '2026-11-19T07:00:00Z',
+    lastEnd: '2026-11-19T07:00:03Z',
+    nextRun: '2026-11-20T07:00:00Z',
+    schedule: { mode: 'cron', intervalSeconds: null, cron: '0 0 7 ? * MON-FRI' },
+  }),
+  jobOf({ name: 'PathCalculator', label: 'Paths Calculator', lastStart: '2026-11-19T10:40:00Z', lastEnd: '2026-11-19T10:40:01Z', nextRun: '2026-11-19T10:45:00Z', schedule: { mode: 'simple', intervalSeconds: 300, cron: null } }),
+]
+
+/** A `422 validation` that names one member of a schedule's change, as PUT /v1/admin/jobs/{name}/schedule answers it */
+export function jobFieldProblem(field: string, code: string): ApiError {
+  return new ApiError(422, 'validation', 'Some details need fixing.', { status: 422, code: 'validation', detail: 'Some details need fixing.', fields: [{ field, code, detail: 'A server sentence.' }] })
+}
+
+/**
+ * What PUT /v1/admin/jobs/{name}/schedule refuses of a change, as the server checks it, in its order: the mode, then the
+ * member for it (an interval from 1 to 31,536,000 seconds, or a cron expression that isn't blank, which the server gives
+ * to Quartz and the fake asks only to have six fields or seven), then the other mode's member, sent with a value
+ */
+export function jobScheduleProblem(body: unknown): ApiError | undefined {
+  const change = (body ?? {}) as Record<string, unknown>
+  if (change.mode === undefined || change.mode === null) return jobFieldProblem('mode', 'required')
+  if (change.mode === 'simple') {
+    const seconds = change.intervalSeconds
+    if (seconds === undefined || seconds === null) return jobFieldProblem('intervalSeconds', 'required')
+    if (typeof seconds !== 'number' || !Number.isInteger(seconds) || seconds < 1 || seconds > 31_536_000) return jobFieldProblem('intervalSeconds', 'out-of-range')
+    if (change.cron !== undefined && change.cron !== null) return jobFieldProblem('cron', 'invalid')
+    return undefined
+  }
+  if (change.mode === 'cron') {
+    const cron = typeof change.cron === 'string' ? change.cron.trim() : ''
+    if (cron === '') return jobFieldProblem('cron', 'required')
+    const fields = cron.split(/\s+/).length
+    if (fields < 6 || fields > 7) return jobFieldProblem('cron', 'invalid')
+    if (change.intervalSeconds !== undefined && change.intervalSeconds !== null) return jobFieldProblem('intervalSeconds', 'invalid')
+    return undefined
+  }
+  return jobFieldProblem('mode', 'invalid')
+}
+
+/** When a run asked for now begins, in the fakes' answers */
+export const JOB_RUN_STARTED = '2026-11-19T10:42:00Z'
+
+export interface JobRoutesOptions {
+  /**
+   * The run begins off the request's thread, so Run Now's answer is the job as it was, and only a later read shows it
+   * running; by default the answer shows it running already
+   */
+  runAnswersBefore?: boolean
+}
+
+/**
+ * Background Jobs' routes, to spread over the defaults: the jobs, over copies of `rows`, and their actions, which change
+ * those copies as the server would and answer the job, or refuse what it doesn't allow now with a `409 refused`, as the
+ * server does; a name the list doesn't have is `404`
+ */
+export function jobRoutes(rows: A['Job'][] = jobRows, options: JobRoutesOptions = {}): Routes {
+  const jobs = new Map(rows.map((job) => [job.name, { ...job }]))
+  const refused = (sentence: string) => problem(409, 'refused', sentence)
+  function change(job: A['Job'], next: Partial<A['Job']>): A['Job'] {
+    const changed = { ...job, ...next }
+    jobs.set(job.name, changed)
+    return { ...changed }
+  }
+  // The job the path names, decided on, or a 404
+  function act(params: string[], decide: (job: A['Job']) => A['Job'] | ApiError): A['Job'] | ApiError {
+    const job = jobs.get(decodeURIComponent(params[0] ?? ''))
+    return job === undefined ? notFound() : decide(job)
+  }
+  const unswitchable = (job: A['Job']) => refused(`${job.label} isn't switched on or off here.`)
+  return {
+    'GET /v1/admin/jobs': () => [...jobs.values()].map((job) => ({ ...job })),
+    'POST /v1/admin/jobs/*/run': ({ params }: { params: string[] }) =>
+      act(params, (job) => {
+        if (!job.canRun) return refused(`${job.label} can't run now.`)
+        const before = { ...job }
+        const begun = change(job, {
+          running: true,
+          canRun: false,
+          canStop: job.logicalDocTask,
+          lastStart: JOB_RUN_STARTED,
+          ...(job.logicalDocTask ? { lastEnd: null, result: null, error: null } : {}),
+        })
+        return options.runAnswersBefore ? before : begun
+      }),
+    'POST /v1/admin/jobs/*/stop': ({ params }: { params: string[] }) => act(params, (job) => (job.canStop ? change(job, { canStop: false }) : refused(`${job.label} isn't running.`))),
+    'POST /v1/admin/jobs/*/enable': ({ params }: { params: string[] }) =>
+      act(params, (job) => (job.switchable ? change(job, { enabled: true, canRun: !job.running, nextRun: job.nextRun ?? '2026-11-19T11:00:00Z' }) : unswitchable(job))),
+    'POST /v1/admin/jobs/*/disable': ({ params }: { params: string[] }) =>
+      act(params, (job) => (job.switchable ? change(job, { enabled: false, canRun: false, nextRun: null, overdue: false }) : unswitchable(job))),
+    'PUT /v1/admin/jobs/*/schedule': ({ params, body }: { params: string[]; body?: unknown }) =>
+      act(params, (job) => {
+        const invalid = jobScheduleProblem(body)
+        if (invalid !== undefined) return invalid
+        if (job.schedule === null) return refused(`${job.label} has no schedule here.`)
+        const sent = body as A['JobScheduleChange']
+        return change(job, {
+          schedule: sent.mode === 'simple' ? { mode: 'simple', intervalSeconds: sent.intervalSeconds ?? null, cron: null } : { mode: 'cron', intervalSeconds: null, cron: (sent.cron ?? '').trim() },
+        })
+      }),
+  }
+}
+
 export interface Call {
   method: string
   path: string
