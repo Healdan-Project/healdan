@@ -197,6 +197,28 @@ tags:
         descriptions change.
       - Each change is recorded in the People area, aimed at the person
         (`user`) or the group (`group`).
+  - name: Monitoring
+    description: |
+      The Monitoring area (`AdminArea.MONITORING`): the errors the server
+      logged, its log files, the Audit Trail and the background jobs (Admin
+      app spec sections 8.8 and 9.3 to 9.5). Only members of `admin`, on the
+      web session, reach these routes: no session is `401 unauthenticated`,
+      a device token `403 web-session-only`, and anyone else
+      `403 admins-only`.
+
+      - A fault's message and stack, and each log line, are answered as the
+        server logged them, but for the user name and password of any URL
+        in them, which are taken out: `scheme://user:secret@host` reads
+        `scheme://host`. A log's download is its files as they are.
+      - A log is named by its appender's name, as `GET /v1/admin/logs` lists
+        it, and only those names are taken: nothing a request sends is read
+        as a file's name or path.
+      - Marking a fault resolved or unresolved is recorded inside its
+        transaction, aimed at the fault (`error`). A job's action is
+        recorded straight after it, aimed at the job (`job`) by its name, as
+        a job's runs and schedule aren't kept in the database. A change
+        that changes nothing isn't recorded, and nothing that reads is: a
+        log's download and the Audit Trail's export included.
 paths:
   /v1/admin/dashboard:
     get:
@@ -4150,6 +4172,759 @@ paths:
           $ref: '#/components/responses/Problem'
         default:
           $ref: '#/components/responses/Problem'
+  /v1/admin/errors:
+    get:
+      operationId: adminListErrors
+      summary: The errors the server logged, by fault
+      description: |
+        The Errors list (Admin app spec sections 8.8 and 9.4): one row for
+        each kind of fault the server logged at error level or above that
+        was last seen in `window`, the one last seen first. A page of
+        `limit` from `offset`, with the total of faults once the filters
+        have applied, which all apply together, and `errors`, how many
+        times those faults were seen in the window, which the list's
+        heading gives with the total, as 14 errors of 4 kinds.
+
+        - `window` is the last hour (`1h`), 24 hours (`24h`, the default), 7
+          days (`7d`) or 30 days (`30d`). A fault is listed when it was last
+          seen in it. `times` and `errors` count by whole clock hours in
+          UTC, from the start of the hour the window begins in, so the last
+          hour's counts cover the hour now and the one before it.
+        - `q`, read with the whitespace at either end taken off, in any case,
+          its `%` and `_` taken as they are, keeps the faults whose latest
+          message, or the name of the logger they were logged through,
+          contains it. Without it, or blank, every fault.
+        - `area` keeps the faults of that area.
+        - `unresolved` true keeps the faults nobody has marked resolved
+          since they were last seen.
+
+        A resolved fault that's seen again is unresolved again, of itself.
+
+        A `window` or `area` that isn't one of these, a negative `offset` or
+        a `limit` outside 1 to 200 is `400 bad-request`.
+      tags: [Monitoring]
+      parameters:
+        - name: window
+          in: query
+          required: false
+          description: How far back the list goes; `24h` by default
+          schema:
+            type: string
+            enum: ['1h', '24h', '7d', '30d']
+        - name: q
+          in: query
+          required: false
+          description: Part of a fault's latest message, or of its logger's name
+          schema:
+            type: string
+        - name: area
+          in: query
+          required: false
+          description: Only the faults of this area
+          schema:
+            $ref: '#/components/schemas/ErrorArea'
+        - name: unresolved
+          in: query
+          required: false
+          description: '`true` for only the faults nobody has marked resolved; `false` by default'
+          schema:
+            type: boolean
+            default: false
+        - $ref: '#/components/parameters/PageOffset'
+        - $ref: '#/components/parameters/PageLimit'
+      responses:
+        '200':
+          description: A page of faults
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorList'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/errors/{id}:
+    get:
+      operationId: adminGetError
+      summary: A fault
+      description: |
+        A fault, for the details the Errors screen opens below its list
+        (Admin app spec section 8.8): what the list gives, and the level it
+        was logged at, the logger it was logged through, its latest stack,
+        the documents its latest message names, how many times it was seen
+        in all, who marked it resolved and when, and the log its logger
+        writes to, for **Show in Server Log**.
+
+        An id that names no fault, as after the server has deleted a
+        resolved fault not seen for 90 days, is `404 not-found`.
+      tags: [Monitoring]
+      parameters:
+        - $ref: '#/components/parameters/ErrorPath'
+      responses:
+        '200':
+          description: The fault
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/errors/{id}/resolve:
+    post:
+      operationId: adminResolveError
+      summary: Mark a fault resolved
+      description: |
+        **Mark Resolved**: marks the fault resolved by the caller, now, in
+        one transaction with its record, and answers it (Admin app spec
+        section 8.8). Takes no body. Once it's seen again it's unresolved
+        again, of itself, naming no one. A fault already resolved is
+        answered as it is, still naming who resolved it, and nothing is
+        recorded.
+
+        `404 not-found` as `adminGetError` answers.
+
+        Recorded as `error.resolved`, aimed at the fault, named by its
+        message as `adminGetError` gives it, cut to fit.
+      tags: [Monitoring]
+      parameters:
+        - $ref: '#/components/parameters/ErrorPath'
+      responses:
+        '200':
+          description: The fault, resolved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/errors/{id}/reopen:
+    post:
+      operationId: adminReopenError
+      summary: Mark a fault unresolved
+      description: |
+        Marks a resolved fault unresolved again, forgetting who resolved it
+        and when, in one transaction with its record, and answers it (Admin
+        app spec section 8.8). Takes no body. A fault that isn't resolved is
+        answered as it is, and nothing is recorded.
+
+        `404 not-found` as `adminGetError` answers.
+
+        Recorded as `error.reopened`, aimed at the fault, named as
+        `error.resolved` names it.
+      tags: [Monitoring]
+      parameters:
+        - $ref: '#/components/parameters/ErrorPath'
+      responses:
+        '200':
+          description: The fault, unresolved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/logs:
+    get:
+      operationId: adminListLogs
+      summary: The server's logs
+      description: |
+        The Server Log's menu (Admin app spec section 8.8): the logs the
+        server's logging configuration writes to files, each named by its
+        appender's name, read at the request. The main log, `DMS`, comes
+        first whenever the configuration has it, labelled **Main Log**; then
+        each other log whose file, or one of the files it rolled over to,
+        holds anything, by label, ignoring case. The HTML copies of the logs
+        (the appenders whose names end `_WEB`) aren't listed. Each with its
+        current file's size and when it last changed. A short list, so not a
+        page.
+      tags: [Monitoring]
+      responses:
+        '200':
+          description: The logs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LogInfo'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/logs/{name}/lines:
+    get:
+      operationId: adminReadLog
+      summary: Lines of a log
+      description: |
+        At most 200 entries of the log's current file, for the Server Log
+        (Admin app spec section 8.8), in the file's order, oldest first. The
+        files it rolled over to, which hold its older lines, are in
+        `GET /v1/admin/logs/{name}/file`. A log whose file isn't there has
+        no entries.
+
+        - With neither `before` nor `after`, the newest entries.
+        - `before`, a byte offset, gives the newest of the entries that start
+          before it: send an answer's `before` for the entries before those,
+          until `atStart`.
+        - `after` gives the oldest of the entries that start at that offset
+          or after it: send an answer's `after` to follow the log as it
+          grows, and each answer's `after` for the next.
+        - An offset past the end of the file means the log has rolled over to
+          a new file since it was given: then the answer is `rolled`, and
+          holds the new file's first entries for `after`, and its newest for
+          `before`.
+        - `level` keeps the entries at that level or above: everything
+          (`all`, the default), warnings and errors (`warn`), or errors
+          (`error`); an entry with no level is kept only with `all`. `q`,
+          read with the whitespace at either end taken off, in any case,
+          keeps the entries whose message, source or continuation lines, as
+          answered, contain it.
+
+        An entry is a line that starts as the server's logging writes one,
+        with its time, level, source and message, and the lines after it
+        that don't start one, such as a stack trace's, which are its
+        `continuation`. Lines that start no entry at the start of what was
+        read, such as those at the start of the file, or, with `after`, the
+        rest of a stack an earlier answer ended in while it was still being
+        written, are entries of their own, a line each, with no time, level
+        or source. A read that goes back stops at an entry's start when it
+        finds one, so an entry's lines come together. A last line not yet
+        ended is left for the next read. A line longer than 10,000
+        characters is cut there.
+
+        A read looks through at most 5 MiB of the file, so with `level` or
+        `q` it may give fewer than 200 entries, or none, before it reaches
+        the start of the file (`atStart`), or its end with `after`
+        (`atEnd`): ask again from the answer's `before` or `after`.
+
+        - `400 bad-request` for both `before` and `after`, a negative offset,
+          or a `level` that isn't one of these.
+        - `404 not-found` for a `name` that isn't one of the logs
+          `GET /v1/admin/logs` lists.
+      tags: [Monitoring]
+      parameters:
+        - $ref: '#/components/parameters/LogName'
+        - name: before
+          in: query
+          required: false
+          description: The entries that start before this byte offset, as an answer's `before` gives it
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+        - name: after
+          in: query
+          required: false
+          description: The entries that start at this byte offset or after it, as an answer's `after` gives it
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+        - name: level
+          in: query
+          required: false
+          description: |
+            `all` for every entry (the default), `warn` for warnings and
+            errors, `error` for errors
+          schema:
+            type: string
+            enum: [all, warn, error]
+        - name: q
+          in: query
+          required: false
+          description: Part of an entry's message, source or continuation lines
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The entries
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LogLines'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/logs/{name}/file:
+    get:
+      operationId: adminDownloadLog
+      summary: Download a log
+      description: |
+        **Download** (Admin app spec section 8.8): the log's files as they
+        are, its current file and the files it rolled over to, which hold its
+        older lines, in a zip, each under its own file name. The answer is an
+        attachment named after the log's file and the time it was made, in
+        UTC, such as `dms-20261122-104107.zip`.
+
+        `404 not-found` for a `name` that isn't one of the logs
+        `GET /v1/admin/logs` lists.
+      tags: [Monitoring]
+      parameters:
+        - $ref: '#/components/parameters/LogName'
+      responses:
+        '200':
+          description: The log's files, zipped
+          headers:
+            Content-Disposition:
+              description: '`attachment`, with the zip''s file name'
+              required: true
+              schema:
+                type: string
+          content:
+            application/zip:
+              schema:
+                type: string
+                contentMediaType: application/zip
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/audit:
+    get:
+      operationId: adminListAudit
+      summary: The Audit Trail
+      description: |
+        The Audit Trail (Admin app spec sections 8.8 and 9.3): what was done,
+        newest first, from LogicalDOC's history of documents, folders and
+        accounts, Healdan's administration record, and its record of storage
+        backends' recovery keys. Rows are kept for good, as nothing deletes
+        them, but a document destroyed for good takes its document rows with
+        it, while the administration rows, and the Trash's record of it,
+        stay.
+
+        Each row is of one `kind`:
+
+        - `sign-in`: an account's sign-ins, sign-outs, sessions that timed
+          out, and failed sign-ins;
+        - `document`: what was done to a document, such as viewing,
+          downloading, filing or saving a version;
+        - `folder`: what was done to a folder;
+        - `user`: the rest of an account's history, such as a new password;
+        - `administration`: each change made through this app, and each
+          client and matter change made elsewhere, with the fields it
+          changed (`changes`); and each showing and entering of a storage
+          backend's recovery key. One made through this app is one row, the
+          administration record's; one made in the Classic Interface's
+          Storage tab is listed from that tab's own record.
+
+        The filters all apply together:
+
+        - `kind` keeps the rows of those kinds; every kind without it.
+        - `userId` keeps the rows the person did, and the rows about them:
+          their account's own history, sign-ins included, and the
+          administration rows aimed at them (`user`). A person's Activity
+          tab is this filter.
+        - `matterId` keeps the document and folder rows of the matter's own
+          folder and every folder in it, those in the Trash included, and
+          the administration rows aimed at the matter, or at a folder or
+          search folder in it; no sign-in, user or storage rows. A document
+          that has left the matter keeps the rows it made while it was in
+          it. A matter's Activity tab is this filter.
+        - `docNumber` keeps the rows of the document with that doc #.
+        - `from` and `to` keep the rows of those days, from the start of
+          `from` to the end of `to`, in `zone`. A row whose time is more
+          than an hour out of step with the rows written around it, as
+          after the server's clock was put back, may be left out of a
+          dated list.
+        - `q`, read with the whitespace at either end taken off, in any
+          case, its `%` and `_` taken as they are, keeps the rows whose
+          person, file name, folder path, target or address contains it.
+
+        A page holds at most `limit` rows, newest first, and reads only so
+        far into each source, so a page whose filters keep few rows may
+        hold fewer, or none, and still have a `nextCursor`. Send
+        `nextCursor` back as `cursor`, with the same filters, for the rows
+        after it. It holds each source's place, so rows written meanwhile
+        never repeat or skip one on a later page. There's no total.
+        `nextCursor` is null only once every source has been read to its
+        end.
+
+        A `kind` that isn't one of these, a `zone` the server doesn't know,
+        a `from` or `to` that isn't a day, a `limit` outside 1 to 200, or a
+        `cursor` that isn't one this route gives is `400 bad-request`. A
+        `userId`, `matterId` or `docNumber` that names nothing keeps no
+        row, and so does a `to` before `from`.
+      tags: [Monitoring]
+      parameters:
+        - $ref: '#/components/parameters/AuditKinds'
+        - $ref: '#/components/parameters/AuditUserId'
+        - $ref: '#/components/parameters/AuditMatterId'
+        - $ref: '#/components/parameters/AuditDocNumber'
+        - $ref: '#/components/parameters/AuditFrom'
+        - $ref: '#/components/parameters/AuditTo'
+        - $ref: '#/components/parameters/AuditZone'
+        - $ref: '#/components/parameters/AuditText'
+        - $ref: '#/components/parameters/PageLimit'
+        - name: cursor
+          in: query
+          required: false
+          description: An answer's `nextCursor`, for the rows after its page; the newest rows without it
+          schema:
+            type: string
+      responses:
+        '200':
+          description: A page of the Audit Trail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditPage'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/audit/export:
+    get:
+      operationId: adminExportAudit
+      summary: Export the Audit Trail as CSV
+      description: |
+        **Export CSV** (Admin app spec section 8.8): the rows the filters
+        keep, as `adminListAudit` takes them, newest first, as CSV, sent as
+        they're read and never held whole, following the pages to the end or
+        to 100,000 rows. The answer is an attachment named after the day it
+        was made, in `zone`, such as `audit-trail-2026-11-22.csv`.
+
+        The file is UTF-8, starting with a byte order mark so that a
+        spreadsheet reads it as UTF-8, and its lines end in CR LF. The first
+        line names the columns, Time, Who, Kind, What, Detail, From and
+        Changes, then a line for each row:
+
+        - Time, the row's `when` in UTC in ISO 8601, such as
+          `2026-11-22T10:44:07.120Z`;
+        - Who, What, Detail and From, the row's `who`, `what`, `detail` and
+          `from`, empty for null;
+        - Kind, as the Audit Trail shows it: Sign-In, Document, Folder, User
+          or Administration;
+        - Changes, an administration row's `changes`, each on a line of its
+          own as `name: before → after`, a value that was none as `(none)`,
+          and a secret's as `name: changed`.
+
+        A cell that holds a comma, a double quote, a CR or an LF is quoted,
+        its double quotes doubled. A cell, once composed, that starts with
+        `=`, `+`, `-`, `@`, a tab or a CR starts with `'` before it, so a
+        spreadsheet doesn't read it as a formula. With more than 100,000
+        rows, the newest 100,000 come, then a last line, whose one cell says
+        `Stopped at 100,000 rows: narrow the filters to export the rest.`
+
+        The filters are checked before anything is sent, and refused as
+        `adminListAudit` refuses them: `400 bad-request`.
+      tags: [Monitoring]
+      parameters:
+        - $ref: '#/components/parameters/AuditKinds'
+        - $ref: '#/components/parameters/AuditUserId'
+        - $ref: '#/components/parameters/AuditMatterId'
+        - $ref: '#/components/parameters/AuditDocNumber'
+        - $ref: '#/components/parameters/AuditFrom'
+        - $ref: '#/components/parameters/AuditTo'
+        - $ref: '#/components/parameters/AuditZone'
+        - $ref: '#/components/parameters/AuditText'
+      responses:
+        '200':
+          description: The rows, as CSV
+          headers:
+            Content-Disposition:
+              description: '`attachment`, with the file''s name'
+              required: true
+              schema:
+                type: string
+          content:
+            text/csv;charset=utf-8:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/jobs:
+    get:
+      operationId: adminListJobs
+      summary: The background jobs
+      description: |
+        Background Jobs (Admin app spec sections 8.8 and 9.5): every job,
+        Healdan's first, in a fixed order, then LogicalDOC's scheduled tasks,
+        each with what it last did since the server started, when it runs
+        next and what it allows now, read at the request. A short list, so
+        not a page.
+
+        - Healdan's jobs report to the server as they run, so a restart
+          forgets their last run. One that doesn't run on this server, such
+          as a storage job where storage backends are off, is listed
+          switched off. **Run Now** is offered for five of them, each while
+          it's switched on and isn't running: `trash-destroyer`,
+          `storage-mover`, `storage-retest`, `storage-purge` and
+          `storage-nightly-check`. It's never offered for `preview`,
+          `email-index` or `storage-alert`, and none of Healdan's jobs is
+          stopped, switched off or rescheduled here.
+        - LogicalDOC's tasks run on their `schedule`, while enabled. Run Now
+          is offered while one is enabled and idle, **Stop** while it runs,
+          and **Enable**, **Disable** and its schedule always. Its last run
+          failed when it logged an error while it ran, which `error` gives.
+      tags: [Monitoring]
+      responses:
+        '200':
+          description: The jobs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Job'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/jobs/{name}/run:
+    post:
+      operationId: adminRunJob
+      summary: Run a job now
+      description: |
+        **Run Now** (Admin app spec section 8.8): starts a run of the job at
+        once, on a thread of its own, and answers the job, which may not
+        show it running yet. The run reports as a scheduled run does, so
+        its end and result come in `GET /v1/admin/jobs`. Takes no body.
+
+        - `404 not-found` for a `name` that `GET /v1/admin/jobs` doesn't
+          list.
+        - `409 refused`, with a sentence that says why, for a job that
+          can't run now (`canRun` false): one of Healdan's that's never run
+          now, such as `preview`, one switched off or disabled, and one
+          already running.
+
+        Recorded as `job.run-requested`.
+      tags: [Monitoring]
+      parameters:
+        - $ref: '#/components/parameters/JobName'
+      responses:
+        '200':
+          description: The job
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/jobs/{name}/stop:
+    post:
+      operationId: adminStopJob
+      summary: Stop a running task
+      description: |
+        **Stop** (Admin app spec section 8.8): asks a LogicalDOC task's run
+        to stop, and answers the job, which shows it running until the run
+        stops, at its next check. Takes no body.
+
+        - `404 not-found` as `adminRunJob` answers.
+        - `409 refused`, with a sentence that says why, for a job that
+          can't be stopped now (`canStop` false): one of Healdan's, which is
+          never stopped here, and a task that isn't running, or has been
+          asked to stop already.
+
+        Recorded as `job.stop-requested`.
+      tags: [Monitoring]
+      parameters:
+        - $ref: '#/components/parameters/JobName'
+      responses:
+        '200':
+          description: The job
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/jobs/{name}/enable:
+    post:
+      operationId: adminEnableJob
+      summary: Enable a task
+      description: |
+        **Enable** (Admin app spec section 8.8): lets a LogicalDOC task run
+        on its schedule again, saved in the server's configuration, so it
+        lasts across a restart, and answers the job with its next run.
+        Takes no body. A task already enabled is answered as it is, and
+        nothing is recorded.
+
+        - `404 not-found` as `adminRunJob` answers.
+        - `409 refused`, with a sentence that says why, for one of Healdan's
+          jobs, which is never switched off or on here (`switchable` false).
+
+        Recorded as `job.enabled`.
+      tags: [Monitoring]
+      parameters:
+        - $ref: '#/components/parameters/JobName'
+      responses:
+        '200':
+          description: The job, enabled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/jobs/{name}/disable:
+    post:
+      operationId: adminDisableJob
+      summary: Disable a task
+      description: |
+        **Disable** (Admin app spec section 8.8): stops a LogicalDOC task
+        from running on its schedule, saved in the server's configuration,
+        so it lasts across a restart, and answers the job. A run already
+        going on goes on to its end, unless it's stopped. Takes no body. A
+        task already disabled is answered as it is, and nothing is
+        recorded.
+
+        - `404 not-found` as `adminRunJob` answers.
+        - `409 refused`, with a sentence that says why, for one of Healdan's
+          jobs, which is never switched off or on here (`switchable` false).
+
+        Recorded as `job.disabled`.
+      tags: [Monitoring]
+      parameters:
+        - $ref: '#/components/parameters/JobName'
+      responses:
+        '200':
+          description: The job, disabled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/jobs/{name}/schedule:
+    put:
+      operationId: adminScheduleJob
+      summary: Change a task's schedule
+      description: |
+        Saves a LogicalDOC task's schedule in the server's configuration, as
+        the Classic Interface's Scheduled Tasks screen saves it, and answers
+        the job with its next run (Admin app spec section 8.8). `simple`
+        runs the task every `intervalSeconds`; `cron` when the cron
+        expression `cron` says, in Quartz's form (seconds, minutes, hours,
+        day of month, month, day of week, and a year if wanted, such as
+        `0 0 3 * * ?` for three in the morning every day), in the server's
+        time zone. The schedule's other settings stay as they are, and so
+        does whether the task is enabled. Saving the schedule it has is
+        answered as it is, and nothing is recorded.
+
+        - `404 not-found` as `adminRunJob` answers.
+        - `422 validation`, each by its field: `mode` missing or null
+          (`required`), or neither `simple` nor `cron` (`invalid`); for
+          `simple`, `intervalSeconds` missing or null (`required`) or
+          outside 1 to 31,536,000, a year (`out-of-range`); for `cron`,
+          `cron` missing, null or blank (`required`), or not an expression
+          Quartz takes, or one that never comes round again (`invalid`);
+          and the other mode's member, sent with a value (`invalid`), null
+          counting as left out.
+        - `409 refused`, with a sentence that says why, for one of Healdan's
+          jobs, which has no schedule here (`schedule` null).
+
+        Recorded as `job.schedule-changed`, with the schedule before and
+        after as one change, `schedule`, each written as
+        `every 1800 seconds` or `cron 0 0 3 * * ?`.
+      tags: [Monitoring]
+      parameters:
+        - $ref: '#/components/parameters/JobName'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JobScheduleChange'
+      responses:
+        '200':
+          description: The job, with its schedule
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
 components:
   securitySchemes:
     cookieAuth:
@@ -4285,6 +5060,110 @@ components:
         type: integer
         format: int64
         minimum: 0
+    ErrorPath:
+      name: id
+      in: path
+      required: true
+      description: The fault's id, as `GET /v1/admin/errors` gives it
+      schema:
+        type: integer
+        format: int64
+        minimum: 0
+    LogName:
+      name: name
+      in: path
+      required: true
+      description: |
+        The log's name, its appender's, as `GET /v1/admin/logs` gives it,
+        such as `DMS`: never a file's name or path
+      schema:
+        type: string
+        pattern: '^[^/\\]*[^/\\.][^/\\]*$'
+        examples: [DMS, IndexerTask]
+    JobName:
+      name: name
+      in: path
+      required: true
+      description: The job's name, as `GET /v1/admin/jobs` gives it
+      schema:
+        type: string
+        examples: [storage-mover, IndexerTask]
+    AuditKinds:
+      name: kind
+      in: query
+      required: false
+      description: The kinds of row to keep, the parameter repeated for each; every kind without it
+      style: form
+      explode: true
+      schema:
+        type: array
+        items:
+          $ref: '#/components/schemas/AuditKind'
+    AuditUserId:
+      name: userId
+      in: query
+      required: false
+      description: |
+        Only the rows a person did, and those about them, by their id, as
+        `GET /v1/admin/users` gives it
+      schema:
+        type: integer
+        format: int64
+        minimum: 0
+    AuditMatterId:
+      name: matterId
+      in: query
+      required: false
+      description: Only the rows of a matter, by its id, as `GET /v1/admin/matters` gives it, not its folder's
+      schema:
+        type: integer
+        format: int64
+        minimum: 0
+    AuditDocNumber:
+      name: docNumber
+      in: query
+      required: false
+      description: "Only the rows of the document with this doc #"
+      schema:
+        type: integer
+        format: int64
+        minimum: 0
+    AuditFrom:
+      name: from
+      in: query
+      required: false
+      description: Only the rows of this day or later, the day starting at midnight in `zone`
+      schema:
+        type: string
+        format: date
+    AuditTo:
+      name: to
+      in: query
+      required: false
+      description: Only the rows of this day or earlier, to the day's end in `zone`
+      schema:
+        type: string
+        format: date
+    AuditZone:
+      name: zone
+      in: query
+      required: false
+      description: |
+        The time zone the days of `from` and `to` are in, and the export's
+        day in its file's name, as an IANA id such as `Europe/London`: the
+        browser's own, so the days are the ones its person sees; the
+        server's time zone without it. One the server doesn't know is
+        `400`.
+      schema:
+        type: string
+        examples: [Europe/London]
+    AuditText:
+      name: q
+      in: query
+      required: false
+      description: Part of a row's person, file name, folder path, target or address
+      schema:
+        type: string
   responses:
     Problem:
       description: A refusal or an error
@@ -7230,3 +8109,516 @@ components:
               items:
                 $ref: '#/components/schemas/GroupMember'
       unevaluatedProperties: false
+    ErrorArea:
+      type: string
+      description: |
+        A fault's area, from the package or class of the logger it was
+        logged through: Previews, Storage, Search Index (reading documents'
+        text included), Email, Sign-In, Background Jobs, and Server for
+        anything else
+      enum: ['Previews', 'Storage', 'Search Index', 'Email', 'Sign-In', 'Background Jobs', 'Server']
+    ErrorRow:
+      type: object
+      description: A kind of fault, as the Errors list shows it
+      additionalProperties: false
+      required: [id, message, area, times, firstSeen, lastSeen, resolved]
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: The fault's id
+        message:
+          type: string
+          description: |
+            What Happened: its latest message, as the server logged it, but
+            for any URL's user name and password, which are taken out
+        area:
+          $ref: '#/components/schemas/ErrorArea'
+        times:
+          type: integer
+          format: int64
+          minimum: 0
+          description: |
+            How many times it was seen in the list's window, counted by whole
+            clock hours in UTC from the start of the hour the window begins in
+        firstSeen:
+          type: string
+          format: date-time
+          description: When it was first seen
+        lastSeen:
+          type: string
+          format: date-time
+          description: When it was last seen
+        resolved:
+          type: boolean
+          description: Whether someone has marked it resolved since it was last seen
+    ErrorList:
+      description: A page of faults, and how many times they were seen
+      allOf:
+        - $ref: '#/components/schemas/Page'
+        - required: [errors]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/ErrorRow'
+            errors:
+              type: integer
+              format: int64
+              minimum: 0
+              description: |
+                How many times the faults the filters keep were seen in the
+                window, every page's together: their `times` added up. With
+                `total`, the faults, the heading's 14 errors of 4 kinds
+      unevaluatedProperties: false
+    ErrorDetail:
+      type: object
+      description: A fault, for its details
+      additionalProperties: false
+      required: [id, level, area, logger, message, stack, documents, total, firstSeen, lastSeen, resolved,
+        resolvedBy, resolvedAt, log]
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: The fault's id
+        level:
+          type: string
+          description: The level it was first logged at
+          enum: [ERROR, FATAL]
+        area:
+          $ref: '#/components/schemas/ErrorArea'
+        logger:
+          type: string
+          description: The name of the logger it was first logged through
+          examples: [com.logicaldoc.healdan.preview.PreviewWorker]
+        message:
+          type: string
+          description: Its latest message, as `ErrorRow.message` gives it
+        stack:
+          type: [string, 'null']
+          description: |
+            Its latest stack trace, as the server logged it, but for any
+            URL's user name and password, which are taken out; null when it
+            was logged with none
+        documents:
+          type: array
+          description: The documents its latest message names, in the order it names them
+          items:
+            $ref: '#/components/schemas/ErrorDocument'
+        total:
+          type: integer
+          format: int64
+          minimum: 1
+          description: How many times it was seen in all
+        firstSeen:
+          type: string
+          format: date-time
+          description: When it was first seen
+        lastSeen:
+          type: string
+          format: date-time
+          description: When it was last seen
+        resolved:
+          type: boolean
+          description: Whether someone has marked it resolved since it was last seen
+        resolvedBy:
+          type: [string, 'null']
+          description: The username of who marked it resolved; null unless `resolved`
+        resolvedAt:
+          type: [string, 'null']
+          format: date-time
+          description: When; null unless `resolved`
+        log:
+          type: [string, 'null']
+          description: |
+            The log its logger writes to, by its name, as
+            `GET /v1/admin/logs` lists it: `DMS`, the main log, unless the
+            logger has one of its own; null when no log listed holds its
+            lines
+          examples: [DMS, IndexerTask]
+    ErrorDocument:
+      type: object
+      description: A document a fault's message names
+      additionalProperties: false
+      required: [id, docNumber, fileName]
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: "LogicalDOC's internal id of the document, as the message names it, not its doc #"
+        docNumber:
+          type: [integer, 'null']
+          format: int64
+          description: "Its doc #; null when no document has that id now, or the document has no doc #"
+        fileName:
+          type: [string, 'null']
+          description: Its file name; null when no document has that id now
+    LogInfo:
+      type: object
+      description: One of the server's logs
+      additionalProperties: false
+      required: [name, label, size, modified]
+      properties:
+        name:
+          type: string
+          description: Its appender's name, which the log's paths take
+          pattern: '^[^/\\]*[^/\\.][^/\\]*$'
+          examples: [DMS, IndexerTask]
+        label:
+          type: string
+          description: |
+            Its name as the Server Log's menu shows it: Main Log for `DMS`;
+            for the log of one of LogicalDOC's tasks, which its appender is
+            named after, the task's `label` as `GET /v1/admin/jobs` gives
+            it; and for any other, its appender's name
+          examples: [Main Log, Indexer]
+        size:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Its current file's size, in bytes; 0 when the file isn't there
+        modified:
+          type: [string, 'null']
+          format: date-time
+          description: When its current file last changed; null when the file isn't there
+    LogLines:
+      type: object
+      description: Entries of a log, and where they were read from
+      additionalProperties: false
+      required: [lines, before, after, atStart, atEnd, rolled]
+      properties:
+        lines:
+          type: array
+          description: The entries, in the file's order, oldest first
+          maxItems: 200
+          items:
+            $ref: '#/components/schemas/LogLine'
+        before:
+          type: integer
+          format: int64
+          minimum: 0
+          description: |
+            Where this read began, as a byte offset in the file: the start of
+            the earliest entry it looked at, kept or not, or of its earliest
+            line when it found no entry's start. Send it as `before` for the
+            entries before these.
+        after:
+          type: integer
+          format: int64
+          minimum: 0
+          description: |
+            Where this read ended: the byte offset just past the last whole
+            line it looked at, the end of the file when it got there. Send
+            it as `after` for the entries after these, as they're written.
+        atStart:
+          type: boolean
+          description: |
+            Whether the read reached the start of the file, so that `before`
+            is 0 and the file holds no older entries
+        atEnd:
+          type: boolean
+          description: |
+            Whether the read reached the end of the file as it was then, so
+            that the file held no newer entries
+        rolled:
+          type: boolean
+          description: |
+            Whether the offset sent was past the end of the file, as the log
+            has rolled over to a new file since, so the entries are the new
+            file's
+    LogLine:
+      type: object
+      description: An entry of a log
+      additionalProperties: false
+      required: [offset, time, level, source, message, continuation]
+      properties:
+        offset:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Where its first line starts in the file, as a byte offset
+        time:
+          type: [string, 'null']
+          format: date-time
+          description: |
+            When it was logged, which the log writes in the server's time
+            zone; null for a line that starts no entry
+        level:
+          type: [string, 'null']
+          description: The level it was logged at; null for a line that starts no entry
+          enum: [TRACE, DEBUG, INFO, WARN, ERROR, FATAL, null]
+        source:
+          type: [string, 'null']
+          description: |
+            Where it was logged from, as the log writes it: the class and the
+            line, without spaces; null for a line that starts no entry
+          examples: ['com.logicaldoc.healdan.preview.PreviewWorker:366']
+        message:
+          type: string
+          description: |
+            Its message, as the server logged it, but for any URL's user name
+            and password, which are taken out; for a line that starts no
+            entry, the line
+          maxLength: 10000
+        continuation:
+          type: array
+          description: |
+            The lines after it that start no entry, such as a stack trace's,
+            each with any URL's user name and password taken out; empty for a
+            line that starts no entry
+          items:
+            type: string
+            maxLength: 10000
+    AuditKind:
+      type: string
+      description: |
+        What a row of the Audit Trail is about: `sign-in`, an account's
+        sign-ins, sign-outs, timed-out sessions and failed sign-ins;
+        `document`, a document; `folder`, a folder; `user`, the rest of an
+        account's history; `administration`, a change the administration
+        record holds, or a showing or entering of a storage backend's
+        recovery key
+      enum: [sign-in, document, folder, user, administration]
+    AuditPage:
+      type: object
+      description: |
+        A page of the Audit Trail, and where the next one starts. It may
+        hold fewer rows than asked for, even none, while `nextCursor` isn't
+        null.
+      additionalProperties: false
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          description: The rows, newest first
+          maxItems: 200
+          items:
+            $ref: '#/components/schemas/AuditRow'
+        nextCursor:
+          type: [string, 'null']
+          description: |
+            Where the next page starts, for `cursor`, which holds each
+            source's place and nothing a client reads; null once every
+            source has been read to its end
+    AuditRow:
+      type: object
+      description: A row of the Audit Trail
+      additionalProperties: false
+      required: [id, when, who, kind, event, what, detail, from, docNumber, folderId, changes]
+      properties:
+        id:
+          type: string
+          description: The row's own, which no other row in the Audit Trail has, and which a client only compares
+        when:
+          type: string
+          format: date-time
+          description: When it was done
+        who:
+          type: [string, 'null']
+          description: |
+            Who did it: the person's name, as the Users list names them, read
+            now; the username the row kept when no account has the row's
+            user id; null when the row names no one
+          examples: [Sam Okafor]
+        kind:
+          $ref: '#/components/schemas/AuditKind'
+        event:
+          type: string
+          description: |
+            What was done, as the row keeps it: LogicalDOC's history event,
+            such as `event.downloaded` or `event.user.login`; the
+            administration record's action, such as `client.renamed`; or the
+            storage record's, `key-shown` or `key-entered`
+          examples: [event.downloaded, client.renamed]
+        what:
+          type: string
+          description: |
+            What was done, in US English, as the Audit Trail and its export
+            say it, such as `Downloaded` or `Renamed a client`; `event`
+            itself when Healdan has no words for it
+          examples: [Downloaded, Renamed a client]
+        detail:
+          type: [string, 'null']
+          description: |
+            One line more, in English: a document's doc #, file name and
+            version; a folder's path; a sign-in's client; an administration
+            row's target. Null when there's nothing more to say
+          examples: ['# 10388, Skeleton Argument.docx, version 1.4']
+        from:
+          type: [string, 'null']
+          description: The address it came from; null when the row keeps none
+          examples: [192.0.2.12]
+        docNumber:
+          type: [integer, 'null']
+          format: int64
+          description: "A document row's doc #; null for other rows, and when the document has none"
+        folderId:
+          type: [integer, 'null']
+          format: int64
+          description: |
+            The folder of a document or folder row, and the folder or search
+            folder an administration row is aimed at; null for other rows
+        changes:
+          type: [object, 'null']
+          description: |
+            An administration row's changed fields, by name, in the order of
+            their names, each with its old and new value, a secret's with
+            neither, as the administration record keeps them; null for
+            other rows, and for an administration row that changed no field
+          additionalProperties:
+            $ref: '#/components/schemas/AuditChange'
+          examples:
+            - name:
+                before: Wasabi
+                after: Wasabi EU
+              secret:
+                secret: true
+    AuditChange:
+      description: |
+        A field's change: its old and new value, each null for none; or, for
+        a secret, `secret` alone, as no value of it is kept
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [before, after]
+          properties:
+            before:
+              type: [string, 'null']
+            after:
+              type: [string, 'null']
+        - type: object
+          additionalProperties: false
+          required: [secret]
+          properties:
+            secret:
+              const: true
+    Job:
+      type: object
+      description: A background job, as Background Jobs shows it
+      additionalProperties: false
+      required: [name, label, logicalDocTask, enabled, running, lastStart, lastEnd, result, error, nextRun, overdue,
+        canRun, canStop, switchable, schedule]
+      properties:
+        name:
+          type: string
+          description: |
+            Its name, which its paths take: one of Healdan's, lower case
+            words joined by hyphens, or a LogicalDOC task's
+          examples: [storage-mover, IndexerTask]
+        label:
+          type: string
+          description: Its name as the app shows it, US English in Title Case
+          examples: [Storage Mover, Indexer]
+        logicalDocTask:
+          type: boolean
+          description: Whether it's one of LogicalDOC's scheduled tasks, not one of Healdan's jobs
+        enabled:
+          type: boolean
+          description: |
+            Whether it runs at all: a LogicalDOC task can be disabled, and one
+            of Healdan's jobs that doesn't run on this server is switched off
+        running:
+          type: boolean
+          description: Whether a run has begun and not ended, one asked to stop included
+        lastStart:
+          type: [string, 'null']
+          format: date-time
+          description: When its last run began; null if none has since the server started
+        lastEnd:
+          type: [string, 'null']
+          format: date-time
+          description: |
+            When its last run that ended did; null if none has, and for a
+            LogicalDOC task while it runs
+        result:
+          type: [string, 'null']
+          description: |
+            How its last run ended: `succeeded`, or `failed`, as `error`
+            says; `done` for a job whose work is done for good, as the email
+            index's once its first pass has ended. Null when it hasn't run
+            since the server started, and for a LogicalDOC task running with
+            no error yet
+          enum: [succeeded, failed, done, null]
+        error:
+          type: [string, 'null']
+          description: |
+            What its last run failed with, in English, as the server logged
+            it, but for any URL's user name and password, which are taken
+            out; null unless `result` is `failed`
+        nextRun:
+          type: [string, 'null']
+          format: date-time
+          description: When it runs next; null when it won't, or that isn't known
+        overdue:
+          type: boolean
+          description: |
+            Whether it's overdue: enabled, not running, and its next run more
+            than twice its interval past, and an hour at least
+        canRun:
+          type: boolean
+          description: |
+            Whether **Run Now** runs it now: a LogicalDOC task while it's
+            enabled and idle, and the five of Healdan's jobs that
+            `GET /v1/admin/jobs` names, each while it's switched on and not
+            running
+        canStop:
+          type: boolean
+          description: |
+            Whether **Stop** stops it now: a LogicalDOC task while it runs
+            and hasn't been asked to stop
+        switchable:
+          type: boolean
+          description: |
+            Whether **Enable** and **Disable** apply to it, as to every
+            LogicalDOC task and none of Healdan's jobs; which applies is
+            `enabled`'s to say
+        schedule:
+          description: A LogicalDOC task's schedule; null for Healdan's jobs, which are never rescheduled here
+          oneOf:
+            - $ref: '#/components/schemas/JobSchedule'
+            - type: 'null'
+    JobSchedule:
+      type: object
+      description: |
+        When a LogicalDOC task runs: every so many seconds (`simple`), or
+        when a cron expression says (`cron`)
+      additionalProperties: false
+      required: [mode, intervalSeconds, cron]
+      properties:
+        mode:
+          type: string
+          enum: [simple, cron]
+        intervalSeconds:
+          type: [integer, 'null']
+          format: int64
+          minimum: 0
+          description: For `simple`, the seconds from one run's start to the next; null for `cron`
+          examples: [1800]
+        cron:
+          type: [string, 'null']
+          description: |
+            For `cron`, the expression, in Quartz's form, read in the
+            server's time zone; null for `simple`
+          examples: ['0 0 3 * * ?']
+    JobScheduleChange:
+      type: object
+      description: |
+        A LogicalDOC task's new schedule: `mode`, and the member for it.
+        The other mode's member is left out or null.
+      additionalProperties: false
+      required: [mode]
+      properties:
+        mode:
+          type: string
+          description: |
+            `simple`, every `intervalSeconds`, or `cron`, when `cron` says;
+            any other value is `422 validation` (`invalid`), not `400`
+          enum: [simple, cron]
+        intervalSeconds:
+          type: [integer, 'null']
+          format: int64
+          description: For `simple`, the seconds from one run's start to the next, from 1 to 31,536,000
+        cron:
+          type: [string, 'null']
+          description: For `cron`, the cron expression, in Quartz's form

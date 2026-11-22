@@ -41,11 +41,30 @@ public class RouteCoverageTest extends AbstractHealdanTestCase {
 
 	/**
 	 * Routes the admin file describes ahead of their implementation, so the Admin app can be built against them, as
-	 * Phase 3's Stores and Storage routes and Phase 4's People routes were (Admin app rulings P3-R2 and P4-R2): none
-	 * now. Each must be described and not implemented ({@link #testRoutesDescribedAheadAreNotImplementedYet}), and
-	 * leaves the list once it's implemented.
+	 * Phase 3's Stores and Storage routes and Phase 4's People routes were (Admin app rulings P3-R2 and P4-R2): Phase
+	 * 5's Monitoring routes (ruling P5-R1). Each must be described and not implemented
+	 * ({@link #testRoutesDescribedAheadAreNotImplementedYet}), and leaves the list once it's implemented.
 	 */
-	static final Set<String> DESCRIBED_AHEAD = Set.of();
+	static final Set<String> DESCRIBED_AHEAD = Set.of(
+			// The errors
+			"GET /v1/admin/errors",
+			"GET /v1/admin/errors/{id}",
+			"POST /v1/admin/errors/{id}/resolve",
+			"POST /v1/admin/errors/{id}/reopen",
+			// The server's logs
+			"GET /v1/admin/logs",
+			"GET /v1/admin/logs/{name}/lines",
+			"GET /v1/admin/logs/{name}/file",
+			// The Audit Trail
+			"GET /v1/admin/audit",
+			"GET /v1/admin/audit/export",
+			// The background jobs
+			"GET /v1/admin/jobs",
+			"POST /v1/admin/jobs/{name}/run",
+			"POST /v1/admin/jobs/{name}/stop",
+			"POST /v1/admin/jobs/{name}/enable",
+			"POST /v1/admin/jobs/{name}/disable",
+			"PUT /v1/admin/jobs/{name}/schedule");
 
 	@Test
 	public void testEveryRouteIsDescribed() {
