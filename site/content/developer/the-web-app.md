@@ -102,7 +102,9 @@ under `/api/v1/admin` (see the [API](../api/#the-admin-apps-routes)).
   arrow keys in its field reach every row, as the focus stays there, and while the rows hold more than their box shows,
   the box is a stop of its own, which Tab reaches after the field and the arrow keys scroll, so what it holds below
   isn't for a pointer alone (axe's `scrollable-region-focusable`); while it's a stop, and only then, it's a region named
-  by the heading over the rows. `TextField` takes `multiline`, a `PickField` option an `icon` and `meta` (secondary text
+  by the picker's field label and the heading over the rows together (`aria-labelledby` names both, so on a person's
+  page "Add a Group Groups"), so it never repeats the name of the section it's in (axe's `landmark-unique`).
+  `TextField` takes `multiline`, a `PickField` option an `icon` and `meta` (secondary text
   that is part of its name), and `Table` `selectionMode="none"`, for a list whose rows lead to a page: a click or Enter
   opens a row, and none draws as selected.
 - **To test it,** `test/renderApp.tsx` renders the whole app at an address under `/admin`, answering from a small
