@@ -20,8 +20,6 @@ Where to look first:
   Once the server has started, its own log is `repository/logs/dms.log`: read it there when the Admin app can't be
   opened.
 
-<!-- P5 docs pass 2 -->
-
 PostgreSQL's log is `docker compose logs db`. Its error lines can quote the row a statement failed on, with names,
 subjects and comments in it, so read what you copy from it before you post it anywhere, such as in an issue.
 

@@ -88,16 +88,19 @@ the actions, in Healdan's own words, such as "You can't disable your own account
 [What Healdan Refuses](#what-healdan-refuses). Should something change meanwhile, Healdan's refusal shows when you try,
 under the actions, until you open a dialog or their status changes.
 
-Below them are **Details**: their **Username**, **Email**, **Signs In With** (their sign-in provider, or their
-password, with when it was last set, or that they must change it at their next sign-in), **Language**, **Time Zone**,
-**Account Made** and **Last Sign-In**. A read-only account's details say it's one, and an administrator's that they
-can use the Admin app and read every document. Then come **Groups**, **Signed-In Devices** and **What They Hold**,
-which the sections below describe.
+Below them are two tabs, **Overview** and **Activity**. The page's address keeps the tab, so a reload or a copied
+link opens the same one.
 
-Their **Activity** tab is the [Audit Trail](../monitoring/audit-trail/) for them alone: what they did, their sign-ins
-among it, and what was done to their account, newest first.
+The **Overview** tab has **Details**: their **Username**, **Email**, **Signs In With** (their sign-in provider, or
+their password, with when it was last set, or that they must change it at their next sign-in), **Language**,
+**Time Zone**, **Account Made** and **Last Sign-In**. A read-only account's details say it's one, and an
+administrator's that they can use the Admin app and read every document. Then come **Groups**, **Signed-In Devices**
+and **What They Hold**, which the sections below describe.
 
-<!-- P5 docs pass 2 -->
+The **Activity** tab is the [Audit Trail](../monitoring/audit-trail/) for them alone: what they did, their sign-ins
+among it, and what was done to their account, newest first, with **Kind** tick boxes to keep some kinds of row.
+Moving to it keeps what you were changing to their groups, and asks nothing. **Open in the Audit Trail** opens the
+Audit Trail with them, and the kinds you ticked, as its filters, for the rest of its filters and **Export CSV**.
 
 An address that names no person says "Person Not Found", with **Go to Users**, as one naming a system account or a
 deleted account does.
@@ -461,8 +464,6 @@ Healdan records each change made here, with who made it, when and from where:
 A change that changes nothing, such as saving someone's groups as they were, isn't recorded. The
 [Audit Trail](../monitoring/audit-trail/) lists these changes, and a person's **Activity** tab those about them and
 those they made.
-
-<!-- P5 docs pass 2 -->
 
 ## In the Classic Interface
 

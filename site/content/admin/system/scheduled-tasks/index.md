@@ -33,8 +33,6 @@ Each first runs between half an hour and an hour and a half after Healdan starts
 Right-click the task and choose **Execute**. **Progress** shows how far it has got, and **Stop** stops it. Background
 Jobs' **Run Now** and **Stop** do the same.
 
-<!-- P5 docs pass 2 -->
-
 ## Changing a Schedule
 
 1. Select the task. Its **Scheduling** tab opens below the list.
@@ -47,8 +45,6 @@ Jobs' **Run Now** and **Stop** do the same.
 
 Background Jobs' **Schedule…** sets a **Simple** policy's interval, or a cron expression, and leaves the initial
 delay and the max duration as they are.
-
-<!-- P5 docs pass 2 -->
 
 A save takes effect at once, with no restart, and Healdan keeps it when it restarts or is upgraded. With **Simple**,
 the task next runs once the **Initial delay** has passed after the save, then every **Repeat interval**, so
@@ -72,8 +68,6 @@ finishes quickly.
 
 Right-click the task and choose **Disable**, and **Enable** to turn it back on, or use **Disable** and **Enable** on
 Background Jobs. Leave the Indexer on: without it, new documents can't be found by their words.
-
-<!-- P5 docs pass 2 -->
 
 ## When the Server Is Busy
 

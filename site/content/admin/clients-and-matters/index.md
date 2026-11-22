@@ -216,8 +216,6 @@ its client's page, once New Matter has made it, and from **Manage in Admin** on 
 - **Three tabs,** **Overview**, **Workspace** and **Activity**. The page's address keeps the tab, so a reload or a
   copied link opens the same one.
 
-<!-- P5 docs pass 2 -->
-
 An address that names no matter, or a matter in the Trash, says "Matter Not Found", with **Go to Matters**. The page
 asks Healdan again each time you come back to its window, as the lists do.
 
@@ -247,11 +245,10 @@ look at the Overview, and leaving the page over a change that isn't saved asks f
 
 The **Activity** tab is the [Audit Trail](../monitoring/audit-trail/) for the matter alone: what was done to the
 documents and folders in its workspace, and the changes the administration record holds for the matter and its
-folders, as [A Matter's Rows](../monitoring/audit-trail/#a-matters-rows) says, newest first. Moving to it keeps what
-you were changing on the Workspace tab, and asks nothing. To export the rows, open the Audit Trail with the matter as
-its filter.
-
-<!-- P5 docs pass 2 -->
+folders, as [A Matter's Rows](../monitoring/audit-trail/#a-matters-rows) says, newest first. Its **Kind** tick boxes
+offer **Document**, **Folder** and **Administration**. Moving to it keeps what you were changing on the Workspace tab,
+and asks nothing. **Open in the Audit Trail** opens the Audit Trail with the matter, and the kinds you ticked, as its
+filters, for the rest of its filters and **Export CSV**.
 
 #### Edit
 

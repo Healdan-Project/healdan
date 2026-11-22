@@ -16,17 +16,15 @@ logged, its log files, the Audit Trail of who did what, and the background jobs.
 - **[Background Jobs](background-jobs/),** at `/admin/jobs`: Healdan's background jobs and LogicalDOC's scheduled
   tasks, with when each last ran and how it went, and what each allows you to do.
 
-<!-- P5 docs pass 2 -->
-
 ## Counts in the Left Pane
 
 **Errors** shows how many unresolved errors the server logged in the last 24 hours, each kind of fault counting once,
 and **Background Jobs** how many jobs failed when they last ran or are overdue, as the Dashboard's Needs Attention
 counts them. As with **Backends**, the counts are asked for when the Admin app opens and each time you come back to its
-window, and every 30 seconds while the Dashboard is showing. Resolving a fault, or an action on a job, asks for them
-again, and they follow within a minute or two, as the Dashboard's figures do.
-
-<!-- P5 docs pass 2 -->
+window, and every 30 seconds while the Dashboard is showing. Marking a fault resolved or reopening it asks for them
+again at once, and so does each action on a job. The Dashboard's figures can be a minute or two old, though, so a count
+may not change straight away: it follows the next time it's asked for, when you come back to the window, or within 30
+seconds while the Dashboard is showing.
 
 ## From the Dashboard
 
@@ -37,19 +35,15 @@ The Dashboard's links open these screens:
 - in Server Health, the **Server**, **Database** and **Memory** tiles open **Server Log**, and the **Previews** and
   **Background Jobs** tiles open **Background Jobs**.
 
-<!-- P5 docs pass 2 -->
-
 See [The Dashboard](../the-admin-app/#the-dashboard).
 
 ## When Something Goes Wrong
 
 Start with **Errors**. It has each fault with its latest message, its stack and the documents it names, however often
-it happened, and **Show in Server Log** opens the log it was written to, searching it for the fault, for what happened
-around it. A job that failed says so on **Background Jobs**, with its error. The Install manual's
-[Troubleshooting](../../install/troubleshooting/) has what to do when the app doesn't start, which these screens can't
-show.
-
-<!-- P5 docs pass 2 -->
+it happened, and **Show in Server Log** opens the log it was written to, searching it for the first line of the fault's
+latest message, for what happened around it. A job that failed says so on **Background Jobs**, with its error under its
+row. The Install manual's [Troubleshooting](../../install/troubleshooting/) has what to do when the app doesn't start,
+which these screens can't show.
 
 ## What Healdan Records
 
@@ -79,5 +73,3 @@ The Classic Interface's screens for these stay for now:
 - [Server Log](server-log/): the main log and the tasks' logs, live, and **Download**.
 - [Audit Trail](audit-trail/): who did what, what counts as looking at a document, and **Export CSV**.
 - [Background Jobs](background-jobs/): every job, and what each allows.
-
-<!-- P5 docs pass 2 -->

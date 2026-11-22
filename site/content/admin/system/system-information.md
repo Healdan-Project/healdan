@@ -40,8 +40,6 @@ share it.
 alone, as the server wrote them, use **Download** on the Admin app's
 [Server Log](../../monitoring/server-log/#download). This zip holds more:
 
-<!-- P5 docs pass 2 -->
-
 - the server's logs and Tomcat's
 - the server's settings, as it runs with them and as `context.properties` and the other files in its
   configuration folder hold them, and Tomcat's settings

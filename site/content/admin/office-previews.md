@@ -28,8 +28,6 @@ other files. To find out why a file failed, open the Admin app's [Server Log](..
 **Warnings and Errors**, and search for `LibreOffice` or `com.logicaldoc.healdan.preview`. The log is
 `repository/logs/dms.log`.
 
-<!-- P5 docs pass 2 -->
-
 A file that can't be converted is logged as a warning, not an error, so it isn't on the
 [Errors](../monitoring/errors/) screen. A fault that stops the previews themselves is, in its **Previews** area.
 
