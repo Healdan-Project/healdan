@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The logging configuration the Server Log's tests read through LogConfigurator, as the server reads its log.xml.
+	Log4j itself reads log4j2.xml in the tests, not this: nothing writes to these files but the tests. Each test sets
+	the root to a folder of its own under target/ (LogTestHooks). healdan-api's tests copy it, as LogConfigurator reads
+	it as a file. -->
+<Configuration packages="com.logicaldoc.util.log4j">
+	<Properties>
+		<Property name="root"><![CDATA[target/healdan-logs]]></Property>
+		<Property name="pattern">%d{dd.MM.yyyy HH:mm:ss,SSS} %-5p (%C:%4L) -- %m%n</Property>
+		<Property name="dateformat">ISO8601</Property>
+	</Properties>
+	<Appenders>
+		<RollingFile name="DMS_WEB" fileName="${root}/dms_web.log.html" filePattern="${root}/dms_web.log.html.%i">
+			<LDHtmlLayout datePattern="${dateformat}" />
+			<Policies>
+				<SizeBasedTriggeringPolicy size="5 MB" />
+			</Policies>
+			<DefaultRolloverStrategy max="5" />
+		</RollingFile>
+		<RollingFile name="DMS" fileName="${root}/dms.log" filePattern="${root}/dms.log.%i">
+			<PatternLayout>
+				<Pattern>${pattern}</Pattern>
+			</PatternLayout>
+			<Policies>
+				<SizeBasedTriggeringPolicy size="5 MB" />
+			</Policies>
+			<DefaultRolloverStrategy max="5" />
+		</RollingFile>
+		<RollingFile name="IndexerTask_WEB" fileName="${root}/indexertask_web.log.html"
+			filePattern="${root}/indexertask_web.log.html.%i">
+			<LDHtmlLayout datePattern="${dateformat}" />
+			<Policies>
+				<SizeBasedTriggeringPolicy size="5 MB" />
+			</Policies>
+			<DefaultRolloverStrategy max="5" />
+		</RollingFile>
+		<RollingFile name="IndexerTask" fileName="${root}/indexertask.log" filePattern="${root}/indexertask.log.%i">
+			<PatternLayout>
+				<Pattern>${pattern}</Pattern>
+			</PatternLayout>
+			<Policies>
+				<SizeBasedTriggeringPolicy size="5 MB" />
+			</Policies>
+			<DefaultRolloverStrategy max="5" />
+		</RollingFile>
+		<RollingFile name="CMIS_WEB" fileName="${root}/cmis_web.log.html" filePattern="${root}/cmis_web.log.html.%i">
+			<LDHtmlLayout datePattern="${dateformat}" />
+			<Policies>
+				<SizeBasedTriggeringPolicy size="5 MB" />
+			</Policies>
+			<DefaultRolloverStrategy max="5" />
+		</RollingFile>
+		<RollingFile name="CMIS" fileName="${root}/cmis.log" filePattern="${root}/cmis.log.%i">
+			<PatternLayout>
+				<Pattern>${pattern}</Pattern>
+			</PatternLayout>
+			<Policies>
+				<SizeBasedTriggeringPolicy size="5 MB" />
+			</Policies>
+			<DefaultRolloverStrategy max="2" />
+		</RollingFile>
+		<RollingFile name="Notifier" fileName="${root}/notifier.log" filePattern="${root}/notifier.log.%i">
+			<PatternLayout>
+				<Pattern>${pattern}</Pattern>
+			</PatternLayout>
+			<Policies>
+				<SizeBasedTriggeringPolicy size="5 MB" />
+			</Policies>
+			<DefaultRolloverStrategy max="5" />
+		</RollingFile>
+		<RollingFile name="Notifier_WEB" fileName="${root}/notifier_web.log.html"
+			filePattern="${root}/notifier_web.log.html.%i">
+			<LDHtmlLayout datePattern="${dateformat}" />
+			<Policies>
+				<SizeBasedTriggeringPolicy size="5 MB" />
+			</Policies>
+			<DefaultRolloverStrategy max="5" />
+		</RollingFile>
+		<RollingFile name="SPRING" fileName="${root}/spring.log" filePattern="${root}/spring.log.%i">
+			<PatternLayout>
+				<Pattern>${pattern}</Pattern>
+			</PatternLayout>
+			<Policies>
+				<SizeBasedTriggeringPolicy size="5 MB" />
+			</Policies>
+			<DefaultRolloverStrategy max="5" />
+		</RollingFile>
+		<RollingFile name=".." fileName="${root}/dots.log" filePattern="${root}/dots.log.%i">
+			<PatternLayout>
+				<Pattern>${pattern}</Pattern>
+			</PatternLayout>
+			<Policies>
+				<SizeBasedTriggeringPolicy size="5 MB" />
+			</Policies>
+			<DefaultRolloverStrategy max="5" />
+		</RollingFile>
+		<Console name="console" target="SYSTEM_OUT">
+			<PatternLayout pattern="%m%n" />
+		</Console>
+	</Appenders>
+	<Loggers>
+		<Logger name="com.logicaldoc.core.searchengine.indexer.IndexerTask" level="info" additivity="false">
+			<AppenderRef ref="IndexerTask_WEB" />
+			<AppenderRef ref="IndexerTask" />
+		</Logger>
+		<Logger name="com.logicaldoc.cmis" level="warn" additivity="false">
+			<AppenderRef ref="CMIS" />
+			<AppenderRef ref="CMIS_WEB" />
+		</Logger>
+		<Logger name="com.logicaldoc.cmis.LDRepository" level="info" additivity="true" />
+		<Logger name="com.logicaldoc.notifier.Notifier" level="info" additivity="false">
+			<AppenderRef ref="Notifier" />
+			<AppenderRef ref="Notifier_WEB" />
+		</Logger>
+		<Logger name="org.springframework.security" level="info" additivity="true">
+			<AppenderRef ref="SPRING" />
+		</Logger>
+		<Logger name="com.logicaldoc.core" level="info" additivity="true" />
+		<Root level="info">
+			<AppenderRef ref="DMS" />
+			<AppenderRef ref="DMS_WEB" />
+		</Root>
+	</Loggers>
+</Configuration>

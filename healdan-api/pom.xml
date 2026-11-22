@@ -265,12 +265,13 @@
 			<testResource>
 				<directory>src/test/resources</directory>
 			</testResource>
-			<!-- The tests build healdan-core's test context. CE reads context.properties as a file, so they can't take it
-				from inside healdan-core's test-jar -->
+			<!-- The tests build healdan-core's test context. CE reads context.properties and log.xml as files, so they
+				can't take them from inside healdan-core's test-jar -->
 			<testResource>
 				<directory>../healdan-core/src/test/resources</directory>
 				<includes>
 					<include>context.properties</include>
+					<include>log.xml</include>
 				</includes>
 			</testResource>
 		</testResources>
