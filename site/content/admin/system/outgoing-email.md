@@ -18,9 +18,12 @@ Email**. Until you do, nothing it tries to send goes out.
   It's off to begin with, and Healdan sends it only once outgoing email [counts as set up](#when-email-counts-as-set-up).
   See [The `admin` Alert](../../healdan-settings/#the-admin-alert) and the Install manual's
   [Break Glass](../../../install/sign-in/#break-glass).
-- **Passwords.** A new person's username and password, when whoever adds them ticks **Notify credentials**. And
-  when someone clicks **Lost your password?** on the sign-in page, a link; once they follow it, a new password,
-  which they change when they next sign in.
+- **Passwords.** A new person's username and temporary password, when whoever adds them in the Admin app asks for
+  it to be emailed, and a temporary password from the Admin app's **Reset Password** in the same way: see
+  [The Temporary Password](../../users-and-groups/#the-temporary-password). A new person's username and password,
+  when whoever adds them in the Classic Interface ticks **Notify credentials**. And when someone clicks **Lost your
+  password?** on the sign-in page, a link; once they follow it, a new password, which they change when they next sign
+  in.
 - **A temporary password.** When you unlink a person from a sign-in provider, their account gets a random password,
   and Healdan emails it to them if outgoing email [counts as set up](#when-email-counts-as-set-up) and the account
   has an email address. Otherwise you see it, to pass on. They change it when they next sign in. See
@@ -61,7 +64,8 @@ The `admin` alert and the email of a temporary password go only once outgoing em
 - `smtp.nosend` isn't `true` in `context.properties`, in the configuration volume. It isn't set to begin with.
 
 With either switch off, LogicalDOC drops every email as if it had sent it, so Healdan doesn't count on it: the
-Sign-In tab says the alert needs outgoing email, and unlinking shows you each temporary password instead.
+Sign-In tab says the alert needs outgoing email, and unlinking, New User and Reset Password show you each temporary
+password instead.
 
 ## Testing It
 
@@ -78,7 +82,7 @@ the **Language** first. Select a template to change its wording, and click **Sav
 |---|---|
 | `bfa.alert` | the sign-in throttle's alert, which Healdan adds |
 | `newdevice` | a sign-in from a new device |
-| `psw.rec1` | a username and password: a new person's, a new one after a password reset, or the temporary password of an account unlinked from a sign-in provider |
+| `psw.rec1` | a username and password: a new person's, a new one after a password reset, the temporary password from the Admin app's New User or Reset Password, or the temporary password of an account unlinked from a sign-in provider |
 | `psw.rec2` | the link a password reset starts with |
 | `signin.adminalert` | the alert that `admin` signed in with its password, which Healdan adds |
 | `newdoc`, `checkin` | the notice to people chosen on **Notify users** |

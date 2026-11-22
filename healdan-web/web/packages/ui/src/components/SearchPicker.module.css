@@ -21,15 +21,24 @@
   font-weight: var(--hd-weight-bold);
 }
 
+/* The box the rows scroll in, a stop of its own while they do (SearchPicker.tsx) */
+.scroll {
+  max-height: 30dvh;
+  overflow: auto;
+  border: 1px solid var(--hd-line);
+  border-radius: var(--hd-radius);
+}
+
+.scroll:focus-visible {
+  outline: var(--hd-focus-outline);
+  outline-offset: var(--hd-focus-offset);
+}
+
 .list {
   display: flex;
   flex-direction: column;
   gap: var(--hd-space-1);
-  max-height: 30dvh;
   padding: var(--hd-space-1);
-  overflow: auto;
-  border: 1px solid var(--hd-line);
-  border-radius: var(--hd-radius);
   outline: none;
 }
 

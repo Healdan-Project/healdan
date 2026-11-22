@@ -17,13 +17,18 @@ weight: 13
 - **No HTTPS on its own.** The app speaks plain HTTP, so anything beyond the machine running Docker goes through a
   [reverse proxy](../reverse-proxy/).
 - **Signed-in Devices lists device sign-ins only.** The app's **Signed-in Devices** shows a person the sign-ins of
-  their Healdan Helper on each Mac, and any program signed in through the API with a password, and revokes them one by one. It doesn't list the web page's own sessions, which
-  **Sign Out** ends, or LogicalDOC's API keys. Changing a person's password or disabling them signs every device out.
-  For a lost device, also delete any LogicalDOC API keys the person doesn't recognise, under the person icon,
-  **Security → API Keys** in the Classic Interface: a key outlasts a password change. Sessions already open in the web
-  page or with a key stay open until an administrator kills them. See
-  [Healdan Settings](../../admin/healdan-settings/#device-sign-ins) and the User Guide's
-  [Signed-in Devices](../../user/getting-started/signed-in-devices/).
+  their Healdan Helper on each Mac, and any program signed in through the API with a password, and revokes them one by
+  one. It doesn't list the web page's own sessions, which **Sign Out** ends, or LogicalDOC's API keys. Changing a
+  person's password or disabling them signs every device out, and **Sign Out Everywhere**, on their page in the Admin
+  app, signs out every device and closes their open sessions too. For a lost device, also delete any LogicalDOC API
+  keys the person doesn't recognise, under the person icon, **Security → API Keys** in the Classic Interface: a key
+  outlasts a password change. See [Healdan Settings](../../admin/healdan-settings/#device-sign-ins) and the User
+  Guide's [Signed-in Devices](../../user/getting-started/signed-in-devices/).
+- **The Admin app leaves a person's LogicalDOC API keys.** **Reset Password** and **Sign Out Everywhere**, on a person's
+  page, don't delete them: a key the person made signs in again once they've chosen their new password after a reset,
+  and straight away after Sign Out Everywhere, until it's deleted. Only the key's owner can delete it, under the person
+  icon, **Security → API Keys** in the Classic Interface. While the account is disabled, no key signs it in. See
+  [Reset Password](../../admin/users-and-groups/#reset-password).
 - **Microsoft Entra ID is experimental.** Signing in through Entra ID hasn't been tried against a real Entra tenant
   yet, only through Authentik and a stand-in provider. See [Microsoft Entra ID](../sign-in/entra-id/).
 - **Provider accounts have no password.** An account that signs in through a provider, such as Microsoft Entra ID,
@@ -192,13 +197,14 @@ weight: 13
 
 ## The Admin App
 
-- **The Dashboard, clients, matters, templates, Stores and storage backends so far.** The Admin app at `/admin/` has
-  its Dashboard, the clients and matters with a page for each, each matter's workspace, the workspace templates, the
-  Stores with a page for each, and the storage backends. Users and groups, the permissions of documents, Healdan
-  Settings, scheduled tasks, search and indexing and the server's log are all in the Classic Interface, which the
-  Admin app's left pane and its links open. A Store's **Who Can See It** adds groups, not people: to let one person
-  see a Store, add a group they're in. The Admin app's find opens a client's or a matter's page in the Admin app, but
-  the Classic Interface for a person, not the person it found. See [The Admin App](../../admin/the-admin-app/).
+- **The Dashboard, clients, matters, templates, Stores, storage backends, users and groups so far.** The Admin app at
+  `/admin/` has its Dashboard, the clients and matters with a page for each, each matter's workspace, the workspace
+  templates, the Stores with a page for each, the storage backends, and the users and groups with a page for each. The
+  permissions of documents, Healdan Settings, scheduled tasks, search and indexing and the server's log are all in the
+  Classic Interface, which the Admin app's left pane and its links open, and so are the Security settings, making
+  read-only accounts, deleting accounts and unlinking one from its sign-in provider. A Store's **Who Can See It** adds
+  groups, not people: to let one person see a Store, add a group they're in. See
+  [The Admin App](../../admin/the-admin-app/) and [Users and Groups](../../admin/users-and-groups/).
 - **For the `admin` group only.** A group given Administration screens through the Classic Interface's menus doesn't
   get the Admin app, and keeps using those screens there.
 - **As the User app,** it needs a [secure address](#the-user-app) and a host name of its own, is made for current

@@ -7,8 +7,8 @@ import { ErrorPanel, useApi } from '@healdan/shell'
 import { Button, Dialog, formatCount, toast } from '@healdan/ui'
 import { adminKeys } from '../queries'
 import { t } from '../strings'
-import { useRefusalFor } from '../strings/refusals'
 import { stuckKey, useStuckFiles } from './queries'
+import { Refusal } from '../forms/Refusal'
 import styles from './Storage.module.css'
 
 export interface StuckFilesProps {
@@ -27,7 +27,7 @@ export interface StuckFilesProps {
 /**
  * Retry (spec 8.6): every stuck file at the route goes back to waiting, its tries counted from nought again, and the
  * mover is woken. It changes something, so the caller holds what it's in while `busy`; a refusal is `failure`, said with
- * useRefusalFor. Once done, the list at `list` and the Dashboard are asked again, and `onRetried` runs.
+ * Refusal. Once done, the list at `list` and the Dashboard are asked again, and `onRetried` runs.
  */
 export function useStuckRetry({ list, retry, retried, onRetried }: Pick<StuckFilesProps, 'list' | 'retry' | 'retried' | 'onRetried'>) {
   const api = useApi()
@@ -117,7 +117,6 @@ export interface StuckFilesDialogProps extends StuckFilesProps {
  * outside do nothing.
  */
 export function StuckFilesDialog({ title, onClose, ...props }: StuckFilesDialogProps) {
-  const refusalFor = useRefusalFor()
   const retrying = useStuckRetry(props)
   const files = useStuckFiles(props.list)
   const any = props.stuck > 0 || (files.data?.length ?? 0) > 0
@@ -128,11 +127,7 @@ export function StuckFilesDialog({ title, onClose, ...props }: StuckFilesDialogP
         <div className={styles.form}>
           <p className={styles.line}>{t('admin.stuck.about')}</p>
           <StuckFiles list={props.list} stuck={props.stuck} />
-          {retrying.failure !== undefined && (
-            <p className={styles.refusal} role="alert">
-              {refusalFor(retrying.failure)}
-            </p>
-          )}
+          <Refusal failure={retrying.failure} />
           <div className={styles.buttons}>
             <Button onPress={close} isDisabled={retrying.busy}>
               {t('admin.recoveryKey.close')}

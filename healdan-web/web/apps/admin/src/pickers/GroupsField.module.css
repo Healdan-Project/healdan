@@ -1,0 +1,106 @@
+/* SPDX-FileCopyrightText: 2026 The Healdan Project
+   SPDX-License-Identifier: LGPL-3.0-only */
+
+/* A list of groups, each with Remove, above the search that adds more: New Store's and a Store's who can see it, and a
+   person's groups */
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hd-space-3);
+  min-width: 0;
+}
+
+.who {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hd-space-2);
+}
+
+/* As a field's label (Fields.module.css) */
+.label {
+  margin: 0;
+  color: var(--hd-text-secondary);
+  font-size: var(--hd-font-size-small);
+}
+
+.note {
+  margin: 0;
+  color: var(--hd-text-secondary);
+  font-size: var(--hd-font-size-small);
+}
+
+.chosen {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hd-space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.group {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--hd-space-3);
+  min-height: 28px;
+  padding-inline-start: var(--hd-space-3);
+  border: 1px solid var(--hd-line);
+  border-radius: var(--hd-radius);
+}
+
+/* The name, and what's said of it under it */
+.groupText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: var(--hd-space-1) 0;
+}
+
+.groupName {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--hd-space-2);
+  min-width: 0;
+}
+
+.groupName svg {
+  color: var(--hd-text-secondary);
+}
+
+.nameText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A name that opens the group's page */
+.link {
+  color: var(--hd-accent-text);
+}
+
+.link:focus-visible {
+  outline: var(--hd-focus-outline);
+  outline-offset: var(--hd-focus-offset);
+  border-radius: var(--hd-radius-small);
+}
+
+/* Why it can't be removed, where its Remove would be */
+.locked {
+  flex: 0 1 auto;
+  padding: var(--hd-space-1) var(--hd-space-3);
+  color: var(--hd-text-secondary);
+  font-size: var(--hd-font-size-small);
+  text-align: end;
+}
+
+/* A group to add: its name, then what it's for, smaller */
+.option {
+  min-width: 0;
+}
+
+.description {
+  font-size: var(--hd-font-size-small);
+}

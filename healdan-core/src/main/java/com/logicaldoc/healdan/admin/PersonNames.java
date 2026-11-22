@@ -36,4 +36,25 @@ public final class PersonNames {
 	public static String of(User user) {
 		return of(user.getFirstName(), user.getName(), user.getUsername());
 	}
+
+	/**
+	 * @param firstName the first name, null for none
+	 * @param lastName the last name, null for none
+	 * @param username the username
+	 * @return how the administration record names a person: their name, with the username, which tells two people of
+	 *         one name apart, such as {@code Ann Lee (alee)}; the username alone when the name is it, as for someone
+	 *         whose first and last names are blank
+	 */
+	public static String recorded(String firstName, String lastName, String username) {
+		String name = of(firstName, lastName, username);
+		return name == null || name.equals(username) ? username : "%s (%s)".formatted(name, username);
+	}
+
+	/**
+	 * @param user a person
+	 * @return how the administration record names them, as {@link #recorded(String, String, String)} gives it
+	 */
+	public static String recorded(User user) {
+		return recorded(user.getFirstName(), user.getName(), user.getUsername());
+	}
 }

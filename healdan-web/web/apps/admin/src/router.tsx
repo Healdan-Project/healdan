@@ -11,12 +11,16 @@ import { BackendView } from './views/BackendView'
 import { ClientView, clientSearch } from './views/ClientView'
 import { ClientsView, clientsSearch } from './views/ClientsView'
 import { DashboardView } from './views/DashboardView'
+import { GroupsView, groupsSearch } from './views/GroupsView'
+import { GroupView } from './views/GroupView'
 import { MattersView, mattersSearch } from './views/MattersView'
 import { MatterView, matterSearch } from './views/MatterView'
 import { StoresView } from './views/StoresView'
 import { StoreView, storeSearch } from './views/StoreView'
 import { TemplatesView } from './views/TemplatesView'
 import { TemplateView } from './views/TemplateView'
+import { UsersView, usersSearch } from './views/UsersView'
+import { UserView } from './views/UserView'
 import { NotFoundView } from './views/NotFoundView'
 
 // The frame holds every page, and an address no page has is said in the frame, in the app's own words. A page reads only
@@ -101,7 +105,61 @@ const backendRoute = createRoute({
   },
 })
 
-const routeTree = rootRoute.addChildren([dashboardRoute, clientsRoute, clientRoute, mattersRoute, matterRoute, templatesRoute, templateRoute, storesRoute, storeRoute, backendsRoute, backendRoute])
+// /users: every person, their filters and order in the address (UsersView); /users/$id, a person's page (UserView), which
+// says itself when the id names nobody
+const usersRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: routes.users,
+  validateSearch: usersSearch,
+  component: function UsersRoute() {
+    return <UsersView search={usersRoute.useSearch()} />
+  },
+})
+
+const userRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: routes.user,
+  component: function UserRoute() {
+    return <UserView id={userRoute.useParams().id} />
+  },
+})
+
+// /groups: every group but the people's own, its words in the address (GroupsView); /groups/$id, a group's page with its
+// members (GroupView), which says itself when the id names no group
+const groupsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: routes.groups,
+  validateSearch: groupsSearch,
+  component: function GroupsRoute() {
+    return <GroupsView search={groupsRoute.useSearch()} />
+  },
+})
+
+const groupRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: routes.group,
+  component: function GroupRoute() {
+    return <GroupView id={groupRoute.useParams().id} />
+  },
+})
+
+const routeTree = rootRoute.addChildren([
+  dashboardRoute,
+  clientsRoute,
+  clientRoute,
+  mattersRoute,
+  matterRoute,
+  templatesRoute,
+  templateRoute,
+  usersRoute,
+  userRoute,
+  groupsRoute,
+  groupRoute,
+  storesRoute,
+  storeRoute,
+  backendsRoute,
+  backendRoute,
+])
 
 /**
  * A view that failed as it drew: the catalogue's short message and Try Again, which asks the server again for what the

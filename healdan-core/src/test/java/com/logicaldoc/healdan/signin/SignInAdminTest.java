@@ -436,7 +436,7 @@ public class SignInAdminTest extends AbstractHealdanTestCase {
 	@Test
 	public void testUnlinkTriesAgainWhenATemporaryPasswordFailsTheRules() throws Exception {
 		List<String> made = new ArrayList<>(List.of(WEAK, STRONG));
-		SignInAdmin.generator = tenant -> made.remove(0);
+		TemporaryPasswords.generator = tenant -> made.remove(0);
 
 		String password = SignInAdmin.get().unlink(jane.getId(), admin);
 
@@ -447,7 +447,7 @@ public class SignInAdminTest extends AbstractHealdanTestCase {
 
 	@Test
 	public void testUnlinkRefusedWhenTwoTemporaryPasswordsFailTheRules() throws Exception {
-		SignInAdmin.generator = tenant -> WEAK;
+		TemporaryPasswords.generator = tenant -> WEAK;
 		String before = storedPassword(jane);
 
 		Exception e = assertThrows(PersistenceException.class, () -> SignInAdmin.get().unlink(jane.getId(), admin));

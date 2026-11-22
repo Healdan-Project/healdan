@@ -17,7 +17,7 @@ import { StorageSettingsForm } from '../storage/StorageSettingsForm'
 import { StuckFilesDialog, useStuckRetry } from '../storage/StuckFiles'
 import { keyShownOf, kindOf, statusDot, statusLine, stuckOf, waitingOf, whereOf } from '../storage/text'
 import { t } from '../strings'
-import { useRefusalFor } from '../strings/refusals'
+import { Refusal } from '../forms/Refusal'
 import clientStyles from '../clients/Clients.module.css'
 import styles from '../storage/Storage.module.css'
 
@@ -213,7 +213,6 @@ function OtherFiles({ files }: { files: A['PendingFiles'] }) {
   const queryClient = useQueryClient()
   const headingId = useId()
   const heading = useRef<HTMLHeadingElement>(null)
-  const refusalFor = useRefusalFor()
   const [listing, setListing] = useState(false)
   const counted = () => void queryClient.invalidateQueries({ queryKey: storageKeys.backends })
   const retried = t('admin.stuck.otherRetried')
@@ -238,11 +237,7 @@ function OtherFiles({ files }: { files: A['PendingFiles'] }) {
           </Button>
         </div>
       )}
-      {retrying.failure !== undefined && (
-        <p className={styles.refusal} role="alert">
-          {refusalFor(retrying.failure)}
-        </p>
-      )}
+      <Refusal failure={retrying.failure} />
       {listing && (
         <StuckFilesDialog
           title={t('admin.stuck.otherTitle')}

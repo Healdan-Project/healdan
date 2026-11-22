@@ -8,8 +8,8 @@ import { idFrom, useApi } from '@healdan/shell'
 import { Button, Dialog, SelectField, toast } from '@healdan/ui'
 import { useStores } from '../queries'
 import { t } from '../strings'
-import { useRefusalFor } from '../strings/refusals'
 import { matterChanged } from './changed'
+import { Refusal } from '../forms/Refusal'
 import styles from '../clients/Clients.module.css'
 
 type A = adminComponents['schemas']
@@ -29,7 +29,6 @@ export interface MoveMatterDialogProps {
 export function MoveMatterDialog({ matter, onClose }: MoveMatterDialogProps) {
   const api = useApi()
   const queryClient = useQueryClient()
-  const refusalFor = useRefusalFor()
   const stores = useStores()
   const [storeId, setStoreId] = useState('')
   const [failure, setFailure] = useState<unknown>()
@@ -81,11 +80,7 @@ export function MoveMatterDialog({ matter, onClose }: MoveMatterDialogProps) {
             }}
           />
           <p className={styles.note}>{t('admin.moveMatter.note')}</p>
-          {failure !== undefined && (
-            <p className={styles.refusal} role="alert">
-              {refusalFor(failure)}
-            </p>
-          )}
+          <Refusal failure={failure} />
           <div className={styles.buttons}>
             <Button onPress={close} isDisabled={busy}>
               {t('common.cancel')}

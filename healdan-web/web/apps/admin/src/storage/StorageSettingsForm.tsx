@@ -10,6 +10,7 @@ import { t } from '../strings'
 import type { AdminStringKey } from '../strings/en-US'
 import { useRefusalFor } from '../strings/refusals'
 import { storageKeys } from './queries'
+import { Refusal } from '../forms/Refusal'
 import styles from './Storage.module.css'
 
 type A = adminComponents['schemas']
@@ -104,11 +105,7 @@ export function StorageSettingsForm({ settings }: { settings: A['StorageSettings
               />
             )
           })}
-          {refusal !== undefined && (
-            <p className={styles.refusal} role="alert">
-              {refusal}
-            </p>
-          )}
+          <Refusal>{refusal}</Refusal>
           <div className={styles.row}>
             <Button type="submit" variant="default" isDisabled={!ready} isPending={busy}>
               {t('admin.storageSettings.save')}

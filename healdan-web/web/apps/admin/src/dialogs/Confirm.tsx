@@ -4,7 +4,7 @@
 import { useId, useState, type ReactNode } from 'react'
 import { Button, Dialog } from '@healdan/ui'
 import { t } from '../strings'
-import { useRefusalFor } from '../strings/refusals'
+import { Refusal } from '../forms/Refusal'
 import styles from '../clients/Clients.module.css'
 
 export interface ConfirmProps {
@@ -27,7 +27,6 @@ export interface ConfirmProps {
  */
 export function Confirm({ title, confirm, children, run, onClose }: ConfirmProps) {
   const describedBy = useId()
-  const refusalFor = useRefusalFor()
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<unknown>()
 
@@ -51,11 +50,7 @@ export function Confirm({ title, confirm, children, run, onClose }: ConfirmProps
           <div id={describedBy} className={styles.form}>
             {children}
           </div>
-          {failure !== undefined && (
-            <p className={styles.refusal} role="alert">
-              {refusalFor(failure)}
-            </p>
-          )}
+          <Refusal failure={failure} />
           <div className={styles.buttons}>
             <Button onPress={close} isDisabled={busy}>
               {t('common.cancel')}

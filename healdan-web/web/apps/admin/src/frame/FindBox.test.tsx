@@ -79,13 +79,13 @@ describe('Find a client, matter or person', () => {
     expect((box() as HTMLInputElement).value).toBe('')
   })
 
-  it('opens a person who is clicked in the Classic Interface, where people are managed until their screens ship', async () => {
+  it('opens a person who is clicked at their page here, inside the app (P4-R18)', async () => {
     const { router } = await renderApp('/', routes)
     const user = userEvent.setup()
     await user.type(box(), 'sal')
     await user.click(await screen.findByRole('option', { name: /Priya Nair/ }))
-    await waitFor(() => expect(goTo).toHaveBeenCalledWith('/frontend.jsp'))
-    expect(router.state.location.pathname).toBe('/')
+    await waitFor(() => expect(router.state.location.pathname).toBe('/users/7'))
+    expect(goTo).not.toHaveBeenCalled()
   })
 
   it("opens the first thing found on Enter when the arrow keys have picked none: here the client, at its page", async () => {
@@ -124,13 +124,12 @@ describe('Find a client, matter or person', () => {
   })
 })
 
-// Phase 2 shipped the Clients and Matters screens, so a client and a matter open at their pages here; Users ship in Phase 4,
-// so a person still opens the Classic Interface. A matter isn't opened in the User app: the find gives its id, and the User
-// app's addresses need its folder's.
+// A client, a matter and a person each open at their page here. A matter isn't opened in the User app: the find gives its
+// id, and the User app's addresses need its folder's.
 describe('Where a find opens each kind', () => {
-  it("is a client's or a matter's page here, by its id, and the Classic Interface for a person until Users ships", () => {
+  it("is a client's, a matter's or a person's page here, by its id", () => {
     expect(destinationOf({ kind: 'client', client: found.clients[0]! })).toBe('/admin/clients/1')
     expect(destinationOf({ kind: 'matter', matter: found.matters[0]! })).toBe('/admin/matters/11')
-    expect(destinationOf({ kind: 'person', person: found.people[0]! })).toBe('/frontend.jsp')
+    expect(destinationOf({ kind: 'person', person: found.people[0]! })).toBe('/admin/users/7')
   })
 })

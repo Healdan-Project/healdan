@@ -8,7 +8,6 @@ import { ErrorPanel, useApi } from '@healdan/shell'
 import { Button, Icon, SelectField, toast, VisuallyHidden } from '@healdan/ui'
 import { Confirm } from '../dialogs/Confirm'
 import { plural, t } from '../strings'
-import { useRefusalFor } from '../strings/refusals'
 import { AddPersonOrGroup } from './AddPersonOrGroup'
 import { useEditState } from './edits'
 import { EveryPermission } from './EveryPermission'
@@ -17,6 +16,7 @@ import { levelOf, NAMED_LEVELS, permissionsOf, type FolderLevel, type NamedLevel
 import { useFolderAccess, workspaceChanged, workspaceKeys } from './queries'
 import { andList } from './text'
 import { below, findNode, followersOf, type WorkspaceNode } from './tree'
+import { Refusal } from '../forms/Refusal'
 import page from '../matters/MatterPage.module.css'
 import styles from './Workspace.module.css'
 
@@ -75,7 +75,6 @@ const ADD = 'add'
 function AccessEditor({ node, root, parent, kind, warnings, access, headingId }: AccessPanelProps & { access: A['FolderAccess']; headingId: string }) {
   const api = useApi()
   const queryClient = useQueryClient()
-  const refusalFor = useRefusalFor()
   // The rows being changed; null while they're the server's
   const [draft, setDraft] = useState<Grant[] | null>(null)
   const [settingOwn, setSettingOwn] = useState(false)
@@ -302,11 +301,7 @@ function AccessEditor({ node, root, parent, kind, warnings, access, headingId }:
           </span>
         )}
       </div>
-      {failure !== undefined && (
-        <p className={styles.problem} role="alert">
-          {refusalFor(failure)}
-        </p>
-      )}
+      <Refusal failure={failure} />
       {access.canApplyToSubfolders && dirty && <p className={styles.note}>{t('admin.access.applySaveFirst')}</p>}
       {ownerStays && editable && <p className={styles.note}>{t('admin.access.ownerStays')}</p>}
       {kind === 'matter' && editable && <p className={styles.note}>{t('admin.access.narrows')}</p>}

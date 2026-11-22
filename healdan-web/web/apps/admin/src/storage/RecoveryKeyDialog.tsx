@@ -6,8 +6,8 @@ import { useEffect, useId, useRef, useState, type RefObject } from 'react'
 import { apiPath, type adminComponents } from '@healdan/api'
 import { ErrorPanel, useApi } from '@healdan/shell'
 import { Button, Dialog, formatDateTime, Icon, TextField, toast } from '@healdan/ui'
+import { Refusal } from '../forms/Refusal'
 import { t } from '../strings'
-import { useRefusalFor } from '../strings/refusals'
 import { backendsChanged, useKeyEvents } from './queries'
 import styles from './Storage.module.css'
 
@@ -76,15 +76,6 @@ function useKeyChange(backend: A['Backend'], route: 'confirm' | 'enter', done: s
   return { run, busy, failure, clear: () => setFailure(undefined) }
 }
 
-function Refusal({ failure }: { failure: unknown }) {
-  const refusalFor = useRefusalFor()
-  return failure === undefined ? null : (
-    <p className={styles.refusal} role="alert">
-      {refusalFor(failure)}
-    </p>
-  )
-}
-
 /**
  * The key in two lines of its groups, as the Storage tab draws it, with Copy. A copy the browser refuses (no permission,
  * or the page not in front) says so beside the key, which never goes into what it says.
@@ -120,11 +111,7 @@ function KeyText({ recoveryKey }: { recoveryKey: string }) {
           </Button>
         )}
       </div>
-      {refused && (
-        <p className={styles.refusal} role="alert">
-          {t('admin.recoveryKey.copyFailed')}
-        </p>
-      )}
+      {refused && <Refusal>{t('admin.recoveryKey.copyFailed')}</Refusal>}
     </>
   )
 }

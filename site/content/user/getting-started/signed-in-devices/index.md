@@ -11,7 +11,8 @@ signed in and end any sign-in you don't want.
 ## Opening the List
 
 Open your menu, under your initials in the top bar, and choose **Signed-in Devices**. The list is yours alone: nobody
-else's sign-ins show in it, and nobody else sees yours.
+else's sign-ins show in it. Only an administrator sees yours too, and can revoke them, from your page in the Admin
+app.
 
 ![The Signed-in Devices window with two devices: Healdan Helper on MacBook, signed in on 12 Nov 2026 at 05:13 and last used at 05:13, and Healdan Helper on Office PC, signed in at 05:13 and last used at 05:19, each expiring on 12 Nov 2027 at 05:13, each with a Revoke button, and a Close button under them](signed-in-devices.png)
 

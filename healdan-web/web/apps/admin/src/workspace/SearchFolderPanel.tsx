@@ -7,10 +7,10 @@ import { apiPath, type adminComponents } from '@healdan/api'
 import { ErrorPanel, idFrom, useApi } from '@healdan/shell'
 import { Button, CheckField, SelectField, TextField, toast } from '@healdan/ui'
 import { t } from '../strings'
-import { useRefusalFor } from '../strings/refusals'
 import { useEditState } from './edits'
 import { useFolderProperties, useSearchFolder, workspaceChanged, workspaceKeys } from './queries'
 import type { WorkspaceNode } from './tree'
+import { Refusal } from '../forms/Refusal'
 import styles from './Workspace.module.css'
 
 type A = adminComponents['schemas']
@@ -141,7 +141,6 @@ export function SearchFolderPanel({ node, root, kind }: SearchFolderPanelProps) 
 function RuleForm({ folder, node, root, kind }: { folder: A['SearchFolder'] } & SearchFolderPanelProps) {
   const api = useApi()
   const queryClient = useQueryClient()
-  const refusalFor = useRefusalFor()
   const { classes, subclasses } = useClassOptions(root.id)
   const initial = draftOfRule(folder.rule)
   const [draft, setDraft] = useState<RuleDraft | null>(null)
@@ -195,11 +194,7 @@ function RuleForm({ folder, node, root, kind }: { folder: A['SearchFolder'] } & 
           }}
         />
       </fieldset>
-      {failure !== undefined && (
-        <p className={styles.problem} role="alert">
-          {refusalFor(failure)}
-        </p>
-      )}
+      <Refusal failure={failure} />
       <div className={styles.buttons}>
         <Button ref={saveButton} type="submit" variant="default" isDisabled={!dirty || rule === undefined} isPending={busy}>
           {t('admin.searchFolder.save')}

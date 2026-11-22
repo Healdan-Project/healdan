@@ -160,11 +160,6 @@
   font-size: var(--hd-font-size-small);
 }
 
-.refusal {
-  margin: 0;
-  color: var(--hd-required);
-}
-
 .buttons {
   display: flex;
   flex-wrap: wrap;

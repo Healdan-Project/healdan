@@ -5,15 +5,14 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useId, useRef, useState } from 'react'
 import { apiPath, type adminComponents } from '@healdan/api'
 import { ErrorPanel, useApi } from '@healdan/shell'
-import { Button, Highlight, Icon, SearchPicker, toast } from '@healdan/ui'
+import { Button, toast } from '@healdan/ui'
+import { Refusal } from '../forms/Refusal'
+import { GroupsField } from '../pickers/GroupsField'
 import { plural, t } from '../strings'
-import { useRefusalFor } from '../strings/refusals'
 import { useEditState } from '../workspace/edits'
 import { andList } from '../workspace/text'
 import workspace from '../workspace/Workspace.module.css'
 import { storeKeys, storesChanged, useStoreAccess } from './queries'
-import { useGroupPicker } from './useGroupPicker'
-import styles from './Stores.module.css'
 
 type A = adminComponents['schemas']
 
@@ -44,9 +43,6 @@ function sameReaders(one: readonly Reader[], other: readonly Reader[]): boolean 
   const ids = new Set(one.map((reader) => reader.groupId))
   return one.length === other.length && other.every((reader) => ids.has(reader.groupId))
 }
-
-/** Where the focus goes once the last reader is removed, or Discard Changes goes: Add a Group */
-const ADD = 'add'
 
 /**
  * Who Can See It, on a Store's page (spec 8.6): each group and person that can see the Store, its one level, Can See, and
@@ -80,16 +76,13 @@ export function StoreAccessPanel({ store }: { store: Pick<A['StoreInfo'], 'id' |
 function AccessEditor({ store, access }: { store: Pick<A['StoreInfo'], 'id' | 'name'>; access: A['StoreAccess'] }) {
   const api = useApi()
   const queryClient = useQueryClient()
-  const refusalFor = useRefusalFor()
-  const groups = useGroupPicker()
   // Who can see it, being changed; null while it's the server's
   const [draft, setDraft] = useState<Reader[] | null>(null)
   const [failure, setFailure] = useState<unknown>()
   const [busy, setBusy] = useState(false)
-  // Where the focus goes once a reader is removed, and its Remove with it: the next one's Remove, or Add a Group
-  const removeButtons = useRef(new Map<number, HTMLButtonElement>())
+  // Where the focus goes once Discard Changes goes: Add a Group
   const addField = useRef<HTMLInputElement>(null)
-  const refocus = useRef<number | typeof ADD | undefined>(undefined)
+  const refocus = useRef(false)
 
   const original = readersOf(access)
   const unlisted = unlistedOf(access)
@@ -101,12 +94,11 @@ function AccessEditor({ store, access }: { store: Pick<A['StoreInfo'], 'id' | 'n
   // The page asks before it's left over a change unsaved, or a save on its way
   useEditState('access', dirty, busy)
 
-  // Once the list is drawn without the one removed, or Discard Changes has gone
+  // Once Discard Changes has gone
   useEffect(() => {
-    const key = refocus.current
-    if (key === undefined) return
-    refocus.current = undefined
-    ;(key === ADD ? addField.current : removeButtons.current.get(key))?.focus()
+    if (!refocus.current) return
+    refocus.current = false
+    addField.current?.focus()
   })
 
   function change(next: Reader[]) {
@@ -114,11 +106,8 @@ function AccessEditor({ store, access }: { store: Pick<A['StoreInfo'], 'id' | 'n
     setFailure(undefined)
   }
 
-  function remove(reader: Reader) {
-    const index = readers.findIndex((one) => one.groupId === reader.groupId)
-    const rest = readers.filter((one) => one.groupId !== reader.groupId)
-    refocus.current = rest[index]?.groupId ?? ADD
-    change(rest)
+  function remove(groupId: number) {
+    change(readers.filter((one) => one.groupId !== groupId))
   }
 
   async function save() {
@@ -145,67 +134,26 @@ function AccessEditor({ store, access }: { store: Pick<A['StoreInfo'], 'id' | 'n
       <p className={workspace.note}>{t('admin.storeAccess.about')}</p>
       {/* Held while a save is on its way, so nothing changed meanwhile is dropped under its Saved */}
       <fieldset disabled={busy} className={workspace.hold}>
-        {readers.length === 0 ? (
-          <p className={workspace.note}>{t('admin.newStore.nobody')}</p>
-        ) : (
-          <ul aria-label={t('admin.storeAccess.list', { name: store.name })} className={styles.chosen}>
-            {readers.map((reader) => (
-              <li key={reader.groupId} className={styles.group}>
-                <span className={`${styles.groupName} ${workspace.who}`}>
-                  <Icon name={reader.person ? 'user' : 'usersGroup'} size={14} />
-                  {reader.name}
-                  {reader.custom && (
-                    <>
-                      {' '}
-                      <span className={workspace.chip}>{t('admin.storeAccess.custom')}</span>
-                    </>
-                  )}
-                </span>
-                <Button
-                  variant="quiet"
-                  isDisabled={busy}
-                  aria-label={t('admin.newStore.remove', { name: reader.name })}
-                  ref={(button) => {
-                    if (button) removeButtons.current.set(reader.groupId, button)
-                    else removeButtons.current.delete(reader.groupId)
-                  }}
-                  onPress={() => remove(reader)}
-                >
-                  <Icon name="close" size={14} />
-                </Button>
-              </li>
-            ))}
-          </ul>
-        )}
-        {readers.some((reader) => reader.custom) && <p className={workspace.note}>{t('admin.storeAccess.customNote')}</p>}
-        {removed.length > 0 && <p className={workspace.note}>{plural('admin.storeAccess.unlisted', removed.length, { names: andList(removed) })}</p>}
-        <SearchPicker<A['Group']>
-          label={t('admin.newStore.add')}
-          placeholder={t('admin.newStore.find')}
+        <GroupsField
+          listLabel={t('admin.storeAccess.list', { name: store.name })}
+          items={readers.map((reader) => ({
+            id: reader.groupId,
+            name: reader.name,
+            person: reader.person,
+            tag: reader.custom ? <span className={workspace.chip}>{t('admin.storeAccess.custom')}</span> : undefined,
+          }))}
+          empty={t('admin.newStore.nobody')}
           hint={t('admin.newStore.hint')}
-          initialHeading={t('admin.newStore.groups')}
-          initial={groups.initial}
-          search={groups.search}
-          id={(group) => String(group.id)}
-          render={(group, query) => (
-            <span className={styles.option}>
-              <Highlight text={group.name} query={query} />
-              {group.description && (
-                <>
-                  {' '}
-                  <span className={styles.description}>
-                    <Highlight text={group.description} query={query} />
-                  </span>
-                </>
-              )}
-            </span>
-          )}
-          onPick={(group) => {
+          isDisabled={busy}
+          onAdd={(group) => {
             if (!taken.has(group.id)) change([...readers, { groupId: group.id, name: group.name, person: false, custom: false }])
           }}
-          leaveOut={(group) => taken.has(group.id)}
+          onRemove={(item) => remove(item.id)}
           inputRef={addField}
-        />
+        >
+          {readers.some((reader) => reader.custom) && <p className={workspace.note}>{t('admin.storeAccess.customNote')}</p>}
+          {removed.length > 0 && <p className={workspace.note}>{plural('admin.storeAccess.unlisted', removed.length, { names: andList(removed) })}</p>}
+        </GroupsField>
       </fieldset>
       <div className={workspace.buttons}>
         <span className={`${workspace.buttons} ${workspace.push}`}>
@@ -216,7 +164,7 @@ function AccessEditor({ store, access }: { store: Pick<A['StoreInfo'], 'id' | 'n
                 setDraft(null)
                 setFailure(undefined)
                 // It goes as the change does, and Save is greyed out with it
-                refocus.current = ADD
+                refocus.current = true
               }}
             >
               {t('admin.storeAccess.discard')}
@@ -227,11 +175,7 @@ function AccessEditor({ store, access }: { store: Pick<A['StoreInfo'], 'id' | 'n
           </Button>
         </span>
       </div>
-      {failure !== undefined && (
-        <p className={workspace.problem} role="alert">
-          {refusalFor(failure)}
-        </p>
-      )}
+      <Refusal failure={failure} />
     </>
   )
 }

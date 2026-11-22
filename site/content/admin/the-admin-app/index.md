@@ -8,9 +8,10 @@ what needs your attention, the server's health and how Healdan is used, on one p
 where clients and matters are made, with a page for each client and matter (see
 [Clients and Matters](../clients-and-matters/)); each matter's workspace, its folders and who can use them; the
 workspace templates (see [Workspace Templates](../workspace-templates/)); the Stores, with a page for each (see
-[Stores](../stores/)); and the storage backends, with a page for each (see [Storage Backends](../storage-backends/)).
-Everything else is still done in the Classic Interface, which the rest of this guide describes, and the Admin app links
-there.
+[Stores](../stores/)); the storage backends, with a page for each (see [Storage Backends](../storage-backends/)); and
+the people who sign in and the groups they're in, with a page for each person and group (see
+[Users and Groups](../users-and-groups/)). Everything else is still done in the Classic Interface, which the rest of
+this guide describes, and the Admin app links there.
 
 {{< callout type="warning" >}}
 An administrator can read every document: an account in the `admin` group skips every permission check. Give each
@@ -53,9 +54,9 @@ Interface. See [Reverse Proxy](../../install/reverse-proxy/).
   five matters and five people, each under its heading: clients by name or number; matters by name, or by number,
   such as `1001.1`, with a client's number listing that client's matters; and people by username or name, a disabled
   one marked **Disabled**. Each matter shows its client beside it. The arrow keys and Enter, or a click, choose one,
-  and Enter alone chooses the first. A client opens [its page](../clients-and-matters/#a-clients-page) and a matter
-  [its page](../clients-and-matters/#a-matters-page), here in the Admin app; a person opens the Classic Interface for
-  now.
+  and Enter alone chooses the first. A client opens [its page](../clients-and-matters/#a-clients-page), a matter
+  [its page](../clients-and-matters/#a-matters-page) and a person [their page](../users-and-groups/#a-persons-page),
+  here in the Admin app.
 - **Open Healdan** opens the User app.
 - **The ? (Help) button** opens a menu with **Admin Guide**, which opens this page, and **Open-Source Notices**; each
   opens in a new window.
@@ -64,10 +65,10 @@ Interface. See [Reverse Proxy](../../install/reverse-proxy/).
 ### The Left Pane
 
 The left pane has what the Admin app has so far: **Dashboard**; under **Firm**, **Clients**, **Matters**, which
-takes your install's word for matters, such as **Projects**, and **Workspace Templates**; under **Storage**,
-**Stores** and **Backends**; and at its foot **Classic Interface**, which opens the Classic Interface, in the same
-window, for everything else. The entry for the screen you're on is marked, and so is a list's entry while one of its
-pages is open, such as **Matters** for a matter's page.
+takes your install's word for matters, such as **Projects**, and **Workspace Templates**; under **People**, **Users**
+and **Groups**; under **Storage**, **Stores** and **Backends**; and at its foot **Classic Interface**, which opens the
+Classic Interface, in the same window, for everything else. The entry for the screen you're on is marked, and so is
+a list's entry while one of its pages is open, such as **Matters** for a matter's page.
 
 An entry shows a count where something there needs attention: **Backends**, how many storage backends can't be
 reached or are failing, as Needs Attention counts them (below). The count is asked for when the Admin app opens and
@@ -104,7 +105,7 @@ app. With nothing to report, it says "Nothing needs your attention."
 | "3 files are stuck moving to storage" | files Healdan gave up moving to their Store's storage backend: see [Stuck Files and Retry](../storage-backends/waiting-and-stuck-files/#stuck-files-and-retry) |
 | "1 storage backend can't be reached" | a storage backend Healdan can't reach now, or that's failing for another reason, so Healdan can't use it: see [When a Backend Fails](../storage-backends/when-a-backend-fails/) |
 | "12 documents couldn't be indexed, so search won't find their text" | documents the [Indexer](../system/scheduled-tasks/) failed on at its last try, which it goes on trying: see [Search and Indexing](../system/search-and-indexing/) |
-| "4 unresolved errors in the last 24 hours" | errors the server logged in the last 24 hours that nobody has resolved, an error logged again and again counting once. The server's log is on the **Log** tab of [System Information](../system/system-information/) |
+| "4 unresolved errors in the last 24 hours" | errors the server logged in the last 24 hours that nobody has resolved, an error logged again and again counting once. A refused sign-in, such as one with a password that has to be changed first or a disabled account's, isn't counted: it's a refusal, not a fault. The server's log is on the **Log** tab of [System Information](../system/system-information/) |
 | "2 previews were given up on" | Office previews Healdan gave up making after their last try: see [Office Previews](../office-previews/) |
 | "1 background job failed when it last ran" | a background job that's switched on, Healdan's own work or one of LogicalDOC's [scheduled tasks](../system/scheduled-tasks/), whose last run failed. A scheduled task's run counts as failed when it logged an error while it ran, even one it went on from |
 | "1 background job hasn't run when it should have" | a background job that's switched on and not running, whose next run is late by more than twice the time between its runs, and by an hour at least |
@@ -167,12 +168,14 @@ from. Why is in the server's log.
 
 ## What's Still in the Classic Interface
 
-Everything else, which the rest of this guide describes there: users and groups; the permissions of documents, and
-of a Store beyond who can see it; Healdan Settings with its Sign-In tab; and the screens
-[System](../system/) covers, such as scheduled tasks, search and indexing, outgoing email, reports and the server's
-log. **Classic Interface**, in your menu or at the foot of the left pane, opens it, on the same sign-in. Its own ways
-of making and changing clients, matters and templates still work there too, and so does Healdan Settings' **Storage**
-tab, which does what the Admin app's storage screens do (see
+Everything else, which the rest of this guide describes there: the permissions of documents, and of a Store beyond
+who can see it; Healdan Settings with its Sign-In tab, where an account is unlinked from its sign-in provider; for
+people, the Security settings under **Access Control**, making read-only accounts and deleting accounts (see
+[In the Classic Interface](../users-and-groups/#in-the-classic-interface)); and the screens [System](../system/)
+covers, such as scheduled tasks, search and indexing, outgoing email, reports and the server's log.
+**Classic Interface**, in your menu or at the foot of the left pane, opens it, on the same sign-in. Its own ways of
+making and changing clients, matters, templates, users and groups still work there too, and so does Healdan Settings'
+**Storage** tab, which does what the Admin app's storage screens do (see
 [The Storage Tab in the Classic Interface](../storage-backends/#the-storage-tab-in-the-classic-interface)), and so
 does its Trash, which can restore a deleted Store too (see [Deleted Stores](../stores/#deleted-stores)).
 

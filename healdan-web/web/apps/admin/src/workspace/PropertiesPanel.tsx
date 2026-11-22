@@ -12,6 +12,7 @@ import { useRefusalFor } from '../strings/refusals'
 import { useEditState } from './edits'
 import { useFolderProperties, workspaceChanged, workspaceKeys } from './queries'
 import type { WorkspaceNode } from './tree'
+import { Refusal } from '../forms/Refusal'
 import styles from './Workspace.module.css'
 
 type A = adminComponents['schemas']
@@ -235,11 +236,7 @@ function ValuesForm({ values, node, root, kind }: { values: A['FolderProperties'
           )
         })}
       </fieldset>
-      {refusal !== undefined && (
-        <p className={styles.problem} role="alert">
-          {refusal}
-        </p>
-      )}
+      <Refusal>{refusal}</Refusal>
       <div className={styles.buttons}>
         <Button ref={saveButton} type="submit" variant="default" isDisabled={!dirty || invalid} isPending={busy}>
           {t('admin.properties.save')}

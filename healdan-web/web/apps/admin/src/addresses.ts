@@ -54,6 +54,31 @@ export function templateHref(id: number): string {
   return `${ADMIN_BASE}/templates/${encodeURIComponent(String(id))}`
 }
 
+/** A person's page, with ADMIN_BASE: the user's id, as one segment */
+export function userHref(id: number): string {
+  return `${ADMIN_BASE}/users/${encodeURIComponent(String(id))}`
+}
+
+/**
+ * A group's id as an address or a search parameter gives it (as text, or as the number the router validated before), or
+ * undefined: digits, with a minus first for one of LogicalDOC's own groups, whose ids are negative (`publisher` is -10000),
+ * as a safe integer. @healdan/shell's idFrom, which the User app shares, takes no minus, as no other id the apps read is
+ * negative, so a group's id is read with this one wherever the Admin app reads one.
+ */
+export function groupIdFrom(text: string | number | undefined): number | undefined {
+  const value = typeof text === 'number' ? String(text) : text
+  if (value === undefined || !/^-?\d{1,16}$/.test(value)) return undefined
+  const id = Number(value)
+  if (!Number.isSafeInteger(id)) return undefined
+  // -0 is the group 0
+  return id === 0 ? 0 : id
+}
+
+/** A group's page, with ADMIN_BASE: the group's id, as one segment, a negative one too */
+export function groupHref(id: number): string {
+  return `${ADMIN_BASE}/groups/${encodeURIComponent(String(id))}`
+}
+
 /** A folder in the User app, as Open in Healdan opens a matter's (spec 6.4): its folder's id, as one segment */
 export function userAppFolderHref(folderId: number): string {
   return `/app/folders/${encodeURIComponent(String(folderId))}`

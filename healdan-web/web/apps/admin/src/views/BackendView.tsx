@@ -10,12 +10,13 @@ import { Button, Dialog, formatList, formatSize, Icon, StatusDot, toast } from '
 import { routes } from '../addresses'
 import { Confirm } from '../dialogs/Confirm'
 import { Fact } from '../facts/Fact'
+import { Problems } from '../forms/Problems'
+import { Refusal } from '../forms/Refusal'
 import { BackendDialog } from '../storage/BackendDialog'
 import { backendsChanged, isStorageUnavailable, storageKeys, useBackend } from '../storage/queries'
 import { RecoveryKeyDialog } from '../storage/RecoveryKeyDialog'
 import { filesOf, keyShownOf, kindOf, statusDot, statusWords, whereOf } from '../storage/text'
 import { plural, t } from '../strings'
-import { useRefusalFor } from '../strings/refusals'
 import clientStyles from '../clients/Clients.module.css'
 import page from '../matters/MatterPage.module.css'
 import styles from '../storage/Storage.module.css'
@@ -64,7 +65,6 @@ function Backend({ backend }: { backend: A['Backend'] }) {
   const api = useApi()
   const queryClient = useQueryClient()
   const navigate = useNavigate()
-  const refusalFor = useRefusalFor()
   const [open, setOpen] = useState<Open | null>(null)
   const [testing, setTesting] = useState(false)
   const [tested, setTested] = useState<{ problems: string[] } | { failure: unknown }>()
@@ -145,21 +145,10 @@ function Backend({ backend }: { backend: A['Backend'] }) {
           (tested.problems.length === 0 ? (
             <p>{t('admin.storage.passed')}</p>
           ) : (
-            <>
-              <p>{plural('admin.storage.testFound', tested.problems.length)}</p>
-              <ul>
-                {tested.problems.map((problem, index) => (
-                  <li key={index}>{problem}</li>
-                ))}
-              </ul>
-            </>
+            <Problems lead={plural('admin.storage.testFound', tested.problems.length)} problems={tested.problems} />
           ))}
       </div>
-      {tested !== undefined && 'failure' in tested && (
-        <p className={styles.refusal} role="alert">
-          {refusalFor(tested.failure)}
-        </p>
-      )}
+      {tested !== undefined && 'failure' in tested && <Refusal failure={tested.failure} />}
       <dl className={clientStyles.facts}>
         <Fact term="admin.backend.kind">{kindOf(backend)}</Fact>
         <Fact term="admin.backend.where">{whereOf(backend)}</Fact>

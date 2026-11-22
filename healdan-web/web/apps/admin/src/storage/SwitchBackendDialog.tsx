@@ -12,6 +12,7 @@ import { t } from '../strings'
 import { useRefusalFor } from '../strings/refusals'
 import { useBackends } from './queries'
 import { filesOf } from './text'
+import { Refusal } from '../forms/Refusal'
 import styles from './Storage.module.css'
 
 type A = adminComponents['schemas']
@@ -112,18 +113,12 @@ export function SwitchBackendDialog({ store, current, onClose }: SwitchBackendDi
                     : t('admin.switchBackend.moves', { files: filesOf(counted.files), size: formatSize(counted.bytes), backend: chosen.name })}
                 </p>
               ) : preview.isError ? (
-                <p className={styles.refusal} role="alert">
-                  {refusalFor(preview.error)}
-                </p>
+                <Refusal failure={preview.error} />
               ) : (
                 <p className={styles.muted}>{t('admin.switchBackend.counting')}</p>
               ))}
           </div>
-          {failure !== undefined && (
-            <p className={styles.refusal} role="alert">
-              {refusalFor(failure)}
-            </p>
-          )}
+          <Refusal failure={failure} />
           <div className={styles.buttons}>
             <Button onPress={close} isDisabled={busy}>
               {t('common.cancel')}

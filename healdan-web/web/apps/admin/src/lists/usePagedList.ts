@@ -4,10 +4,13 @@
 import { keepPreviousData, useInfiniteQuery } from '@tanstack/react-query'
 import { useMemo } from 'react'
 import { ASK_ON_RETURN, useApi } from '@healdan/shell'
-import { adminKey, type AdminAnswer } from '../queries'
+import type { AdminAnswer } from '../queries'
 
-/** The lists that come a page at a time, each with when their figures were worked out */
-export type PagedPath = '/v1/admin/clients' | '/v1/admin/matters'
+/**
+ * The lists that come a page at a time: clients and matters, each with when their figures were worked out, people, groups,
+ * and a group's members, whose route names the group by its `{id}`
+ */
+export type PagedPath = '/v1/admin/clients' | '/v1/admin/matters' | '/v1/admin/users' | '/v1/admin/groups' | '/v1/admin/groups/{id}/members'
 
 /** Which way a list's server sorts it */
 export type SortOrder = 'asc' | 'desc'
@@ -20,7 +23,7 @@ export interface PagedListing<T> {
   items: T[]
   /** How many match, loaded or not */
   total?: number
-  /** When the summary that gives the list's figures was worked out; null until it has been */
+  /** When the summary that gives the list's figures was worked out; null until it has been; undefined for a list with none */
   figuresAt?: string | null
   /** Loads the next page; undefined once every row is loaded, and while the rows are an older question's */
   loadMore?: () => void
@@ -34,15 +37,35 @@ export interface PagedListing<T> {
 }
 
 /**
- * A list of the Admin app's, paged (spec 7.2, 8.2, 8.3): TanStack Query's infinite query over the route, `pageSize` rows
- * at a time from an offset, the last question's rows kept while a new one loads, and asked again on each return to the
- * window, as the User app's lists are. `query` is the list's filters and order; it never holds an offset or a limit.
+ * The route with each `{name}` of its path given by `ids`, as one segment, and its key, as adminKey makes one, but with
+ * each id as the number it is: a group's members are under `['admin', 'groups', 7]`, as the group itself is.
  */
-export function usePagedList<P extends PagedPath>(path: P, query: object, pageSize: number): PagedListing<PagedItem<P>> {
+function located(path: PagedPath, ids: Readonly<Record<string, number>>): { url: string; key: readonly unknown[] } {
+  const segments = path.split('/').filter(Boolean)
+  const id = (segment: string) => {
+    const name = /^\{(.+)\}$/.exec(segment)?.[1]
+    return name === undefined ? undefined : ids[name]
+  }
+  if (segments.some((segment) => segment.startsWith('{') && id(segment) === undefined)) throw new Error(`No id for ${path}`)
+  return {
+    url: `/${segments.map((segment) => (id(segment) === undefined ? segment : encodeURIComponent(String(id(segment))))).join('/')}`,
+    // The segments after /v1/admin, as adminKey's
+    key: ['admin', ...segments.slice(2).map((segment) => id(segment) ?? segment)],
+  }
+}
+
+/**
+ * A list of the Admin app's, paged (spec 7.2, 8.2, 8.3, 8.7): TanStack Query's infinite query over the route, `pageSize` rows
+ * at a time from an offset, the last question's rows kept while a new one loads, and asked again on each return to the
+ * window, as the User app's lists are. `query` is the list's filters and order; it never holds an offset or a limit. A
+ * route whose path names something by its id, as a group's members do, has it in `ids`.
+ */
+export function usePagedList<P extends PagedPath>(path: P, query: object, pageSize: number, ids: Readonly<Record<string, number>> = {}): PagedListing<PagedItem<P>> {
   const api = useApi()
+  const { url, key } = located(path, ids)
   const asked = useInfiniteQuery({
-    queryKey: adminKey(path, query),
-    queryFn: ({ pageParam, signal }) => api.get<AdminAnswer<P>>(path, { ...query, offset: pageParam, limit: pageSize }, { signal }),
+    queryKey: [...key, query],
+    queryFn: ({ pageParam, signal }) => api.get<AdminAnswer<P>>(url, { ...query, offset: pageParam, limit: pageSize }, { signal }),
     initialPageParam: 0,
     getNextPageParam: (last) => {
       const next = last.offset + (last.items?.length ?? 0)
@@ -58,7 +81,7 @@ export function usePagedList<P extends PagedPath>(path: P, query: object, pageSi
   return {
     items,
     total: last?.total ?? undefined,
-    figuresAt: last?.figuresAt,
+    figuresAt: last !== undefined && 'figuresAt' in last ? last.figuresAt : undefined,
     // Asked again while a page is coming, it waits for that one rather than asking twice
     loadMore: asked.hasNextPage && !asked.isPlaceholderData ? () => void asked.fetchNextPage({ cancelRefetch: false }) : undefined,
     isLoadingMore: asked.isFetchingNextPage,

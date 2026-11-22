@@ -6,6 +6,8 @@ import { useState, type ReactNode } from 'react'
 import { ApiError, apiPath, type adminComponents } from '@healdan/api'
 import { fieldErrors, useApi } from '@healdan/shell'
 import { Button, CheckField, Dialog, RadioChoices, TextField, toast } from '@healdan/ui'
+import { Problems } from '../forms/Problems'
+import { Refusal } from '../forms/Refusal'
 import { plural, t } from '../strings'
 import { useRefusalFor } from '../strings/refusals'
 import { backendsChanged } from './queries'
@@ -69,17 +71,8 @@ function draftOf(backend: A['Backend'] | undefined): Draft {
 const orNull = (text: string) => (text.trim() === '' ? null : text.trim())
 
 /** "Test found 2 problems:" and each, as text */
-function Problems({ problems }: { problems: string[] }) {
-  return (
-    <>
-      <p>{plural('admin.storage.testFound', problems.length)}</p>
-      <ul>
-        {problems.map((problem, index) => (
-          <li key={index}>{problem}</li>
-        ))}
-      </ul>
-    </>
-  )
+function TestFound({ problems }: { problems: string[] }) {
+  return <Problems lead={plural('admin.storage.testFound', problems.length)} problems={problems} />
 }
 
 /** A setting shown as text, which can't change here, and why */
@@ -284,7 +277,7 @@ export function BackendDialog({ backend, onAdded, onClose }: BackendDialogProps)
     said = (
       <div className={styles.alert} role="alert">
         {outcome.kind === 'not-added' && <p>{t('admin.backendDialog.notAdded')}</p>}
-        <Problems problems={outcome.problems} />
+        <TestFound problems={outcome.problems} />
         {outcome.kind === 'anyway' && <p>{t('admin.backendDialog.anyway')}</p>}
       </div>
     )
@@ -297,11 +290,7 @@ export function BackendDialog({ backend, onAdded, onClose }: BackendDialogProps)
       </div>
     )
   } else if (refusal !== undefined) {
-    said = (
-      <p className={styles.refusal} role="alert">
-        {refusal}
-      </p>
-    )
+    said = <Refusal>{refusal}</Refusal>
   }
 
   // The button that sends: Add or Save, or what the last answer asks
@@ -394,7 +383,7 @@ export function BackendDialog({ backend, onAdded, onClose }: BackendDialogProps)
             )}
           </fieldset>
           <div className={styles.result} role="status">
-            {outcome?.kind === 'tested' && (outcome.problems.length === 0 ? <p>{t('admin.storage.passed')}</p> : <Problems problems={outcome.problems} />)}
+            {outcome?.kind === 'tested' && (outcome.problems.length === 0 ? <p>{t('admin.storage.passed')}</p> : <TestFound problems={outcome.problems} />)}
           </div>
           {said}
           <div className={styles.buttons}>

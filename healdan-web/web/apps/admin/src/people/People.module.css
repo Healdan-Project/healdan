@@ -1,0 +1,214 @@
+/* SPDX-FileCopyrightText: 2026 The Healdan Project
+   SPDX-License-Identifier: LGPL-3.0-only */
+
+/* The Users list's cells, and a person's page as 04-index-users-storage.html draws it: its facts and its sections, two
+   to a row where there's room, each with its heading, the tables of their devices and check-outs, and the temporary
+   password shown once. */
+
+/* A cell's text gives way with an ellipsis, as the Table's own text cells do */
+.cellText,
+.muted {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.muted {
+  color: var(--hd-text-secondary);
+}
+
+/* What's said after a name: Read-Only, or what admin gives */
+.tag {
+  padding: 0 var(--hd-space-2);
+  border-radius: var(--hd-radius-small);
+  background: var(--hd-pill);
+  color: var(--hd-text);
+  font-size: var(--hd-font-size-small);
+}
+
+.warning {
+  color: var(--hd-caution-text);
+  font-size: var(--hd-font-size-small);
+  font-weight: var(--hd-weight-medium);
+}
+
+/* What the page couldn't refresh, and Try Again, under its title */
+.stale {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--hd-space-3);
+  margin: 0 0 var(--hd-space-3);
+  color: var(--hd-text-secondary);
+}
+
+/* The sentences of the actions the server would refuse, under them */
+.refused {
+  margin: 0 0 var(--hd-space-4);
+}
+
+.line {
+  margin: 0;
+}
+
+.note {
+  margin: 0;
+  color: var(--hd-text-secondary);
+  font-size: var(--hd-font-size-small);
+}
+
+/* The page's sections: two to a row where there's room, each its own panel */
+.sections {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
+  gap: var(--hd-space-5);
+  align-items: start;
+  max-width: 1200px;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hd-space-3);
+  min-width: 0;
+  padding: var(--hd-space-4);
+  border: 1px solid var(--hd-line);
+  border-radius: var(--hd-radius);
+  background: var(--hd-window);
+}
+
+/* A section that holds a table takes the whole row */
+.wide {
+  grid-column: 1 / -1;
+}
+
+.sectionTitle {
+  margin: 0;
+  font-size: var(--hd-font-size);
+  font-weight: var(--hd-weight-bold);
+}
+
+/* The details: each name over what it says, in two columns */
+.details {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--hd-space-2) var(--hd-space-5);
+  margin: 0;
+}
+
+.details dt {
+  color: var(--hd-text-secondary);
+}
+
+.details dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.buttons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--hd-space-3);
+}
+
+/* A plain table in a section: the devices, the check-outs */
+.tableBox {
+  max-width: 100%;
+  overflow: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table th,
+.table td {
+  padding: var(--hd-space-2) var(--hd-space-4) var(--hd-space-2) 0;
+  border-bottom: 1px solid var(--hd-line);
+  text-align: start;
+  vertical-align: middle;
+}
+
+.table thead th {
+  color: var(--hd-text-secondary);
+  font-size: var(--hd-font-size-small);
+  font-weight: var(--hd-weight-bold);
+}
+
+.table td {
+  white-space: nowrap;
+}
+
+/* The name takes what the rest leave, and wraps between words */
+.table .name {
+  width: 99%;
+  font-weight: var(--hd-weight-medium);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.end {
+  text-align: end;
+}
+
+/* A device's computer, under its name */
+.deviceId {
+  display: block;
+  color: var(--hd-text-secondary);
+  font-size: var(--hd-font-size-small);
+  font-weight: normal;
+}
+
+.link {
+  color: var(--hd-accent-text);
+}
+
+.link:focus-visible {
+  outline: var(--hd-focus-outline);
+  outline-offset: var(--hd-focus-offset);
+  border-radius: var(--hd-radius-small);
+}
+
+/* The temporary password, shown once, with Copy beside it */
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--hd-space-3);
+}
+
+.password {
+  margin: 0;
+  padding: var(--hd-space-3) var(--hd-space-4);
+  border: 1px solid var(--hd-line);
+  border-radius: var(--hd-radius);
+  background: var(--hd-window);
+  color: var(--hd-text);
+  font-family: ui-monospace, "SF Mono", menlo, consolas, monospace;
+  font-size: var(--hd-font-size-title);
+  letter-spacing: 0.04em;
+  user-select: all;
+}
+
+/* The fields of a form side by side where there's room */
+.pair {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
+  gap: var(--hd-space-4);
+}
+
+/* A section's fields, held while its save is on its way: a fieldset that draws nothing of its own */
+.hold {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hd-space-3);
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}

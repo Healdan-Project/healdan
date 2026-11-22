@@ -70,38 +70,7 @@
   white-space: nowrap;
 }
 
-/* What the check found about no one field: each in its own box, with its sign */
-.problems {
-  display: flex;
-  flex-direction: column;
-  gap: var(--hd-space-3);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.problem {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--hd-space-3);
-  padding: var(--hd-space-3) var(--hd-space-4);
-  border: 1px solid var(--hd-caution);
-  border-radius: var(--hd-radius);
-}
-
-.problemSign {
-  flex: none;
-  margin-top: 2px;
-  color: var(--hd-caution-text);
-}
-
-.problemText {
-  display: flex;
-  flex-direction: column;
-  gap: var(--hd-space-2);
-  min-width: 0;
-}
-
+/* The line under one of the check's problems that offers to put it right (forms/Problems draws the problems) */
 .problemLine {
   margin: 0;
 }

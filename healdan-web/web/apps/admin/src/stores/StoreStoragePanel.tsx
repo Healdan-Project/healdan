@@ -12,7 +12,7 @@ import { isStorageUnavailable } from '../storage/queries'
 import { StuckFiles, useStuckRetry } from '../storage/StuckFiles'
 import { filesOf, stuckOf, waitingOf } from '../storage/text'
 import { t } from '../strings'
-import { useRefusalFor } from '../strings/refusals'
+import { Refusal } from '../forms/Refusal'
 import clientStyles from '../clients/Clients.module.css'
 import styles from '../storage/Storage.module.css'
 import { storeFilesChanged, storeStuckRoutes, useStoreStorage } from './queries'
@@ -59,7 +59,6 @@ function Stuck({ store, stuck, onRetried }: { store: Pick<A['StoreInfo'], 'id' |
   const queryClient = useQueryClient()
   const headingId = useId()
   const heading = useRef<HTMLHeadingElement>(null)
-  const refusalFor = useRefusalFor()
   const routes = storeStuckRoutes(store.id)
   const retrying = useStuckRetry({
     ...routes,
@@ -85,11 +84,7 @@ function Stuck({ store, stuck, onRetried }: { store: Pick<A['StoreInfo'], 'id' |
           </Button>
         </div>
       )}
-      {retrying.failure !== undefined && (
-        <p className={styles.refusal} role="alert">
-          {refusalFor(retrying.failure)}
-        </p>
-      )}
+      <Refusal failure={retrying.failure} />
     </section>
   )
 }

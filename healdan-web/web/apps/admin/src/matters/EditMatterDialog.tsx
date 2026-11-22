@@ -11,6 +11,7 @@ import { t } from '../strings'
 import { useRefusalFor } from '../strings/refusals'
 import { FOLDER_NAME_MAX, nameProblem } from '../workspace/text'
 import { matterChanged } from './changed'
+import { Refusal } from '../forms/Refusal'
 import styles from '../clients/Clients.module.css'
 
 type A = adminComponents['schemas']
@@ -92,11 +93,7 @@ export function EditMatterDialog({ matter, onClose }: EditMatterDialogProps) {
           <TextField label={t('admin.editMatter.description')} multiline value={description} error={descriptionError} onChange={edited(setDescription)} />
           <PersonPicker label={t('admin.editMatter.owner')} accounts="enabled" required value={owner} error={ownerError} onChange={edited(setOwner)} />
           <p className={styles.note}>{t('admin.editMatter.fixed')}</p>
-          {refusal !== undefined && (
-            <p className={styles.refusal} role="alert">
-              {refusal}
-            </p>
-          )}
+          <Refusal>{refusal}</Refusal>
           <div className={styles.buttons}>
             <Button onPress={close} isDisabled={busy}>
               {t('common.cancel')}

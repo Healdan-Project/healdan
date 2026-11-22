@@ -15,13 +15,14 @@ const GROUPS_SHOWN = 50
 const GROUPS_FOUND = 20
 
 /**
- * What a list of who can see a Store adds from (spec 7.2: anything that can grow long is a search): the first groups by
- * name while nothing is typed, as SearchPicker's starting rows, and the groups found for what is, by `GET /v1/admin/groups`
+ * What a list of groups adds from (GroupsField; spec 7.2: anything that can grow long is a search): the first groups by
+ * name while nothing is typed, as SearchPicker's starting rows, and the groups found for what is, by `GET /v1/admin/groups`.
+ * Nothing is asked while `enabled` is false.
  */
-export function useGroupPicker() {
+export function useGroupPicker(enabled = true) {
   const api = useApi()
   const queryClient = useQueryClient()
-  const listed = useAdminQuery('/v1/admin/groups', { query: { limit: GROUPS_SHOWN } })
+  const listed = useAdminQuery('/v1/admin/groups', { query: { limit: GROUPS_SHOWN }, enabled })
   const search = useCallback(
     async (q: string) => {
       const query = { q, limit: GROUPS_FOUND }
