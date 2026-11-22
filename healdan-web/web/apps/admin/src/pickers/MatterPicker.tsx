@@ -21,9 +21,9 @@ export interface MatterPickerProps {
   onChange: (matter: A['MatterBrief'] | null) => void
 }
 
-/** A matter as a picker names it: its number, then its name */
+/** A matter as a picker names it: its number, then its name; its name alone when it's known by no number, as one gone */
 export function matterLabel(matter: A['MatterBrief']): string {
-  return t('matter.label', { number: matter.number, name: matter.name })
+  return matter.number === '' ? matter.name : t('matter.label', { number: matter.number, name: matter.name })
 }
 
 /**

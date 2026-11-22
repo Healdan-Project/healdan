@@ -110,6 +110,46 @@ describe('A list paged by cursor', () => {
     expect(hook.result.current.hasMore).toBe(true)
   })
 
+  it('asks for the next page as the end comes into view only after a full page, never after a run that stopped over short pages', async () => {
+    const { hook, ids, cursors } = renderList(byCursor({ '': page([1, 2, 3], 'b'), b: page([4], 'c'), c: page([], 'd'), d: page([], 'e'), e: page([], 'f'), f: page([5, 6, 7], 'g') }))
+    await waitFor(() => expect(ids()).toEqual(['d1', 'd2', 'd3']))
+    // A full page: the end coming into view reads on, as Show More would, and the short pages after it are followed
+    act(() => hook.result.current.loadMoreOnScroll())
+    await waitFor(() => expect(cursors()).toEqual([undefined, 'b', 'c', 'd', 'e']))
+    await settle()
+    expect(hook.result.current.hasMore).toBe(true)
+    // The run stopped over short pages: the end, in view again, asks nothing, however often it says so
+    act(() => hook.result.current.loadMoreOnScroll())
+    act(() => hook.result.current.loadMoreOnScroll())
+    await settle()
+    expect(cursors()).toEqual([undefined, 'b', 'c', 'd', 'e'])
+    // Show More reads on
+    act(() => hook.result.current.showMore())
+    await waitFor(() => expect(cursors()).toEqual([undefined, 'b', 'c', 'd', 'e', 'f']))
+  })
+
+  it('asks for nothing as the end comes into view after a read failed, until Try Again or Show More', async () => {
+    let failing = false
+    const routes: Routes = {
+      'GET /v1/admin/audit': ({ query }: { query?: Record<string, unknown> }) => {
+        if (query?.cursor === 'b' && failing) return problem(500, 'internal')
+        return query?.cursor === undefined ? page([1, 2, 3], 'b') : page([4, 5, 6], 'c')
+      },
+    }
+    const { hook, ids, cursors } = renderList(routes)
+    await waitFor(() => expect(ids()).toEqual(['d1', 'd2', 'd3']))
+    failing = true
+    act(() => hook.result.current.loadMoreOnScroll())
+    await waitFor(() => expect(hook.result.current.isError).toBe(true))
+    act(() => hook.result.current.loadMoreOnScroll())
+    await settle()
+    expect(cursors()).toEqual([undefined, 'b'])
+    failing = false
+    act(() => hook.result.current.showMore())
+    await waitFor(() => expect(ids()).toEqual(['d1', 'd2', 'd3', 'd4', 'd5', 'd6']))
+    expect(cursors()).toEqual([undefined, 'b', 'b'])
+  })
+
   it('offers more only once it has stopped going on by itself', async () => {
     let answer: (one: A['AuditPage']) => void = () => {}
     const { hook, cursors } = renderList(byCursor({ '': page([1], 'b'), b: new Promise((resolve) => (answer = resolve)) }))

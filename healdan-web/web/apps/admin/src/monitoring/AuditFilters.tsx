@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { useCallback, useRef } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import type { adminComponents } from '@healdan/api'
 import { idFrom } from '@healdan/shell'
 import { Button, CheckGroup, DatePicker, TextField } from '@healdan/ui'
@@ -10,9 +10,10 @@ import { useChosen } from '../lists/useChosen'
 import { useWords } from '../lists/useWords'
 import { MatterPicker } from '../pickers/MatterPicker'
 import { PersonPicker } from '../pickers/PersonPicker'
+import { useUser } from '../people/queries'
 import { t } from '../strings'
 import type { AuditSearch } from '../views/AuditView'
-import { useMatterNamed, usePersonNamed } from './queries'
+import { useMatter } from '../workspace/queries'
 import { auditKinds, inKindOrder, kindLabel } from './text'
 import styles from './Audit.module.css'
 
@@ -40,9 +41,34 @@ export function KindsFilter({ offered, value, onChange }: KindsFilterProps) {
   )
 }
 
-/** The doc # a bare number typed in the words box is, as a safe integer; anything else is words */
+/**
+ * The doc # the words box holds, as a safe integer: a bare number, or one after `#`, as each row's Detail writes a doc #
+ * (`# 10388`); anything else is words
+ */
 function docNumberIn(words: string): number | undefined {
-  return /^\d+$/.test(words) ? idFrom(words) : undefined
+  const number = /^#?\s*(\d+)$/.exec(words)?.[1]
+  return number === undefined ? undefined : idFrom(number)
+}
+
+/**
+ * The person the address names by id, by name, for the Person box after a reload: asked under their page's key while
+ * nothing was picked here (`ask`), and "Person 7" when the server can't name them, as for an account that has gone, so the
+ * box never looks empty while the filter holds
+ */
+function usePersonNamed(id: number | undefined, ask: boolean): A['PersonBrief'] | null {
+  const asked = useUser(id ?? -1, ask && id !== undefined)
+  if (id === undefined) return null
+  if (asked.data?.id === id) return { id, username: asked.data.username, name: asked.data.name }
+  return asked.isError ? { id, username: '', name: t('admin.audit.personById', { id }) } : null
+}
+
+/** The matter the address names by id, by number and name, for the Matter box, as usePersonNamed names a person */
+function useMatterNamed(id: number | undefined, ask: boolean): A['MatterBrief'] | null {
+  const asked = useMatter(id ?? -1, ask && id !== undefined)
+  if (id === undefined) return null
+  if (asked.data?.id === id) return { id, number: asked.data.number, name: asked.data.name }
+  // Known by its id alone: no number, so the box shows the name alone
+  return asked.isError ? { id, number: '', name: t('admin.audit.matterById', { id }) } : null
 }
 
 export interface AuditFiltersProps {
@@ -66,8 +92,12 @@ export function AuditFilters({ search, onChange }: AuditFiltersProps) {
   const person = chosenPerson !== undefined ? chosenPerson : search.user === undefined ? null : namedPerson
   const matter = chosenMatter !== undefined ? chosenMatter : search.matter === undefined ? null : namedMatter
 
-  const words = useWords(search.doc !== undefined ? String(search.doc) : (search.q ?? ''), (typed) => {
+  // The doc # as it was typed (`# 10388`), which the box goes on showing once the address names that doc #
+  const [typedDoc, setTypedDoc] = useState<string>()
+  const docText = search.doc === undefined ? undefined : typedDoc !== undefined && docNumberIn(typedDoc) === search.doc ? typedDoc : String(search.doc)
+  const words = useWords(docText ?? search.q ?? '', (typed) => {
     const doc = docNumberIn(typed)
+    setTypedDoc(doc === undefined ? undefined : typed)
     onChange(doc !== undefined ? { doc, q: undefined } : { doc: undefined, q: typed === '' ? undefined : typed })
   })
   const filtered = Object.values(search).some((value) => value !== undefined)

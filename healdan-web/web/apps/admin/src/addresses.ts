@@ -94,6 +94,11 @@ export function userAppFolderHref(folderId: number): string {
   return `/app/folders/${encodeURIComponent(String(folderId))}`
 }
 
+/** A document in the User app, by its # handle, as the Audit Trail's details open one: the doc #, as one segment */
+export function userAppDocHref(docNumber: number): string {
+  return `/app/doc/${encodeURIComponent(String(docNumber))}`
+}
+
 /** A link as the browser reads it against the page, when it's on this origin: a server's link to another is no page here */
 function sameOrigin(link: string): URL | undefined {
   try {

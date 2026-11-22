@@ -37,6 +37,8 @@ const pause = () => act(() => new Promise((resolve) => setTimeout(resolve, TYPIN
 /** What each request for the list asked */
 const asked = (api: FakeApi) => api.callsTo('GET /v1/admin/audit').map((call) => call.query)
 const STALE = "Couldn't refresh this, so it shows what was read last."
+/** A moment for anything the list would ask by itself to have been asked */
+const settle = () => act(() => new Promise((resolve) => setTimeout(resolve, 50)))
 
 /** The Audit Trail at `path`, once its first rows have come */
 async function openAudit(path = '/audit', routes: Routes = {}) {
@@ -220,13 +222,61 @@ describe("The Audit Trail's list", () => {
       '/audit',
       byCursor({ '': auditPage(documents(1, 2), 'b'), b: auditPage([], 'c'), c: auditPage([], 'd'), d: auditPage([], 'e'), e: auditPage(documents(3, 1)) }),
     )
-    const more = await within(main()).findByRole('button', { name: 'Show More' })
-    expect(asked(api).map((query) => query?.cursor)).toEqual([undefined, 'b', 'c', 'd'])
+    // Show More is there, pending, while the list goes on by itself, and offered once it has stopped
+    await waitFor(() => expect(asked(api).map((query) => query?.cursor)).toEqual([undefined, 'b', 'c', 'd']))
+    await settle()
     expect(asked(api)).toHaveLength(1 + FOLLOW_SHORT_PAGES)
+    const more = within(main()).getByRole('button', { name: 'Show More' })
+    expect(more.hasAttribute('data-pending')).toBe(false)
     expect(rows()).toHaveLength(2)
+    // The end is in view, as a short list's is, and a browser says so again each time the rows change: the run stopped
+    // over short pages, so only Show More reads on (P5-R22)
+    act(() => bringObservedIntoView())
+    await settle()
+    act(() => bringObservedIntoView())
+    await settle()
+    expect(asked(api).map((query) => query?.cursor)).toEqual([undefined, 'b', 'c', 'd'])
     await userEvent.click(more)
     await waitFor(() => expect(rows()).toHaveLength(3))
     expect(within(main()).getByText('No older rows.')).toBeTruthy()
+  })
+
+  it('reads nothing more as the end comes into view after a run of empty pages that Show More started', async () => {
+    const { api } = await openAudit(
+      '/audit?q=zzz',
+      byCursor({ '': auditPage([], 'b'), b: auditPage([], 'c'), c: auditPage([], 'd'), d: auditPage([], 'e'), e: auditPage([], 'f'), f: auditPage([], 'g'), g: auditPage([], 'h'), h: auditPage([], 'i') }),
+    )
+    // Offered once the first run has stopped, which says nothing has been found yet
+    await within(main()).findByText('Nothing found yet in what has been read. Show More reads further back.')
+    await userEvent.click(within(main()).getByRole('button', { name: 'Show More' }))
+    await waitFor(() => expect(asked(api).map((query) => query?.cursor)).toEqual([undefined, 'b', 'c', 'd', 'e', 'f', 'g', 'h']))
+    await within(main()).findByText('Nothing found yet in what has been read. Show More reads further back.')
+    act(() => bringObservedIntoView())
+    await settle()
+    expect(asked(api)).toHaveLength(8)
+  })
+
+  it('reads nothing more as the end comes into view after a next page failed, until Show More or Try Again', async () => {
+    let failing = true
+    const pages = { '': auditPage(documents(1, AUDIT_PAGE_SIZE), 'b'), b: auditPage(documents(101, 1)) }
+    const { api } = await openAudit('/audit', {
+      'GET /v1/admin/audit': ({ query }: { query?: Record<string, unknown> }) => (query?.cursor === 'b' && failing ? problem(500, 'server-error') : pages[String(query?.cursor ?? '') as keyof typeof pages]),
+    })
+    await waitFor(() => expect(rows()).toHaveLength(AUDIT_PAGE_SIZE))
+    act(() => bringObservedIntoView())
+    expect(await screen.findByText(STALE)).toBeTruthy()
+    expect(asked(api).map((query) => query?.cursor)).toEqual([undefined, 'b'])
+    // The loader draws again once the page has failed, which a browser reports as in view again: never a retry by itself
+    act(() => bringObservedIntoView())
+    await settle()
+    act(() => bringObservedIntoView())
+    await settle()
+    expect(asked(api).map((query) => query?.cursor)).toEqual([undefined, 'b'])
+    expect(rows()).toHaveLength(AUDIT_PAGE_SIZE)
+    failing = false
+    await userEvent.click(within(main()).getByRole('button', { name: 'Show More' }))
+    await waitFor(() => expect(rows()).toHaveLength(AUDIT_PAGE_SIZE + 1))
+    expect(asked(api).map((query) => query?.cursor)).toEqual([undefined, 'b', 'b'])
   })
 
   it('says when nothing has been found yet in what was read, and Show More reads on', async () => {
@@ -320,6 +370,13 @@ describe("The Audit Trail's filters", () => {
     expect(asked(api)[0]).toEqual({ userId: 7, matterId: 12, zone: ZONE, limit: AUDIT_PAGE_SIZE })
   })
 
+  it("names a person and a matter the server can't name, as ones that have gone, by their ids, the filters still sent", async () => {
+    const { api } = await openAudit('/audit?user=99&matter=999')
+    await waitFor(() => expect(box('Person').value).toBe('Person 99'))
+    await waitFor(() => expect(box('Matter').value).toBe('Matter 999'))
+    expect(asked(api)[0]).toEqual({ userId: 99, matterId: 999, zone: ZONE, limit: AUDIT_PAGE_SIZE })
+  })
+
   it('keeps the days typed in the address, and sends them with the time zone they are days in', async () => {
     const { api, router } = await openAudit('/audit?to=2026-11-19')
     expect(within(within(main()).getByRole('group', { name: 'To Date' })).getByRole('spinbutton', { name: /day/i }).textContent).toBe('19')
@@ -341,6 +398,21 @@ describe("The Audit Trail's filters", () => {
     await waitFor(() => expect(asked(api).at(-1)).toEqual({ q: '192.0.2', zone: ZONE, limit: AUDIT_PAGE_SIZE }))
     // One question per pause, never one per key
     expect(asked(api).filter((query) => query?.q !== undefined)).toHaveLength(1)
+
+    // A doc # as each row's Detail writes it, after #, is a doc # too, and the box keeps it as typed
+    await userEvent.clear(words())
+    await userEvent.type(words(), '# 10390')
+    await waitFor(() => expect(router.state.location.search).toEqual({ doc: '10390' }))
+    await waitFor(() => expect(asked(api).at(-1)).toEqual({ docNumber: 10390, zone: ZONE, limit: AUDIT_PAGE_SIZE }))
+    await pause()
+    expect(words().value).toBe('# 10390')
+    await userEvent.clear(words())
+    await userEvent.type(words(), '#10391')
+    await waitFor(() => expect(router.state.location.search).toEqual({ doc: '10391' }))
+    // Anything more than a number is words
+    await userEvent.clear(words())
+    await userEvent.type(words(), '# 10391 v2')
+    await waitFor(() => expect(router.state.location.search).toEqual({ q: '# 10391 v2' }))
   })
 
   it('takes every filter off with Clear Filters', async () => {

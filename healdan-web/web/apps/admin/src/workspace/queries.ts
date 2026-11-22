@@ -36,9 +36,9 @@ function useRead<T>(key: readonly unknown[], path: string, enabled = true) {
   return useQuery({ queryKey: key, queryFn: ({ signal }) => api.get<T>(path, undefined, { signal }), enabled, meta: ASK_ON_RETURN })
 }
 
-/** A matter, for its page; nothing is asked without an id */
-export function useMatter(id: number) {
-  return useRead<A['Matter']>(workspaceKeys.matter(id), apiPath`/v1/admin/matters/${id}`)
+/** A matter, for its page, and to name the matter a filter holds (the Audit Trail's); nothing is asked while `enabled` is false */
+export function useMatter(id: number, enabled = true) {
+  return useRead<A['Matter']>(workspaceKeys.matter(id), apiPath`/v1/admin/matters/${id}`, enabled)
 }
 
 /** Every workspace template, by name: a short list, as Stores are (spec 7.2), for its screens and New Matter's menu */

@@ -5,8 +5,9 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { adminComponents } from '@healdan/api'
 import { ErrorPanel } from '@healdan/shell'
 import { Button, formatDateTime, Table, type TableColumn, type TableRow } from '@healdan/ui'
-import { userAppFolderHref } from '../addresses'
+import { userAppDocHref, userAppFolderHref } from '../addresses'
 import { focusLost } from '../focus'
+import type { CursorListing } from '../lists/useCursorList'
 import { StaleNote } from '../people/StaleNote'
 import { t } from '../strings'
 import { useAuditList, type AuditQuery } from './queries'
@@ -37,11 +38,6 @@ function auditColumns(): TableColumn<AuditTableRow>[] {
     { id: 'detail', name: t('admin.audit.column.detail'), width: '3fr', minWidth: 200, cell: ({ row }) => detailCell(row) },
     { id: 'from', name: t('admin.audit.column.from'), width: 140, minWidth: 100, cell: ({ row }) => row.from ?? '' },
   ]
-}
-
-/** A document in the User app (its # handle): the doc #, as one segment */
-function userAppDocHref(docNumber: number): string {
-  return `/app/doc/${encodeURIComponent(String(docNumber))}`
 }
 
 /**
@@ -98,6 +94,28 @@ function RowDetails({ row }: { row: A['AuditRow'] }) {
   )
 }
 
+/** Where the list's reading stands, as Show More and an empty list say it */
+export interface Reading {
+  /** More may come for these filters, so Show More is there */
+  offering: boolean
+  /**
+   * A page is on its way, or about to be asked for by the list itself, so Show More is pending: a page that has just come
+   * back short, with a cursor, is followed a moment later, and the list says nothing of the end meanwhile
+   */
+  following: boolean
+  /** What a list with no rows says: that it's loading, that nothing has been found yet in what was read, or that nothing is there */
+  empty: 'loading' | 'noneYet' | 'none'
+}
+
+/**
+ * Where the reading stands, from the list's state alone: between a page that came back short and the one the list asks for
+ * itself, neither more is offered nor a page on its way, which is still loading, never the end
+ */
+export function readingOf(listing: Pick<CursorListing<unknown>, 'isLoaded' | 'isStale' | 'atEnd' | 'hasMore'>): Reading {
+  const offering = listing.isLoaded && !listing.isStale && !listing.atEnd
+  return { offering, following: offering && !listing.hasMore, empty: listing.hasMore ? 'noneYet' : listing.atEnd ? 'none' : 'loading' }
+}
+
 export interface AuditListProps {
   /** The filters, as the route takes them; the time zone is the list's own */
   query: AuditQuery
@@ -124,27 +142,22 @@ export function AuditList({ query, filtered, label, fill = false }: AuditListPro
   const selection = useMemo(() => new Set(selectedId === null ? [] : [selectedId]), [selectedId])
   const selected = listing.items.find((row) => row.id === selectedId)
 
-  // Show More stays while its page comes, pending, and goes at the end: the focus it had then goes to what says so, or to
-  // the list when there's nothing in it
-  const showMore = listing.hasMore || listing.isLoadingMore
+  const { offering, following, empty: emptyKind } = readingOf(listing)
+  // Show More goes at the end: the focus it had then goes to what says so, or to the list when there's nothing in it
   const frame = useRef<HTMLDivElement>(null)
   const end = useRef<HTMLParagraphElement>(null)
   const pressed = useRef(false)
-  const shown = useRef(showMore)
+  const shown = useRef(offering)
   useEffect(() => {
     const was = shown.current
-    shown.current = showMore
-    if (!was || showMore || !pressed.current) return
+    shown.current = offering
+    if (!was || offering || !pressed.current) return
     pressed.current = false
     if (focusLost()) (end.current ?? frame.current?.querySelector<HTMLElement>('[role="grid"]'))?.focus()
-  }, [showMore])
+  }, [offering])
 
   const empty =
-    listing.isPending || (listing.items.length === 0 && listing.isLoadingMore) ? (
-      t('common.loading')
-    ) : (
-      <p className={styles.empty}>{t(listing.hasMore ? 'admin.audit.noneYet' : filtered ? 'admin.audit.noneMatch' : 'admin.audit.none')}</p>
-    )
+    emptyKind === 'loading' ? t('common.loading') : <p className={styles.empty}>{t(emptyKind === 'noneYet' ? 'admin.audit.noneYet' : filtered ? 'admin.audit.noneMatch' : 'admin.audit.none')}</p>
 
   return (
     <div className={fill ? `${styles.list} ${styles.fill}` : `${styles.list} ${styles.fixed}`}>
@@ -161,17 +174,18 @@ export function AuditList({ query, filtered, label, fill = false }: AuditListPro
               selectionMode="single"
               selection={selection}
               onSelectionChange={(keys) => setSelectedId([...keys][0] ?? null)}
-              // As the end comes into view; a page on its way shows there as loading
-              loadMore={showMore ? listing.showMore : undefined}
+              // As the end comes into view, after a full page only, so a run stopped over short pages, or a page that failed,
+              // waits for Show More or Try Again; a page on its way shows there as loading
+              loadMore={offering ? listing.loadMoreOnScroll : undefined}
               isLoadingMore={listing.isLoadingMore}
               empty={empty}
               busy={listing.isStale}
             />
           </div>
           <div className={styles.footer}>
-            {showMore && (
+            {offering && (
               <Button
-                isPending={listing.isLoadingMore}
+                isPending={following}
                 onPress={() => {
                   pressed.current = true
                   listing.showMore()

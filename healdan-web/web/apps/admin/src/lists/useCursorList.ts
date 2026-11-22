@@ -41,6 +41,13 @@ export interface CursorListing<T> {
   hasMore: boolean
   /** Asks for the next page, then goes on by itself over short ones again; nothing while hasMore is false */
   showMore: () => void
+  /**
+   * What the end of the list coming into view asks for (a Table's loadMore): what showMore does, but only after a full
+   * page, and never while a read has failed. A browser says the end is in view again each time the rows change, and a run
+   * that stopped over short pages, or a page that failed, leaves a short list with its end in view, so this waits for Show
+   * More (P5-R22), or Try Again, rather than read on by itself, or ask a failing server again and again.
+   */
+  loadMoreOnScroll: () => void
   /** A page after the first is on its way, asked for or followed */
   isLoadingMore: boolean
   /** Every row is loaded: the last page came with no cursor */
@@ -97,14 +104,18 @@ export function useCursorList<P extends CursorPath>(path: P, query: CursorQuery<
 
   const hasMore = more && !follow && !asked.isFetchingNextPage
   const items = useMemo(() => pages?.flatMap((one) => one.items) ?? [], [pages])
+  const showMore = () => {
+    if (!hasMore || pages === undefined) return
+    setRun({ question, start: pages.length })
+    // A re-read under way gives way to the page asked for, which the next return to the window reads again
+    void fetchNextPage()
+  }
   return {
     items,
     hasMore,
-    showMore: () => {
-      if (!hasMore || pages === undefined) return
-      setRun({ question, start: pages.length })
-      // A re-read under way gives way to the page asked for, which the next return to the window reads again
-      void fetchNextPage()
+    showMore,
+    loadMoreOnScroll: () => {
+      if (!asked.isError && last !== undefined && last.items.length >= pageSize) showMore()
     },
     isLoadingMore: asked.isFetchingNextPage,
     atEnd: own && last !== undefined && last.nextCursor === null,

@@ -1,12 +1,8 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { useQuery } from '@tanstack/react-query'
-import { apiPath, type adminComponents, type Api } from '@healdan/api'
-import { ASK_ON_RETURN, useApi } from '@healdan/shell'
+import type { adminComponents, Api } from '@healdan/api'
 import { useCursorList, type CursorListing, type CursorQuery } from '../lists/useCursorList'
-import { peopleKeys } from '../people/queries'
-import { workspaceKeys } from '../workspace/queries'
 
 type A = adminComponents['schemas']
 
@@ -40,36 +36,4 @@ export function auditExportHref(api: Api, query: AuditQuery): string {
   const one = { userId: query.userId, matterId: query.matterId, docNumber: query.docNumber, from: query.from, to: query.to, zone: browserZone(), q: query.q }
   for (const [name, value] of Object.entries(one)) if (value !== undefined) params.append(name, String(value))
   return `${api.url('/v1/admin/audit/export')}?${params.toString()}`
-}
-
-/**
- * The person a filter's address names by id, by name, for its picker after a reload: asked under their page's key, only
- * while `enabled` (nothing was picked here); null when no person has the id
- */
-export function usePersonNamed(id: number | undefined, enabled: boolean): A['PersonBrief'] | null {
-  const api = useApi()
-  const asked = useQuery({
-    queryKey: peopleKeys.user(id ?? -1),
-    queryFn: ({ signal }) => api.get<A['User']>(apiPath`/v1/admin/users/${id ?? -1}`, undefined, { signal }),
-    enabled: enabled && id !== undefined,
-    meta: ASK_ON_RETURN,
-  })
-  const person = asked.data
-  return person !== undefined && person.id === id ? { id: person.id, username: person.username, name: person.name } : null
-}
-
-/**
- * The matter a filter's address names by id, by number and name, for its picker after a reload: asked under its page's
- * key, only while `enabled`; null when no matter has the id
- */
-export function useMatterNamed(id: number | undefined, enabled: boolean): A['MatterBrief'] | null {
-  const api = useApi()
-  const asked = useQuery({
-    queryKey: workspaceKeys.matter(id ?? -1),
-    queryFn: ({ signal }) => api.get<A['Matter']>(apiPath`/v1/admin/matters/${id ?? -1}`, undefined, { signal }),
-    enabled: enabled && id !== undefined,
-    meta: ASK_ON_RETURN,
-  })
-  const matter = asked.data
-  return matter !== undefined && matter.id === id ? { id: matter.id, number: matter.number, name: matter.name } : null
 }

@@ -9,9 +9,8 @@ import { describe, expect, it, vi } from 'vitest'
 import type { adminComponents } from '@healdan/api'
 import { createQueryClient, createSignedOut, ServicesProvider } from '@healdan/shell'
 import { expectNoAxeViolations } from '../test/axe'
-import { auditMatters, fakeApi, findPeople, peopleRoutes, sallyRow, type Routes } from '../test/fakeApi'
+import { auditMatters, fakeApi, type Routes } from '../test/fakeApi'
 import { MATTER_SEARCH_LIMIT, MatterPicker } from './MatterPicker'
-import { PEOPLE_SEARCH_LIMIT, PersonPicker } from './PersonPicker'
 import { TYPING_DELAY_MS } from './typing'
 
 type A = adminComponents['schemas']
@@ -101,47 +100,5 @@ describe('MatterPicker', () => {
     await userEvent.clear(box('Matter'))
     await userEvent.tab()
     expect(onChange).toHaveBeenLastCalledWith(null)
-  })
-})
-
-function PersonExample({ onChange = vi.fn() }: { onChange?: (person: A['PersonBrief'] | null) => void }) {
-  const [value, setValue] = useState<A['PersonBrief'] | null>(null)
-  return (
-    <PersonPicker
-      label="Person"
-      accounts="users"
-      value={value}
-      onChange={(next) => {
-        setValue(next)
-        onChange(next)
-      }}
-    />
-  )
-}
-
-describe('PersonPicker, over the Users list (P5-R23)', () => {
-  it("searches GET /v1/admin/users, so more than the find's five come, those who have left too, saying so", async () => {
-    const onChange = vi.fn()
-    const { api, view } = renderWith(<PersonExample onChange={onChange} />, { ...peopleRoutes(), 'GET /v1/admin/find': ({ query }: { query?: Record<string, unknown> }) => findPeople(query?.q) })
-    // Every email holds it, so every person matches
-    await userEvent.type(box('Person'), 'e')
-    const { list, names } = await offered()
-    expect(names).toEqual([
-      'Alex Morgan admin',
-      'Helen Ashcombe helen',
-      'Jamie Clarke jclarke',
-      'Priya Nair priya',
-      'Ronnie Hale rhale',
-      'Sally Oldham sally.old · Disabled',
-      'Sam Okafor sam',
-    ])
-    expect(api.callsTo('GET /v1/admin/users').map((call) => call.query)).toEqual([{ q: 'e', limit: PEOPLE_SEARCH_LIMIT }])
-    // Neither of the other sources is asked
-    expect(api.callsTo('GET /v1/admin/find')).toEqual([])
-    expect(api.callsTo('GET /v1/users')).toEqual([])
-    await expectNoAxeViolations(view.container)
-    await userEvent.click(within(list).getByRole('option', { name: 'Sally Oldham sally.old · Disabled' }))
-    expect(onChange).toHaveBeenLastCalledWith({ id: sallyRow.id, username: sallyRow.username, name: sallyRow.name })
-    expect(box('Person').value).toBe('Sally Oldham')
   })
 })

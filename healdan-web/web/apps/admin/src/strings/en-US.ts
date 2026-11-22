@@ -1128,6 +1128,9 @@ export const adminEnUS = {
   // One box: a bare number is a doc #, anything else words
   'admin.audit.text': 'Doc #, Name or Address',
   'admin.audit.clear': 'Clear Filters',
+  // The person or the matter an address names by an id the server can't name, as for one that has gone
+  'admin.audit.personById': 'Person {id}',
+  'admin.audit.matterById': '{matter} {id}',
   'admin.audit.column.time': 'Time',
   'admin.audit.column.who': 'Who',
   'admin.audit.column.kind': 'Kind',
