@@ -59,14 +59,15 @@ function useDebounced<V>(value: V, delay: number): V {
 }
 
 /**
- * A stop of its own (tabindex 0) while the box holds more than its height shows, so it scrolls, and then a region named by
- * the heading over its rows (`heading`, its id), so a screen reader says what the stop is; none of these otherwise
+ * A stop of its own (tabindex 0) while the box holds more than its height shows, so it scrolls, and then a region, so a
+ * screen reader says what the stop is: named by its field's label and the heading over its rows together (`names`, their
+ * ids), so it never takes the name of a region it's in that its heading shares, as a person's Groups. None otherwise.
  */
-function markStop(box: HTMLElement, heading: string) {
+function markStop(box: HTMLElement, names: string) {
   if (box.scrollHeight > box.clientHeight) {
     box.tabIndex = 0
     box.setAttribute('role', 'region')
-    box.setAttribute('aria-labelledby', heading)
+    box.setAttribute('aria-labelledby', names)
   } else {
     box.removeAttribute('tabindex')
     box.removeAttribute('role')
@@ -75,21 +76,21 @@ function markStop(box: HTMLElement, heading: string) {
 }
 
 /**
- * Makes the box a stop of its own while it scrolls, named by its heading (`heading`, its id): looked at after each
- * render, as rows come and go, and whenever the box's own size changes, as its height follows the window's. It's set on
- * the element, which React draws with no tabindex, role or name, as it's what the browser has laid out.
+ * Makes the box a stop of its own while it scrolls, named by what `names` gives (ids): looked at after each render, as
+ * rows come and go, and whenever the box's own size changes, as its height follows the window's. It's set on the element,
+ * which React draws with no tabindex, role or name, as it's what the browser has laid out.
  */
-function useStopWhileScrolling(box: RefObject<HTMLElement | null>, drawn: boolean, heading: string) {
+function useStopWhileScrolling(box: RefObject<HTMLElement | null>, drawn: boolean, names: string) {
   useLayoutEffect(() => {
-    if (box.current) markStop(box.current, heading)
+    if (box.current) markStop(box.current, names)
   })
   useLayoutEffect(() => {
     const element = box.current
     if (!drawn || element === null || typeof ResizeObserver === 'undefined') return
-    const observer = new ResizeObserver(() => markStop(element, heading))
+    const observer = new ResizeObserver(() => markStop(element, names))
     observer.observe(element)
     return () => observer.disconnect()
-  }, [box, drawn, heading])
+  }, [box, drawn, names])
 }
 
 /** The characters a regular expression would read as its own, which a query's words are taken without */
@@ -133,6 +134,7 @@ export function SearchPicker<T>({ label, placeholder, hint, initialHeading, init
   const settled = useDebounced(wanted, SEARCH_DELAY_MS)
   const [answer, setAnswer] = useState<Answer<T>>()
   const scroller = useRef<HTMLDivElement>(null)
+  const labelId = useId()
   const headingId = useId()
 
   // The caller's search is read when it is asked, so one made afresh at each render doesn't ask again
@@ -160,7 +162,7 @@ export function SearchPicker<T>({ label, placeholder, hint, initialHeading, init
   const query = shown?.q ?? ''
   const heading = rows.length === 0 ? undefined : wanted === undefined ? initialHeading : plural('searchPicker.results', rows.length)
   const note = shown === undefined ? '' : 'failed' in shown ? t('problems.unknown') : found.length === 0 ? t('search.empty') : ''
-  useStopWhileScrolling(scroller, rows.length > 0, headingId)
+  useStopWhileScrolling(scroller, rows.length > 0, `${labelId} ${headingId}`)
 
   function choose(keys: Selection) {
     if (keys === 'all') return
@@ -173,7 +175,10 @@ export function SearchPicker<T>({ label, placeholder, hint, initialHeading, init
     <div className={styles.picker}>
       <Autocomplete inputValue={text} onInputChange={setText} disableAutoFocusFirst>
         <AriaTextField className={fieldStyles.field}>
-          <Label className={fieldStyles.label}>{label}</Label>
+          {/* Its id names the rows' box too, while that's a stop */}
+          <Label id={labelId} className={fieldStyles.label}>
+            {label}
+          </Label>
           <Input ref={inputRef} className={fieldStyles.input} placeholder={placeholder} />
           {hint && (
             <Text slot="description" className={styles.hint}>
@@ -190,8 +195,8 @@ export function SearchPicker<T>({ label, placeholder, hint, initialHeading, init
           // The box the rows scroll in. The arrow keys in the field reach every row and scroll it into view, as the focus
           // stays in the field (virtual focus), but what a list longer than its box holds below would show only to a
           // pointer: so while it scrolls, the box is a stop of its own, which Tab reaches after the field and the arrow
-          // keys then scroll (WCAG 2.1.1), and a region named by the heading, so a screen reader says what it reached. A
-          // press on its scrollbar leaves the focus where it is, as the list's own does.
+          // keys then scroll (WCAG 2.1.1), and a region named by the field's label and the heading, so a screen reader says
+          // what it reached. A press on its scrollbar leaves the focus where it is, as the list's own does.
           <div
             ref={scroller}
             className={styles.scroll}

@@ -77,10 +77,12 @@ export function NewUserDialog({ onCreated, onClose }: NewUserDialogProps) {
   const refusalFor = useRefusalFor()
   const offered = useUserOptions()
   const options = offered.data
-  // What it offers couldn't be read, and nothing was before: Language has no choices, so nothing can be made yet
-  const unread = options === undefined && offered.isError
+  // What it offers couldn't be read, and nothing was before: Language has no choices, so nothing can be made yet. Decided
+  // on the options missing after a failure, not on the query's error, which a new read clears as it starts: so the note,
+  // and Try Again, pending, stay until they come
+  const unread = options === undefined && offered.errorUpdateCount > 0
   const languageMenu = useRef<HTMLSelectElement>(null)
-  // Try Again goes once they come, so the focus goes to the menu they filled
+  // Try Again goes once they come, so the focus goes to the menu they filled, which has its choices by then
   useFocusWhenGone(!unread, languageMenu)
   const [username, setUsername] = useState('')
   const [draft, setDraft] = useState<PersonDraft>({ firstName: '', lastName: '', email: '', language: '', timeZone: '' })

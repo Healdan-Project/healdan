@@ -162,9 +162,10 @@ tags:
         its groups keeps Everyone whether or not it names it, and taking it
         out of Everyone is refused.
       - A change that would change nothing, such as disabling an account
-        that's disabled, is answered as it is, before any refusal below, and
-        isn't recorded; `refusals` agree, refusing no action that would
-        change nothing.
+        that's disabled, is answered as it is, before any refusal below but
+        that of a caller whose own account was disabled meanwhile, and isn't
+        recorded; `refusals` agree, refusing no action that would change
+        nothing.
       - So that someone can always administer Healdan, each of these is
         `409 refused` with a sentence that says why: disabling the `admin`
         account, or taking it out of the `admin` group; disabling yourself,
@@ -174,8 +175,12 @@ tags:
         changes at the same moment are made one after the other, the second
         counting the administrators the first left and refusing a caller
         whose own account the first disabled, so two administrators can't
-        take each other out. A person's `refusals` say beforehand which of
-        their page's actions would be refused, and why.
+        take each other out. Disable and the changes to someone's groups or
+        a group's members refuse such a caller first, before a change that
+        would change nothing is answered, as `403 admins-only` comes before
+        it too: a caller who is no longer an enabled administrator is told
+        so, whatever the change would have done. A person's `refusals` say
+        beforehand which of their page's actions would be refused, and why.
       - Disable, Reset Password and Sign Out Everywhere sign the person out
         everywhere: their device tokens are revoked, and once the change has
         committed every open session on this server that they opened, as
@@ -3443,16 +3448,18 @@ paths:
         has committed their open sessions on this server close, so every app
         and device signed in as them is signed out at its next request.
         Answers the person. Takes no body. An account already disabled is
-        answered as it is, before the refusals below, and nothing is
-        recorded.
+        answered as it is, and nothing is recorded, before the refusals
+        below but the first.
 
         - `404 not-found` as `adminGetUser` answers.
+        - `409 refused` first, before an account already disabled is
+          answered, as `403 admins-only` comes first too, for a caller whose
+          own account was disabled while the change waited its turn.
         - `409 refused`, as `refusals.disable` says beforehand: for the
           `admin` account; for the caller's own; for a change that would
           leave no enabled administrator, counted once any other such change
-          at the same moment has committed; for a caller whose own account
-          was disabled while the change waited its turn; and for what
-          Healdan's rules refuse.
+          at the same moment has committed; and for what Healdan's rules
+          refuse.
 
         Recorded as `user.disabled`.
       tags: [People]
@@ -3648,7 +3655,8 @@ paths:
         stays; so does Everyone, for an account that isn't read-only, and
         `guest`, for a read-only one, whether or not the list names it. An
         empty list leaves them in no other group. A list that changes
-        nothing is answered as it is, before the refusals below. For an
+        nothing is answered as it is, before the refusals below but the
+        first `409`. For an
         account linked to a sign-in provider, its membership of each group
         the provider's group map names (`Group.mappedBy`) may be set again
         from the provider at its next sign-in there. Adding someone to
@@ -3659,14 +3667,16 @@ paths:
           holds a null.
         - `404 not-found` as `adminGetUser` answers.
         - `422 validation` for a missing or null `groupIds` (`required`).
+        - `409 refused` first, before a list that changes nothing is
+          answered, as `403 admins-only` comes first too, for a caller whose
+          own account was disabled while the change waited its turn.
         - `409 refused` for a group that no longer exists, or isn't one
           `GET /v1/admin/groups` lists; for a read-only account given any
           group but `guest`; for taking the `admin` account, or the caller,
           out of `admin`, as `refusals.leaveAdmin` says beforehand; for a
           change that would leave no enabled administrator, counted once any
-          other such change at the same moment has committed; for a caller
-          whose own account was disabled while the change waited its turn;
-          and for what Healdan's rules refuse.
+          other such change at the same moment has committed; and for what
+          Healdan's rules refuse.
 
         Recorded as `user.groups-changed`, with the groups before and after,
         by name. A change that changes nothing isn't recorded.
@@ -4061,7 +4071,8 @@ paths:
       description: |
         Adds the person to the group, and answers `204` (Admin app spec
         section 8.7). Someone already in it changes nothing, before the
-        refusals below, and nothing is recorded. Adding someone to `admin`
+        refusals below but the first, and nothing is recorded. Adding someone
+        to `admin`
         lets them use this app and read every document: the app asks first.
         For an account linked to a sign-in provider, its membership of a
         group the provider's group map names (`mappedBy`) may be set again
@@ -4069,9 +4080,11 @@ paths:
 
         - `404 not-found` as `adminGetGroup` answers for the group, and as
           `adminGetUser` answers for `userId`.
-        - `409 refused` for a read-only account and any group but `guest`;
-          for a caller whose own account was disabled while the change
-          waited its turn; and for what Healdan's rules refuse.
+        - `409 refused` first, before someone already in it is answered, as
+          `403 admins-only` comes first too, for a caller whose own account
+          was disabled while the change waited its turn.
+        - `409 refused` for a read-only account and any group but `guest`,
+          and for what Healdan's rules refuse.
 
         Recorded as `group.member-added`, with the person, named as
         `Ann Lee (alee)`.
@@ -4098,22 +4111,25 @@ paths:
       description: |
         Takes the person out of the group, and answers `204` (Admin app spec
         section 8.7). Someone not in it changes nothing, before the refusals
-        below, and nothing is recorded. For an account linked to a sign-in
+        below but the first, and nothing is recorded. For an account linked
+        to a sign-in
         provider, its membership of a group the provider's group map names
         (`mappedBy`) may be set again from the provider at its next sign-in
         there.
 
         - `404 not-found` as `adminGetGroup` answers for the group, and as
           `adminGetUser` answers for `userId`.
+        - `409 refused` first, before someone not in it is answered, as
+          `403 admins-only` comes first too, for a caller whose own account
+          was disabled while the change waited its turn.
         - `409 refused` for Everyone, which every account but a read-only
           one is always in, and for `guest` and a read-only account, which
           is always in it, each with a sentence that says so; for taking the
           `admin` account, or the caller, out of `admin`, as the person's
           `refusals.leaveAdmin` says beforehand; for a change that would
           leave no enabled administrator, counted once any other such change
-          at the same moment has committed; for a caller whose own account
-          was disabled while the change waited its turn; and for what
-          Healdan's rules refuse.
+          at the same moment has committed; and for what Healdan's rules
+          refuse.
 
         Recorded as `group.member-removed`, with the person, named as
         `Ann Lee (alee)`.

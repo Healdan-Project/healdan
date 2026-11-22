@@ -5,7 +5,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import userEvent from '@testing-library/user-event'
 import { createRef } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { expectNoAxeViolations } from '../test/axe'
+import { expectNoAxeViolations, expectNoPageAxeViolations } from '../test/axe'
 import '../tokens.css'
 import { Highlight, SEARCH_DELAY_MS, SearchPicker } from './SearchPicker'
 import pickerCss from './SearchPicker.module.css?raw'
@@ -73,6 +73,32 @@ function Example({
 
 // A text box that names the row the arrow keys are on (aria-activedescendant), as React Aria's Autocomplete makes it
 const field = () => screen.getByRole('textbox', { name: 'Find a Matter' })
+
+/**
+ * jsdom has no ResizeObserver, and lays nothing out: a box is given its heights, and its observers are called back by hand,
+ * as a browser calls them when the box changes size (its height follows the window's). The test unstubs it.
+ */
+function observedSizes() {
+  const observers: (() => void)[] = []
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      constructor(callback: () => void) {
+        observers.push(callback)
+      }
+      observe() {}
+      disconnect() {}
+    },
+  )
+  return (box: HTMLElement, holds: number) => {
+    Object.defineProperty(box, 'clientHeight', { configurable: true, value: 200 })
+    Object.defineProperty(box, 'scrollHeight', { configurable: true, value: holds })
+    act(() => observers.forEach((observer) => observer()))
+  }
+}
+
+/** What names an element, by the ids its aria-labelledby gives */
+const namedBy = (element: Element) => (element.getAttribute('aria-labelledby') ?? '').split(' ').map((id) => document.getElementById(id)?.textContent)
 const names = (list: HTMLElement) => within(list).getAllByRole('option').map((option) => option.textContent)
 
 afterEach(() => {
@@ -272,21 +298,9 @@ describe('SearchPicker', () => {
     expect(status.textContent).toBe('Something went wrong.')
   })
 
-  it('makes the box its rows scroll in a stop of its own, named by its heading, while they need scrolling, and only then', async () => {
+  it("makes the box its rows scroll in a stop of its own, named by its field's label and its heading, while they need scrolling, and only then", async () => {
     const user = userEvent.setup()
-    // jsdom has no ResizeObserver, and lays nothing out: the box is given its heights, and its observers are called back by
-    // hand, as a browser calls them when the box changes size (its height follows the window's)
-    const observers: (() => void)[] = []
-    vi.stubGlobal(
-      'ResizeObserver',
-      class {
-        constructor(callback: () => void) {
-          observers.push(callback)
-        }
-        observe() {}
-        disconnect() {}
-      },
-    )
+    const layBox = observedSizes()
     try {
       const { search } = controlled()
       // In a landmark, as on a page or in a dialog, so axe looks at the box as it is there
@@ -298,11 +312,7 @@ describe('SearchPicker', () => {
       )
       const after = screen.getByRole('button', { name: 'After' })
       const box = screen.getByRole('listbox', { name: 'Recent Matters' }).parentElement!
-      const lay = (holds: number) => {
-        Object.defineProperty(box, 'clientHeight', { configurable: true, value: 200 })
-        Object.defineProperty(box, 'scrollHeight', { configurable: true, value: holds })
-        act(() => observers.forEach((observer) => observer()))
-      }
+      const lay = (holds: number) => layBox(box, holds)
 
       // Every row fits: Tab goes from the field to what follows, as the arrow keys in the field reach every row
       lay(200)
@@ -314,9 +324,11 @@ describe('SearchPicker', () => {
       // More rows than the box shows: Tab stops at the box, which the arrow keys then scroll, then goes on
       lay(400)
       expect(box.getAttribute('tabindex')).toBe('0')
-      // A stop is named, as a region, by the heading over its rows
-      expect(screen.getByRole('region', { name: 'Recent Matters' })).toBe(box)
-      expect(document.getElementById(box.getAttribute('aria-labelledby') ?? '')?.tagName).toBe('H3')
+      // A stop is named, as a region, by its field's label and the heading over its rows
+      expect(screen.getByRole('region', { name: 'Find a Matter Recent Matters' })).toBe(box)
+      expect(namedBy(box)).toEqual(['Find a Matter', 'Recent Matters'])
+      // The field keeps its own name
+      expect(field()).toBeTruthy()
       await expectNoAxeViolations(document.body)
       await user.click(field())
       await user.tab()
@@ -329,6 +341,29 @@ describe('SearchPicker', () => {
       expect(box.hasAttribute('tabindex')).toBe(false)
       expect(box.hasAttribute('role')).toBe(false)
       expect(box.hasAttribute('aria-labelledby')).toBe(false)
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it("never repeats the name of a region it's in that its heading shares, as a person's Groups and its group picker's", async () => {
+    const layBox = observedSizes()
+    try {
+      render(
+        <main>
+          <h1>A Person</h1>
+          <section aria-labelledby="section-heading">
+            <h2 id="section-heading">Recent Matters</h2>
+            <Example search={controlled().search} initial={[series, charter, charity, lease]} />
+          </section>
+        </main>,
+      )
+      const box = screen.getByRole('listbox', { name: 'Recent Matters' }).parentElement!
+      layBox(box, 400)
+      expect(box.getAttribute('role')).toBe('region')
+      expect(screen.getAllByRole('region').map((region) => namedBy(region).join(' '))).toEqual(['Recent Matters', 'Find a Matter Recent Matters'])
+      // The whole page, so landmark-unique looks at both
+      await expectNoPageAxeViolations(document, 'A Person')
     } finally {
       vi.unstubAllGlobals()
     }
