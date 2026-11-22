@@ -4,7 +4,7 @@
 import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { launch } from '../actions/launch'
+import { launch, launchDownload } from '../actions/launch'
 import { expectNoAxeViolations } from '../test/axe'
 import { detailsRoutes, letter } from '../test/details'
 import { children, document, folder, problem, type Routes } from '../test/fakeApi'
@@ -25,7 +25,10 @@ function routes(doc = letter, over: Routes = {}): Routes {
 const details = () => screen.findByRole('region', { name: 'Details' })
 const button = async (name: string) => within(await details()).findByRole('button', { name })
 
-beforeEach(() => vi.mocked(launch).mockClear())
+beforeEach(() => {
+  vi.mocked(launch).mockClear()
+  vi.mocked(launchDownload).mockClear()
+})
 
 describe('Open and Download in the details', () => {
   it('opens a document the helper handles through its healdan: link, then says what to do if nothing opened', async () => {
@@ -43,16 +46,28 @@ describe('Open and Download in the details', () => {
     await renderApp('/folders/7?sel=10500', routes(photo))
     await userEvent.click(await button('Open'))
 
-    expect(launch).toHaveBeenCalledExactlyOnceWith('/api/v1/documents/10500/content', 'Site Photo.png')
+    expect(launchDownload).toHaveBeenCalledExactlyOnceWith('/api/v1/documents/10500/content', expect.any(Function))
     expect(screen.queryByText(/If nothing opened/)).toBeNull()
   })
 
-  it('downloads through a link to /content, which no script reads', async () => {
+  it("downloads through a hidden frame's navigation to /content, which no script reads", async () => {
     const { api } = await renderApp('/folders/7?sel=10388', routes())
     await userEvent.click(await button('Download'))
 
-    expect(launch).toHaveBeenCalledExactlyOnceWith('/api/v1/documents/10388/content', letter.name)
+    expect(launchDownload).toHaveBeenCalledExactlyOnceWith('/api/v1/documents/10388/content', expect.any(Function))
     expect(api.callsTo('GET /v1/documents/*/content')).toHaveLength(0)
+  })
+
+  it('shows the signed-out page when a download finds the session has ended', async () => {
+    await renderApp('/folders/7?sel=10388', routes())
+    await userEvent.click(await button('Download'))
+
+    // What launchDownload calls for a 401 in its frame, which no request of the API client's sees
+    const onSignedOut = vi.mocked(launchDownload).mock.lastCall?.[1]
+    act(() => onSignedOut?.())
+
+    expect(await screen.findByRole('heading', { level: 1, name: "You've been signed out." })).toBeTruthy()
+    expect(screen.queryByRole('region', { name: 'Details' })).toBeNull()
   })
 
   it('disables both for a document the person may not download', async () => {

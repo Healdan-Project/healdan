@@ -23,6 +23,7 @@ import org.junit.Test;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentDAO;
+import com.logicaldoc.core.document.DocumentEvent;
 import com.logicaldoc.core.document.DocumentLink;
 import com.logicaldoc.core.document.DocumentLinkDAO;
 import com.logicaldoc.core.document.DocumentManager;
@@ -626,6 +627,131 @@ public class MessageResourceTest extends ApiTestCase {
 		assertEquals(0, DocumentLinkDAO.get().findByDocId(email.getId(), "attachment").size());
 		JsonNode attachments = get(path(email, "")).token(token).send().json().path("attachments");
 		assertTrue(attachments.get(0).path("docNumber").isNull());
+		assertEquals(0, jdbc().queryForObject(
+				"select count(*) from ld_document where ld_filename = 'Contract.pdf' and ld_deleted = 0", Integer.class)
+				.intValue());
+	}
+
+	@Test
+	public void testAFailureAfterTheLinkTakesTheLinkBackPastABackgroundWrite() throws Exception {
+		// CE's link DAO writes both documents' counts in the delete's transaction too, so the delete is lost the
+		// same way: the copy's delete then took the link with it, and the email kept the count of a link it no
+		// longer had
+		Document email = file("parts-attached.eml");
+		String token = signIn(clerk);
+		BackgroundWrite indexer = BackgroundWrite.atFlush(email.getId(), DocumentEvent.INDEXED, d -> d.setColor("red"))
+				.overtakingLinkCount();
+		MessageResource.afterLinked = copy -> {
+			// From here on: the link's store isn't the write to overtake
+			indexer.start();
+			throw new IllegalStateException("The answer couldn't be made");
+		};
+		try (indexer) {
+			ApiResponse response = post(path(email, "/attachments/1/file")).token(token).send();
+			assertEquals(response.toString(), 500, response.status());
+			indexer.assertWritten();
+		} finally {
+			MessageResource.afterLinked = null;
+		}
+
+		assertEquals(0, jdbc().queryForObject("select count(*) from ld_link where ld_deleted = 0", Integer.class)
+				.intValue());
+		assertEquals(0, linksOf(email.getId()));
+	}
+
+	/** @return the count of links CE keeps on the document's row */
+	private int linksOf(long docId) {
+		return jdbc().queryForObject("select ld_links from ld_document where ld_id = ?", Integer.class, docId)
+				.intValue();
+	}
+
+	/** Checks the save's answer, its one link, both documents' counts of links, and that the message names the copy */
+	private void assertSavedAndLinked(Document email, ApiResponse response, String token) throws Exception {
+		assertEquals(response.toString(), 201, response.status());
+		long docNumber = response.json().path("docNumber").asLong();
+		Document saved = DocumentDAO.get().findByCustomId(Long.toString(docNumber), Tenant.DEFAULT_ID);
+		assertEquals(1, jdbc().queryForObject(
+				"select count(*) from ld_link where ld_deleted = 0 and ld_type = 'attachment' and ld_docid1 = ? and ld_docid2 = ?",
+				Integer.class, email.getId(), saved.getId()).intValue());
+		assertEquals(1, linksOf(email.getId()));
+		assertEquals(1, linksOf(saved.getId()));
+		// What the app reads straight after the save, to show Saved as # on the attachment
+		JsonNode attachments = get(path(email, "")).token(token).send().json().path("attachments");
+		assertEquals(docNumber, attachments.get(0).path("docNumber").asLong());
+		assertEquals(1, jdbc().queryForObject(
+				"select count(*) from ld_document where ld_filename = 'Contract.pdf' and ld_deleted = 0", Integer.class)
+				.intValue());
+	}
+
+	@Test
+	public void testSaveToMatterPastTheIndexersWriteOfTheCopy() throws Exception {
+		// The Indexer saves the copy it has just indexed after CE's link DAO read it to count its links, so that
+		// DAO's write of the count is a record version behind
+		Document email = file("parts-attached.eml");
+		String token = signIn(clerk);
+		ApiResponse response;
+		try (BackgroundWrite indexer = BackgroundWrite.of(0, DocumentEvent.INDEXED, copy -> copy.setColor("red"))
+				.overtakingLinkCount().except(email.getId()).start()) {
+			response = post(path(email, "/attachments/1/file")).token(token).send();
+			indexer.assertWritten();
+		}
+
+		assertSavedAndLinked(email, response, token);
+	}
+
+	@Test
+	public void testSaveToMatterPastTheIndexersWriteOfTheCopyAtTheFlush() throws Exception {
+		// The Indexer's save commits just before the UPDATE of the copy's count of links, whose failure CE's DAO
+		// swallows: the transaction that stored the link rolls back at its commit, unseen and unlogged, and the
+		// message read 4 ms after the 201 named no copy (the smoke test's step 9, CI, 2026-11-21)
+		Document email = file("parts-attached.eml");
+		String token = signIn(clerk);
+		ApiResponse response;
+		try (BackgroundWrite indexer = BackgroundWrite
+				.atFlush(0, DocumentEvent.INDEXED, copy -> copy.setColor("red")).overtakingLinkCount()
+				.except(email.getId()).start()) {
+			response = post(path(email, "/attachments/1/file")).token(token).send();
+			indexer.assertWritten();
+		}
+
+		assertSavedAndLinked(email, response, token);
+	}
+
+	@Test
+	public void testSaveToMatterPastABackgroundWriteOfTheEmailAtTheFlush() throws Exception {
+		// The same, for the email: its count of links is written first, in the same transaction
+		Document email = file("parts-attached.eml");
+		String token = signIn(clerk);
+		ApiResponse response;
+		try (BackgroundWrite indexer = BackgroundWrite
+				.atFlush(email.getId(), DocumentEvent.INDEXED, d -> d.setColor("red")).overtakingLinkCount().start()) {
+			response = post(path(email, "/attachments/1/file")).token(token).send();
+			indexer.assertWritten();
+		}
+
+		assertSavedAndLinked(email, response, token);
+	}
+
+	@Test
+	public void testSaveToMatterWhoseLinkIsOvertakenEveryTimeIsTakenBack() throws Exception {
+		// Other writes of the copy keep coming, so the link is never kept: the save says so and keeps nothing
+		Document email = file("parts-attached.eml");
+		String token = signIn(clerk);
+		ApiResponse response;
+		try (BackgroundWrite indexer = BackgroundWrite
+				.atFlush(0, DocumentEvent.INDEXED, copy -> copy.setColor("red")).overtakingLinkCount()
+				.except(email.getId()).always().start()) {
+			response = post(path(email, "/attachments/1/file")).token(token).send();
+			indexer.assertWritten();
+			assertEquals(CheckoutResource.TRIES, indexer.writes());
+		}
+
+		assertEquals(response.toString(), 500, response.status());
+		assertEquals(0, jdbc().queryForObject("select count(*) from ld_link where ld_deleted = 0", Integer.class)
+				.intValue());
+		assertEquals(0, linksOf(email.getId()));
+		assertTrue(get(path(email, "")).token(token).send().json().path("attachments").get(0).path("docNumber")
+				.isNull());
 		assertEquals(0, jdbc().queryForObject(
 				"select count(*) from ld_document where ld_filename = 'Contract.pdf' and ld_deleted = 0", Integer.class)
 				.intValue());
