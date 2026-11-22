@@ -1,6 +1,6 @@
 ---
 title: Office Previews
-weight: 9
+weight: 10
 ---
 
 Healdan converts Word, Excel, PowerPoint and OpenDocument files, LibreOffice Draw's `.odg` drawings among them, to
@@ -17,12 +17,21 @@ PDF with LibreOffice, which is in the Docker image, for their previews and thumb
 - **On the spot.** If someone opens a preview before its turn, it's converted then.
 - **Safely.** Conversion never runs a document's macros and never fetches anything over the network.
 - **Permissions** are those of PDF previews: Read and Download.
+- **Reading one is recorded.** Opening a preview in the User app, in Quick Look or the reading pane, is recorded in
+  the document's history as a view, once per person and half hour, and the thumbnail isn't: see
+  [What Counts as Looking at a Document](../monitoring/audit-trail/#what-counts-as-looking-at-a-document).
 
 ## When a Preview Says "Not Available"
 
 A damaged or password-protected file can't be converted, and its preview says "not available". It doesn't hold up
-other files. To find out why a file failed, search the log, `repository/logs/dms.log`, for `LibreOffice` or
-`com.logicaldoc.healdan.preview`.
+other files. To find out why a file failed, open the Admin app's [Server Log](../monitoring/server-log/), choose
+**Warnings and Errors**, and search for `LibreOffice` or `com.logicaldoc.healdan.preview`. The log is
+`repository/logs/dms.log`.
+
+<!-- P5 docs pass 2 -->
+
+A file that can't be converted is logged as a warning, not an error, so it isn't on the
+[Errors](../monitoring/errors/) screen. A fault that stops the previews themselves is, in its **Previews** area.
 
 ## Files That Keep Timing Out
 
@@ -32,5 +41,12 @@ straight away, and Healdan gives up on it after four tries.
 To try again with a longer limit, raise `converter.OfficeConverter.timeout` (in seconds) in the configuration
 volume's `context.properties`, and restart. Healdan then gives each version that timed out under the shorter limit
 one more try. Replacing a version's file also starts its conversion over.
+
+## Watching the Previews
+
+The Admin app's Dashboard counts the previews waiting to be made and those given up on, on its **Previews** tile, and
+under Needs Attention once one is given up on. Both open [Background Jobs](../monitoring/background-jobs/), whose
+**Previews** job says when it last ran and how that went. It runs by itself, as files arrive, so Background Jobs
+offers nothing to do with it.
 
 [What Runs](../../install/what-runs/#office-previews) in the Install manual has the details.

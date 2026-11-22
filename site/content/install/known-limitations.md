@@ -197,14 +197,15 @@ weight: 13
 
 ## The Admin App
 
-- **The Dashboard, clients, matters, templates, Stores, storage backends, users and groups so far.** The Admin app at
-  `/admin/` has its Dashboard, the clients and matters with a page for each, each matter's workspace, the workspace
-  templates, the Stores with a page for each, the storage backends, and the users and groups with a page for each. The
-  permissions of documents, Healdan Settings, scheduled tasks, search and indexing and the server's log are all in the
-  Classic Interface, which the Admin app's left pane and its links open, and so are the Security settings, making
-  read-only accounts, deleting accounts and unlinking one from its sign-in provider. A Store's **Who Can See It** adds
-  groups, not people: to let one person see a Store, add a group they're in. See
-  [The Admin App](../../admin/the-admin-app/) and [Users and Groups](../../admin/users-and-groups/).
+- **The Dashboard, clients, matters, templates, Stores, storage backends, users and groups, and monitoring so far.**
+  The Admin app at `/admin/` has its Dashboard, the clients and matters with a page for each, each matter's workspace,
+  the workspace templates, the Stores with a page for each, the storage backends, the users and groups with a page for
+  each, and the errors, the server's log, the Audit Trail and the background jobs. The permissions of documents,
+  Healdan Settings and search and indexing are all in the Classic Interface, which the Admin app's left pane and its
+  links open, and so are the Security settings, making read-only accounts, deleting accounts and unlinking one from
+  its sign-in provider. A Store's **Who Can See It** adds groups, not people: to let one person see a Store, add a
+  group they're in. See [The Admin App](../../admin/the-admin-app/), [Users and Groups](../../admin/users-and-groups/)
+  and [Monitoring](../../admin/monitoring/).
 - **For the `admin` group only.** A group given Administration screens through the Classic Interface's menus doesn't
   get the Admin app, and keeps using those screens there.
 - **As the User app,** it needs a [secure address](#the-user-app) and a host name of its own, is made for current

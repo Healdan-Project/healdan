@@ -11,9 +11,10 @@ kept.
 Start in [the Admin app](the-admin-app/), at `/admin/`, whose Dashboard shows what needs your attention, the server's
 health and how Healdan is used, and where [clients and matters](clients-and-matters/), their workspaces, the
 [workspace templates](workspace-templates/) and the [Stores](stores/) are made and managed, the
-[storage backends](storage-backends/) set up, and the [people and groups](users-and-groups/) added and looked after.
-Everything else is still done in the Classic Interface, under **Administration** and in the Documents tab's folder
-tree, and the rest of this guide describes those screens.
+[storage backends](storage-backends/) set up, the [people and groups](users-and-groups/) added and looked after, and
+the server [monitored](monitoring/): its errors, its log, the Audit Trail and the background jobs. Everything else is
+still done in the Classic Interface, under **Administration** and in the Documents tab's folder tree, and the rest of
+this guide describes those screens.
 
 {{< cards >}}
   {{< card link="the-admin-app/" title="The Admin App" icon="presentation-chart-bar" >}}
@@ -25,6 +26,7 @@ tree, and the rest of this guide describes those screens.
   {{< card link="permissions/" title="Permissions" icon="shield-check" >}}
   {{< card link="healdan-settings/" title="Healdan Settings" icon="cog" >}}
   {{< card link="storage-backends/" title="Storage Backends" icon="database" >}}
+  {{< card link="monitoring/" title="Monitoring" icon="status-online" >}}
   {{< card link="office-previews/" title="Office Previews" icon="eye" >}}
   {{< card link="system/" title="System" icon="adjustments" >}}
 {{< /cards >}}
