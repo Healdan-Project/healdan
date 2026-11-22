@@ -1,16 +1,23 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
+import { useNavigate } from '@tanstack/react-router'
 import type { adminComponents } from '@healdan/api'
-import { searchId } from '../addresses'
+import { useApi } from '@healdan/shell'
+import { Icon } from '@healdan/ui'
+import { routes, searchId } from '../addresses'
+import { AuditFilters } from '../monitoring/AuditFilters'
+import { AuditList } from '../monitoring/AuditList'
+import { auditExportHref, type AuditQuery } from '../monitoring/queries'
+import { auditKinds, inKindOrder } from '../monitoring/text'
 import { typed } from '../pickers/typing'
 import { t } from '../strings'
-import styles from './views.module.css'
+import styles from '../monitoring/Audit.module.css'
 
 type A = adminComponents['schemas']
 
 /** The kinds of row the Audit Trail has, in the server's order */
-export const auditKinds = ['sign-in', 'document', 'folder', 'user', 'administration'] as const satisfies readonly A['AuditKind'][]
+export { auditKinds }
 
 /**
  * What the Audit Trail's address holds: its kinds, the person, the matter and the doc # it keeps the rows of, its days
@@ -44,10 +51,9 @@ function dayIn(value: unknown): string | undefined {
  */
 export function auditSearch(search: Record<string, unknown>): AuditSearch {
   const listed: unknown[] = Array.isArray(search.kind) ? search.kind : [search.kind]
-  const kind = auditKinds.filter((one) => listed.includes(one))
   const q = typeof search.q === 'string' ? typed(search.q) : ''
   return {
-    kind: kind.length === 0 ? undefined : kind,
+    kind: inKindOrder(listed.filter((one): one is string => typeof one === 'string')),
     user: searchId(search.user),
     matter: searchId(search.matter),
     doc: searchId(search.doc),
@@ -57,15 +63,41 @@ export function auditSearch(search: Record<string, unknown>): AuditSearch {
   }
 }
 
+/** The filters the address holds, as the list's route and the export take them */
+function queryOf(search: AuditSearch): AuditQuery {
+  return { kind: search.kind, userId: search.user, matterId: search.matter, docNumber: search.doc, from: search.from, to: search.to, q: search.q }
+}
+
 /**
- * The Audit Trail, at /admin/audit (spec 8.8): what was done, newest first. The route hands in the address's parameters
- * as `search`.
+ * The Audit Trail, at /admin/audit (spec 8.8): what was done, newest first, from the server's histories and the
+ * administration record, with its filters, every one in the address, so Back and a reload come back to the same list.
+ * Export CSV downloads what the filters keep. The route hands in the address's parameters as `search`.
  */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- the list and its filters read it
 export function AuditView({ search }: { search: AuditSearch }) {
+  const api = useApi()
+  const navigate = useNavigate({ from: routes.audit })
+  const query = queryOf(search)
+  const filtered = Object.values(query).some((value) => value !== undefined)
+
+  /** The address with `change` made, kept in place of the one before: a filter isn't a step of its own */
+  function change(next: Partial<AuditSearch>) {
+    void navigate({ to: routes.audit, search: (prev) => ({ ...prev, ...next }), replace: true })
+  }
+
   return (
     <div className={styles.view}>
-      <h1 className={styles.title}>{t('admin.audit.title')}</h1>
+      <div className={styles.head}>
+        <h1 className={styles.title}>{t('admin.audit.title')}</h1>
+        <div className={styles.actions}>
+          {/* A plain link, with the browser's own session, so the file comes as the server sends it, row by row */}
+          <a className={styles.export} href={auditExportHref(api, query)} download>
+            <Icon name="download" size={14} />
+            {t('admin.audit.export')}
+          </a>
+        </div>
+      </div>
+      <AuditFilters search={search} onChange={change} />
+      <AuditList query={query} filtered={filtered} label={t('admin.audit.title')} fill />
     </div>
   )
 }

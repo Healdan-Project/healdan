@@ -1,0 +1,235 @@
+/* SPDX-FileCopyrightText: 2026 The Healdan Project
+   SPDX-License-Identifier: LGPL-3.0-only */
+
+/* The Audit Trail, as 03-monitoring.html draws it, and the Activity tabs: the heading with Export CSV at the end of its
+   line, the filters, then the list, which fills what they leave of the main area and scrolls inside, with Show More or the
+   end under it and the selected row's details under that. In a tab the page scrolls as a whole, so the list has a height
+   of its own. */
+
+.view {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  height: 100%;
+  min-height: 0;
+  padding: var(--hd-space-5) var(--hd-space-6) var(--hd-space-4);
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--hd-space-2) var(--hd-space-4);
+  margin-bottom: var(--hd-space-2);
+}
+
+.title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: var(--hd-weight-bold);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-self: center;
+  gap: var(--hd-space-3);
+  margin-inline-start: auto;
+}
+
+/* Export CSV, a link that looks like a button */
+.export {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--hd-space-2);
+  box-sizing: border-box;
+  min-height: 26px;
+  padding: 0 var(--hd-space-4);
+  border: 1px solid var(--hd-button-secondary-line);
+  border-radius: var(--hd-radius);
+  background: var(--hd-button-secondary);
+  color: var(--hd-text);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.export:focus-visible {
+  outline: var(--hd-focus-outline);
+  outline-offset: var(--hd-focus-offset);
+  box-shadow: 0 0 0 5px var(--hd-focus-ring);
+}
+
+/* The filters: the kinds on a line of their own, the searches, the days and the words under them */
+.filters {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hd-space-3);
+  padding-bottom: var(--hd-space-3);
+  border-bottom: 1px solid var(--hd-line);
+}
+
+.fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--hd-space-3) var(--hd-space-4);
+}
+
+.filter {
+  flex: 0 1 220px;
+  min-width: 160px;
+}
+
+.day {
+  flex: 0 0 auto;
+}
+
+.words {
+  flex: 1 1 240px;
+  max-width: 320px;
+}
+
+/* The kinds' tick boxes, in a row after their name */
+.kinds > [role='group'] {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--hd-space-2) var(--hd-space-5);
+}
+
+.kinds > [role='group'] > :first-child {
+  margin: 0;
+}
+
+/* The list, and what's under it */
+.list {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.fill {
+  flex: 1;
+}
+
+.fixed {
+  height: min(70vh, 640px);
+  min-height: 320px;
+}
+
+.rows {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 160px;
+}
+
+.empty {
+  margin: 0;
+  color: var(--hd-text-secondary);
+}
+
+.footer {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--hd-space-4);
+  min-height: 26px;
+  padding: var(--hd-space-2) 0;
+}
+
+.end {
+  margin: 0;
+  color: var(--hd-text-secondary);
+  font-size: var(--hd-font-size-small);
+}
+
+.end:focus-visible {
+  outline: var(--hd-focus-outline);
+  outline-offset: var(--hd-focus-offset);
+  border-radius: var(--hd-radius-small);
+}
+
+/* The selected row, whole: its facts in two columns, its changes and its link, in a box that scrolls when it's long */
+.details {
+  flex: none;
+  max-height: 35vh;
+  overflow: auto;
+  padding: var(--hd-space-3) var(--hd-space-4);
+  border: 1px solid var(--hd-line);
+  border-radius: var(--hd-radius);
+  background: var(--hd-window);
+  color: var(--hd-text);
+}
+
+.details:focus-visible {
+  outline: var(--hd-focus-outline);
+  outline-offset: var(--hd-focus-offset);
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--hd-space-2) var(--hd-space-5);
+  margin: 0;
+}
+
+.facts dt {
+  color: var(--hd-text-secondary);
+}
+
+.facts dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.changes {
+  margin-top: var(--hd-space-3);
+}
+
+.changesTitle {
+  margin: 0 0 var(--hd-space-1);
+  color: var(--hd-text-secondary);
+}
+
+.changes ul {
+  margin: 0;
+  padding-inline-start: var(--hd-space-5);
+  overflow-wrap: anywhere;
+}
+
+.open,
+.link {
+  color: var(--hd-accent-text);
+}
+
+.open {
+  display: inline-block;
+  margin-top: var(--hd-space-3);
+}
+
+.open:focus-visible,
+.link:focus-visible {
+  outline: var(--hd-focus-outline);
+  outline-offset: var(--hd-focus-offset);
+  border-radius: var(--hd-radius-small);
+}
+
+/* An Activity tab: its kinds, with the way to the whole Audit Trail at the end of their line, over the list */
+.activity {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hd-space-3);
+}
+
+.activityHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--hd-space-3) var(--hd-space-5);
+  padding-bottom: var(--hd-space-3);
+  border-bottom: 1px solid var(--hd-line);
+}

@@ -24,7 +24,7 @@ import { StoreView, storeSearch } from './views/StoreView'
 import { TemplatesView } from './views/TemplatesView'
 import { TemplateView } from './views/TemplateView'
 import { UsersView, usersSearch } from './views/UsersView'
-import { UserView } from './views/UserView'
+import { UserView, userSearch } from './views/UserView'
 import { NotFoundView } from './views/NotFoundView'
 
 // The frame holds every page, and an address no page has is said in the frame, in the app's own words. A page reads only
@@ -109,8 +109,8 @@ const backendRoute = createRoute({
   },
 })
 
-// /users: every person, their filters and order in the address (UsersView); /users/$id, a person's page (UserView), which
-// says itself when the id names nobody
+// /users: every person, their filters and order in the address (UsersView); /users/$id, a person's page, its tab in the
+// address (UserView), which says itself when the id names nobody
 const usersRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: routes.users,
@@ -123,8 +123,9 @@ const usersRoute = createRoute({
 const userRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: routes.user,
+  validateSearch: userSearch,
   component: function UserRoute() {
-    return <UserView id={userRoute.useParams().id} />
+    return <UserView id={userRoute.useParams().id} search={userRoute.useSearch()} />
   },
 })
 

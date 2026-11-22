@@ -11,6 +11,7 @@ import { Fact } from '../facts/Fact'
 import { DeleteMatterDialog } from '../matters/DeleteMatterDialog'
 import { EditMatterDialog } from '../matters/EditMatterDialog'
 import { MoveMatterDialog } from '../matters/MoveMatterDialog'
+import { ActivityPanel } from '../monitoring/ActivityPanel'
 import { plural, t } from '../strings'
 import { useMatter } from '../workspace/queries'
 import { WorkspaceEditor } from '../workspace/WorkspaceEditor'
@@ -20,8 +21,8 @@ import pageStyles from './views.module.css'
 
 type A = adminComponents['schemas']
 
-/** A matter's page's tabs (P2-R5): Reindex's and Activity's come with their phases */
-export type MatterTab = 'overview' | 'workspace'
+/** A matter's page's tabs (P2-R5): Reindex's comes with its phase */
+export type MatterTab = 'overview' | 'workspace' | 'activity'
 
 /** What a matter's page's address holds: the tab open, when it isn't the Overview */
 export interface MatterSearch {
@@ -30,13 +31,13 @@ export interface MatterSearch {
 
 /** The address's parameters the page reads; a tab it doesn't know opens the Overview */
 export function matterSearch(search: Record<string, unknown>): MatterSearch {
-  return { tab: search.tab === 'workspace' ? 'workspace' : undefined }
+  return { tab: search.tab === 'workspace' || search.tab === 'activity' ? search.tab : undefined }
 }
 
 /**
  * A matter's page, at /admin/matters/{id} (spec 8.3, P2-R5): its title, client, Store, owner, template and totals; Edit,
- * Move to Another Store, Open in Healdan and Delete; and the Overview and Workspace tabs, the tab in the address. An
- * address that names no matter, or one in the Trash, says so in the app's words.
+ * Move to Another Store, Open in Healdan and Delete; and the Overview, Workspace and Activity tabs, the tab in the address.
+ * An address that names no matter, or one in the Trash, says so in the app's words.
  */
 export function MatterView({ id, search }: { id: string; search: MatterSearch }) {
   const matterId = idFrom(id)
@@ -89,7 +90,8 @@ function Matter({ matter, tab }: { matter: A['Matter']; tab: MatterTab }) {
 
   function choose(next: string) {
     // A tab isn't a step of its own, as an order isn't
-    void navigate({ to: routes.matter, params: { id: String(matter.id) }, search: next === 'workspace' ? { tab: 'workspace' } : {}, replace: true })
+    const search: MatterSearch = next === 'workspace' || next === 'activity' ? { tab: next } : {}
+    void navigate({ to: routes.matter, params: { id: String(matter.id) }, search, replace: true })
   }
 
   return (
@@ -139,6 +141,12 @@ function Matter({ matter, tab }: { matter: A['Matter']; tab: MatterTab }) {
         tabs={[
           { id: 'overview', label: t('admin.matter.tab.overview'), content: <Overview matter={matter} /> },
           { id: 'workspace', label: t('admin.matter.tab.workspace'), keepMounted: workspaceOpened, content: <WorkspaceEditor rootFolderId={matter.folderId} kind="matter" /> },
+          // The Audit Trail for the matter (P5-R24): the Workspace behind it stays as it was, and changing to it asks nothing
+          {
+            id: 'activity',
+            label: t('admin.matter.tab.activity'),
+            content: <ActivityPanel fixed={{ matterId: matter.id }} name={t('admin.matter.title', { number: matter.number, name: matter.name })} />,
+          },
         ]}
       />
       {dialog === 'edit' && <EditMatterDialog matter={matter} onClose={close} />}
