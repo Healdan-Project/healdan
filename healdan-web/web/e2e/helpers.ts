@@ -216,18 +216,21 @@ export async function expectListUnder(field: Locator) {
 }
 
 /**
- * Starts a download with `start`, waits for it, and checks the server answered it with the file (`200`). The download
- * alone proves little: a browser can save a refusal's body as readily as a file's, and under the name the page gave it,
- * as WebKit did while the app's link had the `download` attribute. The page then says nothing went wrong: the app takes a
- * frame that loads a page for a refusal, and each browser must tell it of none for a file.
+ * Starts a download with `start`, waits for it, and checks the server answered it with the file (`200`), and, when
+ * `type` is given, with a `Content-Type` it matches. The download alone proves little: a browser can save a refusal's
+ * body as readily as a file's, and under the name the page gave it, as WebKit did while the app's link had the
+ * `download` attribute. The page then says nothing went wrong: the app takes a frame that loads a page for a refusal,
+ * and each browser must tell it of none for a file.
  */
-export async function downloadBy(page: Page, start: () => Promise<unknown>): Promise<Download> {
-  const answers = new Map<string, number>()
-  const note = (response: Response) => void answers.set(response.url(), response.status())
+export async function downloadBy(page: Page, start: () => Promise<unknown>, expected: { type?: RegExp } = {}): Promise<Download> {
+  const answers = new Map<string, { status: number; type: string }>()
+  const note = (response: Response) =>
+    void answers.set(response.url(), { status: response.status(), type: response.headers()['content-type'] ?? '' })
   page.on('response', note)
   try {
     const [download] = await Promise.all([page.waitForEvent('download'), start()])
-    await expect.poll(() => answers.get(download.url()), { message: `the server's answer to the download of ${download.url()}` }).toBe(200)
+    await expect.poll(() => answers.get(download.url())?.status, { message: `the server's answer to the download of ${download.url()}` }).toBe(200)
+    if (expected.type) expect(answers.get(download.url())?.type, `the type of the download of ${download.url()}`).toMatch(expected.type)
     await expect(page.getByText('Something went wrong.')).toHaveCount(0)
     return download
   } finally {
