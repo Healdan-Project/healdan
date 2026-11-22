@@ -22,9 +22,9 @@ logged, its log files, the Audit Trail of who did what, and the background jobs.
 and **Background Jobs** how many jobs failed when they last ran or are overdue, as the Dashboard's Needs Attention
 counts them. As with **Backends**, the counts are asked for when the Admin app opens and each time you come back to its
 window, and every 30 seconds while the Dashboard is showing. Marking a fault resolved or reopening it asks for them
-again at once, and so does each action on a job. The Dashboard's figures can be a minute or two old, though, so a count
-may not change straight away: it follows the next time it's asked for, when you come back to the window, or within 30
-seconds while the Dashboard is showing.
+again at once, and the Errors count follows. Each action on a job asks for them again too, but the server works out
+the jobs' figures afresh only once a minute, so the Background Jobs count can take a minute or two to follow, as can a
+new fault in the Errors count: each shows the next time the counts are asked for after that.
 
 ## From the Dashboard
 

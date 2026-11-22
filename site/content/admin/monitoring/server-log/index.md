@@ -11,9 +11,9 @@ It doesn't show the container's own output, such as the start-up tool's messages
 
 ## Choosing a Log
 
-The **Log** menu has **Main Log** first, then each other log that holds anything, by name: a LogicalDOC task's log
-under the task's name, such as **Indexer**, and any other under its name in the server's logging configuration. A task
-such as the Indexer writes to its own log, not to the main log.
+The **Log** menu has **Main Log** first, then each other log that holds anything, A to Z by the name the menu gives
+it: a LogicalDOC task's log under the task's name, such as **Indexer**, and any other under its name in the server's
+logging configuration. A task such as the Indexer writes to its own log, not to the main log.
 
 A log is its current file and the older files it rolled over to, read as one. As Healdan ships, the main log starts a
 new file once it reaches 5 MB and keeps the five before it, so it holds about 30 MB: lines older than that are gone
@@ -37,8 +37,9 @@ Above the box:
 - **Level:** **Everything**, which the page starts on, **Warnings and Errors**, or **Errors**. Lines that start no
   entry, such as those at the very start of the oldest file, show only under Everything.
 - **Search the Log** keeps the entries whose message, source or following lines hold what you type, in any case. It
-  searches what the page shows, so it never finds a URL's user name or password, which don't show, and it searches
-  a source by its whole name, such as `com.logicaldoc.healdan.preview`. The box follows once you pause typing.
+  looks through the lines as the page shows them, where a user name and password written in a URL have been cut (see
+  [below](#a-user-name-and-password-in-a-url)), and through a source by its whole name, such as
+  `com.logicaldoc.healdan.preview`. The box follows once you pause typing.
 
 Choosing another log, level or search starts again from the newest entries. With a level or a search, each read looks
 through only so much of the log, about 5 MB, so it can find few entries, or none. The page then goes on back by
