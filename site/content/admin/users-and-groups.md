@@ -85,7 +85,8 @@ block ends. The Admin app's find opens it too. Beside the name are its actions:
 **Disable**, **Sign Out Everywhere** and **Reset Password** ask first, and **Enable** and **Clear Sign-In Block**,
 which take nothing away, don't. Where Healdan would refuse one of them, it's greyed out, and the page says why under
 the actions, in Healdan's own words, such as "You can't disable your own account." on yours: see
-[What Healdan Refuses](#what-healdan-refuses). Should something change meanwhile, Healdan's refusal shows when you try.
+[What Healdan Refuses](#what-healdan-refuses). Should something change meanwhile, Healdan's refusal shows when you try,
+under the actions, until you open a dialog or their status changes.
 
 Below them are **Details**: their **Username**, **Email**, **Signs In With** (their sign-in provider, or their
 password, with when it was last set, or that they must change it at their next sign-in), **Language**, **Time Zone**,
@@ -150,8 +151,9 @@ person signs it in again whenever they're ready. Their other devices stay signed
   afterwards. One that another account has, in any case, is taken, a deleted account's or a system account's
   included: New User names the person who has it before you press **Create User**, and Healdan refuses it whoever has
   it.
-- **First Name** and **Last Name:** both needed, each at most 255 characters.
-- **Email:** their email address, if they have one. Their temporary password can be emailed only to it.
+- **First Name** and **Last Name:** both needed, each at most 255 characters, with no control characters or markup.
+- **Email:** their email address, if they have one, at most 255 characters: an `@` that's neither first nor last, and
+  no spaces or control characters. Their temporary password can be emailed only to it.
 - **Language:** a menu of the languages your install offers, filled in with the server's default.
 - **Time Zone:** none unless you choose one: type part of its name, such as `london` or `new york`, and choose it,
   such as `Europe/London`.
@@ -166,8 +168,12 @@ Healdan would refuse, said beside its field, such as a username that's taken. An
 press it shows in the dialog, in Healdan's own words, beside its field or above the buttons. While the account is being
 made, **Cancel** is greyed out, and Esc and a click outside do nothing, as the account would be made anyway.
 
-Once it's made, New User shows the temporary password, or that it was emailed, under "Added Ann Lee". **Done** closes
-it and opens their page.
+New User offers the languages and time zones Healdan gives it. If it can't read them, it says "Couldn't read the
+languages and time zones to choose from, so the account can't be made yet.", with **Try Again**, and **Create User**
+stays greyed out until they come.
+
+Once it's made, New User shows the temporary password, or that it was emailed, under "Added Ann Lee". Only **Done**
+closes it, and opens their page: Esc and a click outside do nothing, as it's the only time the password is shown.
 
 ### The Temporary Password
 
@@ -177,8 +183,8 @@ to change it at their first sign-in: the sign-in page asks them for a new one.
 - **Emailed:** with **Email It to Them** ticked, Healdan emails it to them once the account is made, and says so,
   with the address, without showing it to you.
 - **Shown once:** otherwise, New User shows it once the account is made, for you to give them, with **Copy**. "It
-  isn't shown again: once this closes, it's gone." Nothing shows it again, and Healdan keeps no copy anyone can read:
-  if it's lost, use [Reset Password](#reset-password).
+  isn't shown again: once this closes, it's gone." Only **Done** closes it. Nothing shows it again, and Healdan keeps
+  no copy anyone can read: if it's lost, use [Reset Password](#reset-password).
 - **Shown when it can't be emailed:** when outgoing email isn't set up, they have no email address, or the mail
   server didn't take the email within 15 seconds, the account is still made, and New User shows the password instead,
   saying why it wasn't emailed: "Couldn't email the temporary password: the mail server didn't take it in time. Give
@@ -214,7 +220,8 @@ provider gives them.
 provider account's can be, may stay blank; one that wasn't is still needed. A username never changes. **Save** stays
 greyed out until something has changed, and sends only what you changed, so a field you left alone keeps what it
 holds, even if another administrator changed it while Edit was open. A language or time zone set elsewhere that Edit's
-menus don't offer stays as it is unless you change it.
+menus don't offer stays as it is unless you change it, and so does an email set elsewhere that New User wouldn't take:
+Edit and Healdan judge it only once you change it.
 
 For an account that signs in through a provider, Edit says the provider may set the names and the email again at their
 next sign-in through it, from what the provider has.
@@ -225,11 +232,16 @@ next sign-in through it, from what the provider has.
 their next sign-in. It asks first, "Reset the Password of Ann Lee?", and says they're signed out everywhere. While
 [outgoing email](../system/outgoing-email/#when-email-counts-as-set-up) is set up and they have an email address, it
 offers **Email It to Them**; otherwise it says the password will be shown. Then it shows the password once, or says it
-was emailed, as New User does (see [The Temporary Password](#the-temporary-password)).
+was emailed, as New User does, and only **Done** closes it (see [The Temporary Password](#the-temporary-password)).
 
-A reset signs them out everywhere: every device signed in as them is signed out, and every session they have open is
-closed, as a reset is often because the account may be in someone else's hands. It also lifts a
-[sign-in block](#clear-sign-in-block) on their username, as any new password does.
+A reset signs them out everywhere, as [Sign Out Everywhere](#sign-out-everywhere) does: every device signed in as them
+is signed out, and every session they opened is closed, as a reset is often because the account may be in someone
+else's hands. It also lifts a [sign-in block](#clear-sign-in-block) on their username, as any new password does.
+
+A reset doesn't delete their LogicalDOC API keys: a key they made signs in again once they've chosen their new
+password, until it's deleted, and only they can delete it. Have them delete any key they don't recognise, as
+[Device Sign-Ins](../healdan-settings/#device-sign-ins) says for a lost device. See
+[Known Limitations](../../install/known-limitations/).
 
 - **An account that signs in through a provider** has no password in Healdan, so its page doesn't offer
   **Reset Password**, and Healdan refuses a reset for it. Use [Sign Out Everywhere](#sign-out-everywhere) to sign it
@@ -242,14 +254,16 @@ closed, as a reset is often because the account may be in someone else's hands. 
 ## Sign Out Everywhere
 
 **Sign Out Everywhere** signs the person out of everything at once, after asking, "Sign Ann Lee Out Everywhere?":
-every device signed in as them is signed out, and every session they have open is closed, however it was opened: the
-web page's, the Classic Interface's, WebDAV's, an API key's or a device's. Each app and device is signed out at its
-next request. Healdan then says what it did, as "Signed Ann Lee out: 2 sessions closed, 1 device signed out", or "Ann
-Lee was signed in nowhere".
+every device signed in as them is signed out, and every session they opened is closed, however it was opened: the web
+page's, the Classic Interface's, WebDAV's, an API key's or a device's, and one they opened in another account's name,
+as an [allowed impersonator](../../user/getting-started/your-profile-and-password/#allowed-impersonators). Each app and
+device is signed out at its next request. Healdan then says what it did, as "Signed Ann Lee out: 2 sessions closed, 1
+device signed out", or "Ann Lee was signed in nowhere".
 
-It changes nothing else: they can sign in again straight away, with the same password or through their provider. To
-keep them out, [disable](#disable-and-enable) them, or [reset their password](#reset-password) if someone else may
-know it.
+It changes nothing else: they can sign in again straight away, with the same password or through their provider, and
+a LogicalDOC API key they made still signs in, until it's deleted (see
+[Known Limitations](../../install/known-limitations/)). To keep them out, [disable](#disable-and-enable) them, or
+[reset their password](#reset-password) if someone else may know it.
 
 Signing yourself out this way is allowed: the question says it signs you out here too, and the Admin app then shows
 that you're signed out.
@@ -284,8 +298,10 @@ So that someone can always administer Healdan, Healdan refuses, each with a sent
   app mid-change;
 - **any change that would leave no enabled administrator,** an enabled account in `admin`: "That would leave no
   enabled administrator. Make someone else an administrator first." Two such changes at the same moment are made one
-  after the other, the second counting the administrators the first left, so two administrators can't take each other
-  out.
+  after the other, and the second is checked against what the first left, so two administrators can't take each other
+  out: it counts the administrators the first left, and a **Disable**, or a change of someone's groups or a group's
+  members, by an administrator the first disabled is refused, with "Your own account has been disabled, so you can't
+  change people's accounts and groups."
 
 It also refuses:
 
@@ -333,9 +349,9 @@ as one naming a personal group or a deleted one does.
 read-only account marked **Read-Only**, and each name opening their page. **Name, Username or Email** keeps the members
 whose name, username or email holds what you type. It shows 100, and **Show More** the next 100.
 
-- **Add Member** finds a person by name or username, among the accounts that can sign in, and **Add** adds them at
-  once. Someone already in the group is said so before **Add**. Adding someone to `admin` asks first: see
-  [Day-to-Day Accounts Shouldn't Be Admins](#day-to-day-accounts-shouldnt-be-admins).
+- **Add Member** finds a person by name or username, among the accounts that can sign in, and **Add** adds them at once.
+  Someone already in the group is said so before **Add**, and adding someone already in it changes nothing. Adding
+  someone to `admin` asks first: see [Day-to-Day Accounts Shouldn't Be Admins](#day-to-day-accounts-shouldnt-be-admins).
 - **Remove**, beside a member, asks first, "Take Ann Lee Out of Partners?", saying they lose what the group gives them
   unless another of their groups gives it too, then takes them out. Taking someone out of `admin` says they can no
   longer use the Admin app, nor read every document.
@@ -353,7 +369,8 @@ whose name, username or email holds what you type. It shows 100, and **Show More
 **New Group** asks for:
 
 - **Name:** at most 200 characters, not starting `_user_`, as personal groups' names do, and with no control
-  character. One that another group has, in any case, is taken: New Group says so before its button.
+  character. One that another group has, in any case, is taken: New Group says so before its button, and Healdan
+  refuses it whoever has it.
 - **Description:** at most 255 characters, if you want one.
 
 It says the new group has no members, and gives nobody anything until a folder's or a Store's access names it: see

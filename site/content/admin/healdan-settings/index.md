@@ -44,7 +44,7 @@ their sign-ins and revokes each one. An administrator sees the same list on the 
 **Users**, and revokes any of them with **Revoke**: see [Devices](../users-and-groups/#devices).
 
 To sign out every device a person has signed in on, use **Sign Out Everywhere** on their page, which also closes
-every session they have open: see [Sign Out Everywhere](../users-and-groups/#sign-out-everywhere). **Reset Password**
+every session they opened: see [Sign Out Everywhere](../users-and-groups/#sign-out-everywhere). **Reset Password**
 and **Disable** there sign them out everywhere too. A new password set any other way, or disabling them in the Classic
 Interface, signs out every device. Deleting a person stops their devices at once too.
 
@@ -52,7 +52,7 @@ Interface, signs out every device. Deleting a person stops their devices at once
 
 1. **Sign it out.** If the person can still sign in, they can revoke its row in their **Signed-in Devices**, or you
    can revoke it on their page, which signs out that device alone. Otherwise, or to be sure, use
-   **Sign Out Everywhere** on their page, which signs out every device and closes every session open as them, and
+   **Sign Out Everywhere** on their page, which signs out every device and closes every session they opened, and
    leaves their password as it is. If whoever has the device may also know the password, use **Reset Password**
    instead, which does the same and gives them a temporary one.
 2. **Their API keys.** Have them delete any LogicalDOC API keys they don't recognise: under the person icon in the
@@ -290,8 +290,9 @@ Linking an account, or making one, turns it into a provider account:
 - **Its LogicalDOC API keys are deleted,** as a key would let it in without the provider. A key made afterwards,
   under the person icon's **Security → API Keys**, never signs in.
 - **Its open sessions are closed,** in the web page, WebDAV, CMIS and the web services, however they were opened:
-  with its password, with its keys, or by another account's key impersonating it. Only the sign-in through the
-  provider that linked it stays signed in.
+  with its password, with its keys, or by another account's key impersonating it. So are those its person opened in
+  another account's name, as an allowed impersonator. Only the sign-in through the provider that linked it stays
+  signed in.
 - **Its Healdan Helpers signed in with the old password are signed out,** and ask the person to sign in again,
   through the provider.
 - **Everything else stays:** its user id, and with it its documents, check-outs, history, My Matters, favourites

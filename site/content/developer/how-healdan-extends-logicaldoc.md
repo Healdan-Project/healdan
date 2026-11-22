@@ -660,58 +660,68 @@ see [Building from Source](../building-from-source/#running-the-war-outside-dock
     account belongs only to its own group and `guest`. A group is a live ordinary group of the tenant that isn't a
     person's own (`_user_…`), and `admin`, `guest`, `publisher` and Everyone are fixed. The Users list reads the
     accounts, their groups, provider links, throttle counts and device tokens in one go (`PeopleReads`), then filters,
-    sorts and pages in Java, as a firm has hundreds of people. A person's Last Sign-In is when LogicalDOC last opened a session for them: `Session`
-    writes `ld_lastlogin` and an `event.user.login` history row for every new session, a device token's included once
-    its bound session has timed out, and an account with no such row has never signed in.
-  - **Each change runs a transaction of its own,** a `TransactionTemplate` rather than `@Transactional`, and refuses
-    to run inside a caller's (`IllegalStateException`), so a guarded change commits before it lets go of its lock, and
-    what follows a commit follows a real one: closing sessions, emailing a temporary password and `recordAfter`. Each
-    refuses anyone but an administrator first, then what isn't a person or a group, then a form's fields
-    (`admin.FieldRefusal`, each field with its code and sentence, in the form's order), then a group id in the request
-    that names no group, then a change that would change nothing, answered as it is and not recorded, and last
-    Healdan's rules, each a `HealdanRuleException` with its sentence (public constants, such as
-    `UserAdministration.LAST_ADMIN`). A refusal changes nothing. A person's `refusals`, on their page, are those
-    sentences, worked out at the read.
+    sorts and pages in Java, as a firm has hundreds of people. A person's Last Sign-In is when LogicalDOC last opened a
+    session for them: `Session` writes `ld_lastlogin` and an `event.user.login` history row for every new session, a
+    device token's included once its bound session has timed out, and an account with no such row has never signed
+    in.
+  - **Each change runs a transaction of its own,** a `TransactionTemplate` rather than `@Transactional`, and refuses to
+    run inside a caller's (`IllegalStateException`), so a guarded change commits before it lets go of its lock, and what
+    follows a commit follows a real one: closing sessions, emailing a temporary password and `recordAfter`. Each refuses
+    anyone but an administrator first (and, for the changes the guards below bind, a caller whose own account is no
+    longer enabled), then what isn't a person or a group, then a form's fields (`admin.FieldRefusal`, each field with
+    its code and sentence, in the form's order), then a group id in the request that names no group, then a change that
+    would change nothing, answered as it is and not recorded, and last Healdan's rules, each a `HealdanRuleException`
+    with its sentence (public constants, such as `UserAdministration.LAST_ADMIN`). A refusal changes nothing. A person's
+    `refusals`, on their page, are those sentences, worked out at the read.
   - **The guards and the locks.** The `admin` account is never disabled or taken out of the `admin` group, nobody
-    disables or takes themselves out of it, and no change leaves the tenant without an enabled administrator (an
-    enabled account in `admin`, not a system account). A change that could lower their count, a disable or a
-    membership change that touches `admin`, holds `UserAdministration.ADMIN_CHANGES`, counts them after its write,
-    inside its transaction, and commits before it lets go, so of two administrators taking each other out at the same
-    moment the second counts what the first left, and is refused. New User holds `NEW_USERNAMES`, and New Group and a
-    rename `GroupAdministration.GROUP_NAMES`, so a name's check in any case and its insert can't interleave with
-    another's; a unique index's refusal (SQLState `23505`) is checked again after the transaction, as `NumberRaces`
-    does, and answered `taken` only when the name is taken now. Each lock is taken outside its transaction, and
-    nothing after a commit runs under one.
-  - **Signing a person out** is `PersonSessions` (`admin.people`): `closeAll(userId)` closes every open LogicalDOC
-    session of the account on this server, however it was opened (the web page's, the Classic Interface's, WebDAV's,
-    CMIS's, the web services', an API key's or a device token's), each by its id with `SessionManager.kill`, never
-    through the request that asks, and each on its own, so one that fails leaves the others closed all the same. It
-    holds the session manager's lock, which LogicalDOC holds while it signs someone in, so a sign-in that read the
-    account before the commit has its session in the pool by then. It never throws. Disable and Reset Password call it
-    once they've committed, and Sign Out Everywhere once it has revoked the device tokens. M4's account linking
-    (`SignInAccounts`) closes an account's sessions, and those its API keys opened, through it too.
+    disables or takes themselves out of it, and no change made here leaves the tenant without an enabled administrator
+    (an enabled account in `admin`, not a system account). A change that could lower their count, a disable or a change
+    of anyone's memberships (a person's groups, a group's member added or removed), holds
+    `UserAdministration.ADMIN_CHANGES`, counts them after its write, inside its transaction, and commits before it lets
+    go, so of two administrators taking each other out at the same moment the second counts what the first left, and is
+    refused. Inside the lock, before anything else, it refuses a caller whose own account, as stored now and read with
+    JDBC past the second-level cache, is no longer enabled (`YOUR_ACCOUNT_DISABLED`), so an administrator another
+    disabled while their change waited its turn changes nothing. Edit, Enable, Reset Password's transaction and a
+    group's delete hold `ADMIN_CHANGES` too, so the Admin app's stores of one person take turns, and none puts back
+    groups another has just changed. New User holds `NEW_USERNAMES`, and New Group and a rename
+    `GroupAdministration.GROUP_NAMES`, so a name's check in any case and its insert can't interleave with another's; a
+    unique index's refusal (SQLState `23505`) is checked again after the transaction, as `NumberRaces` does, and
+    answered `taken` only when the name is taken now. Each lock is taken outside its transaction, and nothing after a
+    commit runs under one.
+  - **Signing a person out** is `PersonSessions` (`admin.people`): `closeAll(userId, username)` closes every open
+    LogicalDOC session of the account on this server, however it was opened (the web page's, the Classic Interface's,
+    WebDAV's, CMIS's, the web services', an API key's or a device token's), and every one the person opened as another
+    account, whose `impersonator` is their stored username, each by its id with `SessionManager.kill`, never through the
+    request that asks, and each on its own, so one that fails leaves the others closed all the same. It holds the
+    session manager's lock, which LogicalDOC holds while it signs someone in, so a sign-in that read the account before
+    the commit has its session in the pool by then. It never throws. Disable and Reset Password call it once they've
+    committed, and Sign Out Everywhere once it has revoked the device tokens. M4's account linking (`SignInAccounts`)
+    closes an account's sessions, those it opened as another account, and those its API keys opened, through it too.
   - **Temporary passwords** are `TemporaryPasswords` (`com.logicaldoc.healdan.signin`), which New User, Reset Password
-    and unlinking an account from its sign-in provider (`SignInAdmin`) share. `make` makes one and checks it against
-    the tenant's password rules, before the change's transaction, with a second try; `email` sends each in LogicalDOC's credentials email (`psw.rec1`) once the change has committed, waits 15
-    seconds at most for the mail server to take it, and says what became of it (`EMAILED`, `NOT_SET_UP`, `NO_EMAIL` or
-    `NOT_TAKEN`). A reset stores the password with the must-change flag and the history LogicalDOC writes for a new
-    password, through `UserDAO.store`, so the listeners revoke the person's device tokens and lift their username's
-    block. The password is in New User's and Reset Password's result, once, when it wasn't emailed, and in no record,
-    log line, exception or `toString()`.
+    and unlinking an account from its sign-in provider (`SignInAdmin`) share. `make` makes one and checks it against the
+    tenant's password rules, before the change's transaction, with a second try; `email` sends each in LogicalDOC's
+    credentials email (`psw.rec1`) once the change has committed, waits 15 seconds at most for the mail server to take
+    it, and says what became of it (`EMAILED`, `NOT_SET_UP`, `NO_EMAIL` or `NOT_TAKEN`). A reset stores the password
+    with the must-change flag and the history LogicalDOC writes for a new password, through `UserDAO.store`, so the
+    listeners revoke the person's device tokens and lift their username's block. The password is in New User's and Reset
+    Password's result, once, when it wasn't emailed, and in no record, log line, exception or `toString()`.
   - **The other changes.** Clear Sign-In Block clears the username's count through `HealdanThrottle.passwordSet`'s
     logic, never an address's. A person's groups are set as a whole, their own group, and Everyone or `guest`, kept
     whatever is sent. A group's delete takes each member who's a person out through `UserDAO.store`, so the listeners
     run, and any other account's membership, such as a system account's, by its `ld_usergroup` row alone, never storing
     that account, then deletes the group, all in one transaction. A group's name is at most 200 characters, as
     LogicalDOC renames a deleted group `<name>.<id>` within 255, and a longer one given elsewhere is refused a delete
-    until it's renamed.
+    until it's renamed. An edit takes the person's current names, email, language and time zone as they are, a blank
+    name or an email set elsewhere that New User wouldn't take included, and checks only what it changes, as the Admin
+    app sends back what it was given.
   - **Recording.** Each change is in the administration record, in the People area, a person named as
     `Ann Lee (alee)` (`PersonNames.recorded`) and a group by its name: `user.created` (every field set, the groups by
     name, and `password` as a secret), `user.changed`, `user.disabled`, `user.enabled`, `user.groups-changed` (the
     groups before and after, by name), `user.block-cleared`, `group.created`, `group.changed`, `group.deleted`,
     `group.member-added` and `group.member-removed` inside the change's transaction, and `user.password-reset`
     (`password` as a secret, and `emailed`), `user.signed-out` (the sessions and devices) and `user.device-revoked`
-    (the device's name) straight after it, with `recordAfter`.
+    (the device's name) straight after it, with `recordAfter`: a reset's record says whether the email went, which is
+    known only once it has.
   - **`hd_error` and `hd_error_hour`** (`V12__admin.sql` too) hold the errors the server logged, by fault. `hd_error`
     has a row for each fingerprint: the level, the area, the logger, the latest message, its stack and the documents
     it names (the ids a message names as `doc 10412` or `document id 10412`), how many times it was seen, when first
@@ -729,7 +739,11 @@ see [Building from Source](../building-from-source/#running-the-war-outside-dock
     class, the message up to 4,000 characters and the stack up to 16,000, with any NUL character taken out, which
     PostgreSQL refuses in text) onto a queue in memory that holds 1,000, and counts what doesn't fit. It leaves out
     what its own package's loggers log and anything logged on the writer's thread, so a failure to write the errors
-    can't feed itself.
+    can't feed itself. It leaves out a refused sign-in too: an `AuthenticationException`, of any kind, that LogicalDOC's
+    `AuthenticationChain` logs, such as a password that has to be changed first or a disabled account, which is a
+    refusal, not a fault, and which every first sign-in with a temporary password would otherwise add. Anything else
+    that logger logs at error, a `PersistenceException` or an error with no exception, is a fault as any other
+    (`ErrorCaptureTest#testASignInRefusedIsNoFault`).
   - **One thread, `healdan-error-writer`, writes them.** It takes the queue's errors in batches of 100, oldest first.
     An error it can't write stays at the head of its batch while the queue fills behind it, so while the database is
     down nothing is lost but what doesn't fit; the thread logs a warning, waits a second, doubling up to a minute, and

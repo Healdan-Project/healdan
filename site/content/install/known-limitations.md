@@ -17,13 +17,18 @@ weight: 13
 - **No HTTPS on its own.** The app speaks plain HTTP, so anything beyond the machine running Docker goes through a
   [reverse proxy](../reverse-proxy/).
 - **Signed-in Devices lists device sign-ins only.** The app's **Signed-in Devices** shows a person the sign-ins of
-  their Healdan Helper on each Mac, and any program signed in through the API with a password, and revokes them one by one. It doesn't list the web page's own sessions, which
-  **Sign Out** ends, or LogicalDOC's API keys. Changing a person's password or disabling them signs every device out,
-  and **Sign Out Everywhere**, on their page in the Admin app, signs out every device and closes their open sessions
-  too. For a lost device, also delete any LogicalDOC API keys the person doesn't recognise, under the person icon,
-  **Security → API Keys** in the Classic Interface: a key outlasts a password change. See
-  [Healdan Settings](../../admin/healdan-settings/#device-sign-ins) and the User Guide's
-  [Signed-in Devices](../../user/getting-started/signed-in-devices/).
+  their Healdan Helper on each Mac, and any program signed in through the API with a password, and revokes them one by
+  one. It doesn't list the web page's own sessions, which **Sign Out** ends, or LogicalDOC's API keys. Changing a
+  person's password or disabling them signs every device out, and **Sign Out Everywhere**, on their page in the Admin
+  app, signs out every device and closes their open sessions too. For a lost device, also delete any LogicalDOC API
+  keys the person doesn't recognise, under the person icon, **Security → API Keys** in the Classic Interface: a key
+  outlasts a password change. See [Healdan Settings](../../admin/healdan-settings/#device-sign-ins) and the User
+  Guide's [Signed-in Devices](../../user/getting-started/signed-in-devices/).
+- **The Admin app leaves a person's LogicalDOC API keys.** **Reset Password** and **Sign Out Everywhere**, on a person's
+  page, don't delete them: a key the person made signs in again once they've chosen their new password after a reset,
+  and straight away after Sign Out Everywhere, until it's deleted. Only the key's owner can delete it, under the person
+  icon, **Security → API Keys** in the Classic Interface. While the account is disabled, no key signs it in. See
+  [Reset Password](../../admin/users-and-groups/#reset-password).
 - **Microsoft Entra ID is experimental.** Signing in through Entra ID hasn't been tried against a real Entra tenant
   yet, only through Authentik and a stand-in provider. See [Microsoft Entra ID](../sign-in/entra-id/).
 - **Provider accounts have no password.** An account that signs in through a provider, such as Microsoft Entra ID,

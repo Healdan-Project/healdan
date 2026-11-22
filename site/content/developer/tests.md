@@ -229,9 +229,9 @@ and `ResourceServiceImplTest#testMoveFolder` (WebDAV's move). `RpcPermissionGaps
 
 ### The Admin App's Server Tests
 
-The administration record's, the error capture's, the job status's, the Dashboard's, and the clients', matters',
-folder access's, Stores', workspaces', templates' and people's tests are in `healdan-core`
-(`com.logicaldoc.healdan.admin` and the packages under it), `healdan-api` and `healdan-storage`. No test makes a real start, so they call
+The administration record's, the error capture's, the job status's, the Dashboard's, and the clients', matters', folder
+access's, Stores', workspaces', templates' and people's tests are in `healdan-core` (`com.logicaldoc.healdan.admin` and
+the packages under it), `healdan-api` and `healdan-storage`. No test makes a real start, so they call
 `ErrorWriter.drainOnce()` and `UsageSummary.refreshNow()` themselves, and the tests of the threads start them;
 `DashboardServiceTest` calls `forget()`, which drops what the Dashboard keeps, before it reads again.
 
@@ -244,7 +244,9 @@ folder access's, Stores', workspaces', templates' and people's tests are in `hea
 - **`ErrorCaptureTest`** runs the appender on a Log4j context of its own (`capture-log4j.xml`): errors on additive and
   non-additive loggers, one appender however often it's attached, a new one after a reload, a storm of 5,000 that
   keeps the first 1,000, counts the rest and makes nobody wait, its own package's loggers and the writer's thread left
-  out, detaching, and the caps.
+  out, a refused sign-in left out (`testASignInRefusedIsNoFault`: an `AuthenticationException` from LogicalDOC's
+  sign-in chain, while a `PersistenceException` and an error with no exception from it, and a refusal another logger
+  logs, are kept), detaching, and the caps.
 - **`ErrorWriterTest`** checks the writer: the queue kept while the database is down and written once it's back, an
   error refused itself left out after three tries, and its count started again when the database goes down between
   them, a database that fails every write (a timeout, a lock, a full disk, a read-only database, an exhausted pool)
@@ -264,16 +266,15 @@ folder access's, Stores', workspaces', templates' and people's tests are in `hea
   LogicalDOC's Store isn't `HealdanStorage`, and that the mover, the purge and the retests report under their names, a
   purge that fails saying why.
 - **`DashboardServiceTest`** checks Needs Attention and Server Health over fakes of each source: each attention code,
-  several backends and Stores, the ten tiles in order and those that need attention, a part that fails leaving the
-  rest whole, a source that can't be read unchecked, a slow one still being worked out, storage backends off, the
-  database's tile on PostgreSQL, Sign-In and Outgoing Email, and a second read coming from what's kept.
-  `DashboardScreensTest` pins where the links go: each shipped screen's Admin address, the Dashboard, Clients,
-  Matters, Workspace Templates, Stores, Backends and Users, the Classic Interface for every other, and stuck files linking
-  to Stores, or to Backends when only files with no Store are stuck, as `DashboardServiceTest` does too. `CachedTest`
-  checks what's kept: one ask per period however many read, the last answer while it's asked again, none older than
-  two periods, a failure kept like an answer, `forget()` and a clock set back. `WordsTest` checks the tiles' words,
-  and `ProviderClientTest` that `answers` fetches a provider's discovery document afresh and remembers a failure for
-  30 seconds.
+  several backends and Stores, the ten tiles in order and those that need attention, a part that fails leaving the rest
+  whole, a source that can't be read unchecked, a slow one still being worked out, storage backends off, the database's
+  tile on PostgreSQL, Sign-In and Outgoing Email, and a second read coming from what's kept. `DashboardScreensTest` pins
+  where the links go: each shipped screen's Admin address, the Dashboard, Clients, Matters, Workspace Templates, Stores,
+  Backends and Users, the Classic Interface for every other, and stuck files linking to Stores, or to Backends when only
+  files with no Store are stuck, as `DashboardServiceTest` does too. `CachedTest` checks what's kept: one ask per period
+  however many read, the last answer while it's asked again, none older than two periods, a failure kept like an answer,
+  `forget()` and a clock set back. `WordsTest` checks the tiles' words, and `ProviderClientTest` that `answers` fetches
+  a provider's discovery document afresh and remembers a failure for 30 seconds.
 - **`UsageSummaryTest`** checks the Usage: nothing before the first summary, the totals, 30 days of documents,
   storage by Store with the backends the storage port names and a port that fails, the busiest matters, each matter's
   figures, the stamps read trimmed, the people signed in, reading the summary running no query (counted on a
@@ -362,24 +363,26 @@ folder access's, Stores', workspaces', templates' and people's tests are in `hea
   administrator, and finds each `403 admins-only`, with nothing changed.
 - **`UserAdministrationTest`**, in `healdan-core`, checks the people: the Users list leaving out system, deleted and
   other tenants' accounts, each row's fields, Disabled winning over Blocked and a block ending after its wait, a
-  provider account signing in with its provider, the filters together, each sort both ways with someone who never
-  signed in last, and paging; a person's page with their check-outs and the
-  matters they own; the options; New User's password account in Everyone, its password emailed, or shown when it can't
-  be, a username taken in any case, a deleted or system account's included, every field refused at once, and a group
-  that isn't one; an edit of contacts, language and time zone, a stored blank name kept and a provider
-  account given no password; a system account never changed, and a non-administrator refused every change first;
-  Disable revoking the device tokens and closing the sessions; the guards, each with its sentence, a change that
-  changes nothing answered before them and `refusals` null for it; Reset Password signing the person out everywhere,
-  emailing the password, and refused for your own account and a provider's; Sign Out Everywhere's counts, an expired
-  token revoked but not counted; Clear Sign-In Block clearing the username's count alone; a person's groups replaced,
-  Everyone kept, and a read-only person given no group but `guest`; and the devices, one revoked, and one's provider
-  named by its id once the provider is removed. `GroupAdministrationTest`
-  checks the groups: the list by name, a mapped group's providers, a page's count of the folders that grant it, what
-  isn't a group having no page, New Group and its refused fields, a 200-character name made and 201 refused, an older
-  name too long to keep once deleted still editable and its delete refused, a fixed group's name kept and its
-  description changed, a delete taking the members out and never storing a system account in the group (its
-  `ld_usergroup` row taken out alone), a fixed group never deleted, the members by name, a member added and removed,
-  Everyone's and `guest`'s guards and the `admin` group's, and a non-administrator refused every change first.
+  provider account signing in with its provider, the filters together, each sort both ways with someone who never signed
+  in last, and paging; a person's page with their check-outs and the matters they own; the options; New User's password
+  account in Everyone, its password emailed, or shown when it can't be, a username taken in any case, a deleted or
+  system account's included, every field refused at once, and a group that isn't one; an edit of contacts, language and
+  time zone, a stored blank name kept, a stored email New User wouldn't take kept (`testAnEditKeepsAStoredEmailAsItIs`)
+  and a provider account given no password; a system account never changed, and a non-administrator refused every change
+  first; Disable revoking the device tokens and closing the sessions, and Disable, Reset Password and Sign Out
+  Everywhere closing one the person opened as another account (`testTheSessionsAPersonOpenedAsAnotherAccountCloseToo`,
+  `carol>bob`, bob's own session staying); the guards, each with its sentence, a change that changes nothing answered
+  before them and `refusals` null for it; Reset Password signing the person out everywhere, emailing the password, and
+  refused for your own account and a provider's; Sign Out Everywhere's counts, an expired token revoked but not counted;
+  Clear Sign-In Block clearing the username's count alone; a person's groups replaced, Everyone kept, and a read-only
+  person given no group but `guest`; and the devices, one revoked, and one's provider named by its id once the provider
+  is removed. `GroupAdministrationTest` checks the groups: the list by name, a mapped group's providers, a page's count
+  of the folders that grant it, what isn't a group having no page, New Group and its refused fields, a 200-character
+  name made and 201 refused, an older name too long to keep once deleted still editable and its delete refused, a fixed
+  group's name kept and its description changed, a delete taking the members out and never storing a system account in
+  the group (its `ld_usergroup` row taken out alone), a fixed group never deleted, the members by name, a member added
+  and removed, Everyone's and `guest`'s guards and the `admin` group's, and a non-administrator refused every change
+  first.
 - **The races.** `UserAdministrationTest#testTwoAdminsCannotRemoveEachOther` and `#testTwoAdminsCannotDisableEachOther`
   disable the `admin` account in their fixture, so two administrators are the only enabled ones, then run both changes
   at once: one is made and the other refused. `#testTwoCreatesOfOneUsernameInAnyCase` and
@@ -389,7 +392,12 @@ folder access's, Stores', workspaces', templates' and people's tests are in `hea
   the administrators, counted them), to hold a change there until the other thread is waiting for that very lock, as
   `ThreadMXBean` names it, or has reached the hook too, as it would without the lock. With any of the locks taken out,
   all four fail every time; an earlier version that waited before the count, or for any blocked state, let the race
-  pass without the lock some of the time. The tests put the hook back to `NOTHING` as they end.
+  pass without the lock some of the time. The tests put the hook back to `NOTHING` as they end. With the same hook,
+  `#testAnAdministratorDisabledMeanwhileChangesNothing` has two administrators disable each other at once, one made
+  and the other refused as its own account is disabled, then holds a Disable of an administrator while their own
+  change of someone's groups waits for the lock, which is then refused, changing nothing; and
+  `#testTheAppsStoresOfAPersonTakeTurns` holds a change of someone's groups while an Edit, an Enable, a Reset Password
+  and a group's delete start, and finds each waited for the lock and both changes kept.
 - **Temporary passwords in tests.** `SignInTestHooks.makeTemporaryPasswords(generator)`, in `healdan-core`'s test-jar,
   has `TemporaryPasswords.make` use a test's generator in place of LogicalDOC's, so a test knows the password it gets,
   until `SignInTestHooks.reset()`; `captureEmails` keeps the credentials emails rather than send them, as for
@@ -408,8 +416,9 @@ folder access's, Stores', workspaces', templates' and people's tests are in `hea
   missing account, and for a person's own, a deleted or another tenant's group, with the route's own sentence ("There's
   no person 4953.") so a missing route can't pass; `publisher`'s page at its negative id; the check order (`400`
   before `404` before `422`); `422`'s fields, `taken` in any case among them; the guards and the no-ops through the
-  routes; two administrators disabling each other at once without the hook, one `200` and the other `409` or, its
-  session closed first, `401`; the device tokens signed out and the sessions closed; and the refusals of a
+  routes; two administrators disabling each other at once without the hook, one `200` and the other `409`, with the
+  sentence for a caller whose own account was disabled, or, its session closed first, `401`; an edit keeping a stored
+  email that `POST` wouldn't take; the device tokens signed out and the sessions closed; and the refusals of a
   non-administrator and of a device token on every People route. A `FieldRefusal` answered `409` rather than `422`,
   or a password logged, fails them.
 
@@ -1003,7 +1012,9 @@ Tests](#the-web-modules-tests) are Maven's). [The Web App](../the-web-app/) says
     says it's signed out. **Enable** lets the person sign in again, with the password they chose. It never touches
     `webuser`, `apiuser`, Everyone or `admin`'s own account, and no sign-in of any name fails with a wrong password, as
     five block a username for 15 minutes: the person's first, with the temporary password, is the right password that
-    has to change, which the sign-in throttle doesn't count.
+    has to change, which the sign-in throttle doesn't count. Its person and group stay on the stack, as the Admin app
+    deletes no account, so a stack it runs on again and again collects one of each per browser per run, as
+    `admin-a11y.spec.ts`'s are, one per theme.
   - `admin-storage.spec.ts` walks Phase 3's Storage screens (Admin app spec §8.6). As `admin`, with names of its own
     run, it finds `Smoke Garage` reachable on the Backends list, with its page and the storage settings and their
     limits, which it only reads: none of its requests there writes, and a value outside a setting's limits is said

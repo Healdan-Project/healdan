@@ -191,11 +191,12 @@ apart; a blank name is "Unnamed device".
 - **Changing your password signs out every device.** For a lost device, do that, then delete any LogicalDOC API
   keys you don't recognise: in the web page, under the person icon in the top bar, **Security → API Keys**,
   right-click a key and choose **Delete**. A device token can't make a key, but whoever had the device may have had
-  the web page too, and a key outlasts a password change. Then ask an administrator to end your open sessions
-  (see [Healdan Settings](../../admin/healdan-settings/#device-sign-ins)).
+  the web page too, and a key outlasts a password change. Then ask an administrator to use **Sign Out Everywhere** on
+  your page in the Admin app, which signs out every device and closes every session you opened, a key's included (see
+  [Healdan Settings](../../admin/healdan-settings/#device-sign-ins)).
 - **An account that signs in through a provider** has no password to change, and its API keys never sign in. For
-  a lost device, ask an administrator to disable the account and enable it again, which signs out every device,
-  and to end your open sessions.
+  a lost device, ask an administrator to use **Sign Out Everywhere** on your page in the Admin app, which signs out
+  every device and closes every session you opened.
 - **Signing out** is `DELETE /auth/tokens/current`, which revokes the token making the request.
 - **Your devices:** `GET /auth/tokens` lists your tokens that still work, newest first, never the tokens themselves.
   `current` marks the one making the request, and none on the web session. `DELETE /auth/tokens/{id}` revokes one
@@ -1473,16 +1474,20 @@ is.
 - **The checks come in the order above:** `400` for a body that isn't the JSON expected, and for `groupIds` with a
   null or a group named twice; `404`; `422 validation`, with each field's `required`, `too-long`, `invalid`, `taken`
   or `not-editable`; then `409 refused`, with the rule's sentence.
-- **A change that would change nothing is answered as it is,** before any refusal, and isn't recorded: a Disable of a
-  disabled account, the `admin` account's included, an Enable of an enabled one, a `PUT …/groups` of the groups they're
-  in, a Clear Sign-In Block with nothing counted, a Sign Out Everywhere with nothing to close
+- **A change that would change nothing is answered as it is,** before any refusal of the rules, and isn't recorded:
+  a Disable of a disabled account, the `admin` account's included, an Enable of an enabled one, a `PUT …/groups` of
+  the groups they're in, a Clear Sign-In Block with nothing counted, a Sign Out Everywhere with nothing to close
   (`{ "sessions": 0, "devices": 0 }`), and a member's add when they're in the group and remove when they're not (`204`
   both). A person's `refusals` agree: an action that would change nothing isn't refused.
 - **The guards,** each `409 refused` with its sentence: disabling the `admin` account or yourself; taking the `admin`
   account out of the `admin` group, or yourself; and any change that would leave the tenant with no enabled
   administrator, an enabled account in `admin` that isn't a system account. That's counted after the change and before
   it commits, under a lock every such change holds, so of two administrators taking each other out at the same moment,
-  the second is refused. They bind Disable, `PUT …/groups` and a member's `DELETE`.
+  the second is refused. They bind Disable, `PUT …/groups` and a member's `DELETE`. Under the same lock, Disable,
+  `PUT …/groups` and a member's `PUT` and `DELETE` first refuse a caller whose own account is no longer enabled, as
+  another administrator disabled it while the change waited its turn ("Your own account has been disabled, so you
+  can't change people's accounts and groups."). Edit, Enable, Reset Password and a group's `DELETE` hold the lock too,
+  so the changes to one person take turns, and none puts back what another has just changed.
 - **Everyone and `guest`.** Every person but a read-only one is always in Everyone, and a read-only one always in its
   own group and `guest`, and in no other. `PUT …/groups` keeps them whether it names them or not, so the answer's
   `groups` has them. Naming any other group for a read-only account, Everyone included, a member's `PUT` of one into
@@ -1493,9 +1498,10 @@ is.
   or a log line. `emailed` says whether the mail server took it, within 15 seconds; an answer doesn't say why it
   wasn't, which the Admin app works out from the options' `outgoingEmail` and the person's `email`.
 - **Signing out.** Disable and Reset Password revoke the person's device tokens in their transaction, and once it has
-  committed close every session open as the person on the server, however it was opened; Sign Out Everywhere does
-  both. A session is closed by its id, never through the request that asks, so the caller's own stays open unless
-  it's the person's: signing yourself out is allowed, and your next request is `401`.
+  committed close every session the person opened on the server, however it was opened, as themselves or as another
+  account they may impersonate; Sign Out Everywhere does both. A session is closed by its id, never through the
+  request that asks, so the caller's own stays open unless it's the person's: signing yourself out is allowed, and
+  your next request is `401`.
 - **Each change is recorded** in the People area, inside its transaction, or straight after it for one with steps
   after its commit: `user.created`, `user.changed`, `user.disabled`, `user.enabled`, `user.password-reset` (`password`
   as a secret, with no value, and `emailed`), `user.signed-out` (the counts), `user.block-cleared`,
@@ -1519,7 +1525,7 @@ The routes:
   in comes last by `lastSignIn` either way. Any other value is `400`.
 - **`GET /v1/admin/users/options`**, beyond the spec's list, is what New User and Edit offer: `languages`
   (`{ "code", "name" }`, those the tenant's interface offers, by name), `defaultLanguage`, `timeZones` (the IANA
-  region names, sorted, without three-letter ids such as `PST` and `SystemV/` names), `providers` (the sign-in
+  region names and `UTC`, sorted, without three-letter ids such as `PST` and `SystemV/` names), `providers` (the sign-in
   providers that are on, as `{ "id", "label" }`, in their buttons' order) and `outgoingEmail`, whether outgoing email
   counts as set up.
 - **`POST /v1/admin/users`** with `{ "username", "firstName", "lastName", "email", "language", "timeZone",
@@ -1528,7 +1534,8 @@ The routes:
   `{ "user", "temporaryPassword", "emailed" }`, and its `Location`. `username`, `firstName`, `lastName` and
   `emailPassword` are needed; text is read trimmed, a blank email is none, a language left out the default, and a time
   zone left out none. `422` is `required`; `too-long` past 255 characters; `invalid` for a username with `>` or a
-  control character, an email that isn't an address, and a language or time zone the options don't offer; and `taken`
+  control character, a first or last name with a control character or markup, an email with no `@` but first or last
+  or with whitespace or a control character, and a language or time zone the options don't offer; and `taken`
   for a username another account has, in any case, a deleted or a system account's included, and for the second of
   two creates of one username at the same moment.
 - **`GET /v1/admin/users/{id}`** is a person's page, `User`: the row, with `language` (never null), `timeZone`,
@@ -1539,8 +1546,9 @@ The routes:
   person. A member left out stays; `email` or `timeZone` null or blank takes it away, and `language` null or blank is
   the default. A `username`, even as null, is `422 not-editable`. A first or last name null or blank is `422 required`
   over a name that isn't blank, and one that's blank now, as a provider account's can be, may stay blank. A language
-  or time zone equal to the person's own is taken as it is, offered or not. A provider account's names and email may
-  be set again at its next sign-in through the provider.
+  or time zone equal to the person's own is taken as it is, offered or not, and so is an email equal to theirs, but for
+  whitespace at either end, even one set elsewhere that `POST` wouldn't take; a different one is checked as `POST`'s.
+  A provider account's names and email may be set again at its next sign-in through the provider.
 - **`POST /v1/admin/users/{id}/disable`** and **`/enable`** answer the person. Disable revokes the device tokens and
   closes the sessions; Enable gives no token back.
 - **`POST /v1/admin/users/{id}/reset-password`** with `{ "emailPassword" }`, `422 required` without it, gives the
