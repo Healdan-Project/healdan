@@ -51,7 +51,8 @@ Change the `admin` password straight away.
 
 Signing in opens Healdan's web app. As `admin`, open your menu, under your initials in the top bar, and choose
 **Admin** for the [Admin app](../../admin/the-admin-app/), whose Dashboard shows the server's health and what needs
-your attention. Give yourself an ordinary account for everyday work: `admin` can read every document.
+your attention. Give yourself an ordinary account for everyday work, with **New User** under **Users** there (see
+[New User](../../admin/users-and-groups/#new-user)): `admin` can read every document.
 
 {{% /steps %}}
 

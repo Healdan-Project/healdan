@@ -322,9 +322,14 @@ export const templateTrees: Record<number, A['WorkspaceNode']> = {
   ),
 }
 
-export const everyone: A['Group'] = { id: 2, name: 'Everyone', description: 'Everyone in the firm' }
-export const partners: A['Group'] = { id: 3, name: 'Partners', description: null }
-export const trainees: A['Group'] = { id: 4, name: 'Trainees', description: 'Trainee solicitors' }
+/** A group as GET /v1/admin/groups lists it: no members, not fixed, not `admin`, in no provider's map, unless `over` says */
+export function group(id: number, name: string, description: string | null, over: Partial<A['Group']> = {}): A['Group'] {
+  return { id, name, description, members: 0, fixed: false, admin: false, mappedBy: [], ...over }
+}
+
+export const everyone: A['Group'] = group(2, 'Everyone', 'Everyone in the firm', { members: 12, fixed: true })
+export const partners: A['Group'] = group(3, 'Partners', null, { members: 4 })
+export const trainees: A['Group'] = group(4, 'Trainees', 'Trainee solicitors', { members: 3 })
 
 /** GET /v1/admin/groups: by name, those whose name holds `q`, in any case */
 export function groups(query?: Record<string, unknown>): A['GroupList'] {
@@ -368,10 +373,10 @@ export function matterPage(row: A['MatterRow'] = matterRow(), over: Partial<A['M
   return { ...row, description: 'Charter party dispute over the MV Northern Star.', indexFailed: 0, previewsGivenUp: 0, figuresAt: '2026-11-19T10:41:00Z', ...over }
 }
 
-export const wsEveryone: A['Group'] = { id: 2, name: 'Everyone', description: 'Everyone in the firm' }
-export const wsGuest: A['Group'] = { id: 3, name: 'wsGuest', description: null }
-export const wsPartners: A['Group'] = { id: 20, name: 'Partners', description: null }
-export const wsTrainees: A['Group'] = { id: 21, name: 'Trainees', description: null }
+export const wsEveryone: A['Group'] = group(2, 'Everyone', 'Everyone in the firm', { fixed: true })
+export const wsGuest: A['Group'] = group(3, 'wsGuest', null)
+export const wsPartners: A['Group'] = group(20, 'Partners', null)
+export const wsTrainees: A['Group'] = group(21, 'Trainees', null)
 
 /** GET /v1/admin/groups for `q`: the groups whose name holds it, in any case, by name */
 export function workspaceGroups(q: unknown): A['GroupList'] {

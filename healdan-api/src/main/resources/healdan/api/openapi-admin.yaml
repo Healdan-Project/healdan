@@ -133,11 +133,63 @@ tags:
         no value. A change that changes nothing isn't recorded.
   - name: People
     description: |
-      The People area (`AdminArea.PEOPLE`): the groups, for the forms that
-      name them (Admin app spec section 8.7). Only members of `admin`, on the
-      web session, reach these routes: no session is `401 unauthenticated`,
-      a device token `403 web-session-only`, and anyone else
-      `403 admins-only`.
+      The People area (`AdminArea.PEOPLE`): the people who sign in to
+      Healdan, the groups that give them access, and the groups for the
+      forms that name one (Admin app spec section 8.7). Only members of
+      `admin`, on the web session, reach these routes: no session is
+      `401 unauthenticated`, a device token `403 web-session-only`, and
+      anyone else `403 admins-only`.
+
+      - A person is an account of the caller's tenant that isn't deleted and
+        isn't a system account. A system account, such as `_system`, which
+        runs Healdan's own jobs, isn't a person: it isn't listed or counted,
+        and it's `404 not-found` on every `/v1/admin/users/{id}` path and as
+        a group's member, so nothing here changes it.
+      - New User makes a password account. An account linked to a sign-in
+        provider (`signsInWith`) signs in there and has no password, so
+        Reset Password is refused for it. It's made, or a password account
+        with the same email linked to it when the provider links by email,
+        at the person's first sign-in there, with the groups the provider's
+        group map gives them. Its names and email, and its membership of
+        each group the provider's map names (`Group.mappedBy`), may be set
+        again from the provider at its next sign-in there.
+      - A read-only account (`readOnly`) is always in its own group and
+        `guest`, and in no other: a list of its groups keeps `guest` whether
+        or not it names it, taking it out of `guest` is refused, and so is
+        adding it to any other group. This app makes no read-only account,
+        and changes no account's kind.
+      - Every account but a read-only one is always in Everyone: a list of
+        its groups keeps Everyone whether or not it names it, and taking it
+        out of Everyone is refused.
+      - A change that would change nothing, such as disabling an account
+        that's disabled, is answered as it is, before any refusal below, and
+        isn't recorded; `refusals` agree, refusing no action that would
+        change nothing.
+      - So that someone can always administer Healdan, each of these is
+        `409 refused` with a sentence that says why: disabling the `admin`
+        account, or taking it out of the `admin` group; disabling yourself,
+        or taking yourself out of `admin` (another administrator does, as
+        you'd lose this app mid-change); and any change that would leave no
+        enabled administrator, an enabled account in `admin`. Two such
+        changes at the same moment are made one after the other, the second
+        counting the administrators the first left, so two administrators
+        can't take each other out. A person's `refusals` say beforehand
+        which of their page's actions would be refused, and why.
+      - Disable, Reset Password and Sign Out Everywhere sign the person out
+        everywhere: their device tokens are revoked, and once the change has
+        committed their open sessions on this server close, so every app and
+        device signed in as them is signed out at its next request.
+      - A temporary password, which New User and Reset Password make, is in
+        that route's answer only, and only when it wasn't emailed: never in
+        another answer, a problem, the administration record or a log line.
+      - A person's own group, which every account has, named `_user_` and
+        its id, isn't listed, and is `404 not-found` on every
+        `/v1/admin/groups/{id}` path, as is a deleted group and another
+        tenant's. `admin`, `guest`, `publisher` and Everyone are fixed
+        (`Group.fixed`): they're never renamed or deleted, though their
+        descriptions change.
+      - Each change is recorded in the People area, aimed at the person
+        (`user`) or the group (`group`).
 paths:
   /v1/admin/dashboard:
     get:
@@ -3095,15 +3147,662 @@ paths:
           $ref: '#/components/responses/Problem'
         default:
           $ref: '#/components/responses/Problem'
+  /v1/admin/users:
+    get:
+      operationId: adminListUsers
+      summary: The people
+      description: |
+        The Users list (Admin app spec section 8.7): every person of the
+        caller's tenant, disabled and read-only accounts included, but not
+        deleted or system accounts, as the People tag says. A page of
+        `limit` from `offset`, with the total once the filters have applied,
+        which all apply together.
+
+        - `q`, read with the whitespace at either end taken off, in any case,
+          its `%` and `_` taken as they are, keeps the people whose username,
+          email, first name, last name, or first and last name, as
+          `Ann Lee`, contains it. Without it, or blank, everyone.
+        - `groupId` keeps the members of that group. An id that names no
+          group `GET /v1/admin/groups` lists keeps none.
+        - `status` keeps the people whose `status` is that one.
+        - `sort` is `name` (the default: the name as `name` gives it),
+          `username` or `lastSignIn`, names ignoring case, and `order` `asc`
+          (the default) or `desc`. Ties go by username, ignoring case; by
+          `lastSignIn`, someone who has never signed in comes last whichever
+          the order.
+
+        A `sort`, `order` or `status` that isn't one of these, a negative
+        `offset` or a `limit` outside 1 to 200 is `400 bad-request`.
+      tags: [People]
+      parameters:
+        - name: q
+          in: query
+          required: false
+          description: Part of a person's name, username or email
+          schema:
+            type: string
+        - name: groupId
+          in: query
+          required: false
+          description: Only the members of this group
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+        - name: status
+          in: query
+          required: false
+          description: Only the people with this status
+          schema:
+            $ref: '#/components/schemas/UserStatus'
+        - name: sort
+          in: query
+          required: false
+          description: The column to sort by; `name` by default
+          schema:
+            type: string
+            enum: ['name', 'username', 'lastSignIn']
+        - $ref: '#/components/parameters/SortOrder'
+        - $ref: '#/components/parameters/PageOffset'
+        - $ref: '#/components/parameters/PageLimit'
+      responses:
+        '200':
+          description: A page of people
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserList'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: adminCreateUser
+      summary: Add a person
+      description: |
+        Makes a password account, in one transaction
+        (`UserAdministration.create`), and answers `201` with it and its
+        temporary password, its address as `Location` (Admin app spec
+        section 8.7). The account is an ordinary one, never read-only, in
+        Everyone and each group `groupIds` names, with a temporary password
+        the server's password rules accept, which must be changed at its
+        first sign-in (`mustChangePassword`). The username, the names and
+        the email have the whitespace at either end taken off.
+
+        With `emailPassword` true, the temporary password is emailed to the
+        person, in the credentials email, once the account is made, and the
+        answer has `emailed` true and no password. It's shown instead, with
+        `emailed` false, when `emailPassword` is false, and when it couldn't
+        be emailed: outgoing email isn't set up (`outgoingEmail` in
+        `GET /v1/admin/users/options`), the person has no email address, or
+        the mail server didn't take it within 15 seconds. The account is
+        made either way. The password is in this answer only: never in
+        another answer, a problem, the administration record or a log line.
+
+        Adding someone to `admin` lets them use this app and read every
+        document: the app asks first.
+
+        While a sign-in provider is on (`providers` in the options), people
+        who sign in through it needn't be added here: their account is made,
+        or a password account with the same email linked to it when the
+        provider links by email, at their first sign-in there, with the
+        groups the provider's group map gives them.
+
+        - `400 bad-request` for a `groupIds` that names a group twice or
+          holds a null.
+        - `422 validation`, each by its field: `username`, `firstName` or
+          `lastName` missing, null or blank, or `emailPassword` missing or
+          null (`required`); a username, a name or an email over 255
+          characters (`too-long`); a username with `>` or a control
+          character, an email that isn't an email address, a `language`
+          that isn't one of the options' `languages`, or a `timeZone` that
+          isn't one of their `timeZones` (`invalid`); and a username another
+          account has, in any case, a deleted or a system account's included
+          (`taken`). Of two adds of one username at the same moment, in any
+          case, the second is refused as taken.
+        - `409 refused` for a group in `groupIds` that no longer exists, or
+          isn't one `GET /v1/admin/groups` lists; and for what Healdan's
+          rules refuse.
+
+        Recorded as `user.created`, with every field it set and its groups,
+        by name; never its password.
+      tags: [People]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewUser'
+      responses:
+        '201':
+          description: The new person, and their temporary password unless it was emailed
+          headers:
+            Location:
+              description: The person's address, such as `/api/v1/admin/users/42`
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreatedUser'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/users/options:
+    get:
+      operationId: adminUserOptions
+      summary: What New User and Edit offer
+      description: |
+        What the forms that add and edit a person need (Admin app spec
+        section 8.7), read at the request: the languages a person can be
+        given and the one New User fills in; the time zones; the sign-in
+        providers that are on, for New User's note that people who sign in
+        through one needn't be added; and whether outgoing email is set up,
+        so New User and Reset Password offer to email the temporary password
+        only when it can go.
+
+        `options` is a path of its own: JAX-RS matches it before
+        `GET /v1/admin/users/{id}`'s template, as it does
+        `/v1/admin/matters/next-number` and `/v1/admin/stores/deleted`.
+      tags: [People]
+      responses:
+        '200':
+          description: The options
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserOptions'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/users/{id}:
+    get:
+      operationId: adminGetUser
+      summary: A person
+      description: |
+        The person, as the list gives them, with what their page shows
+        (Admin app spec section 8.7): their language and time zone, when the
+        account was made and its password last set, whether that password
+        must be changed, how many documents they have checked out and live
+        matters they own, and `refusals`, the sentence the server would
+        refuse each of the page's actions with, read at the request. Their
+        devices are `GET /v1/admin/users/{id}/devices`, their check-outs
+        `GET /v1/admin/users/{id}/checkouts`, and the matters they own
+        `GET /v1/admin/matters?ownerId=`.
+
+        An id that names no account, a deleted account, another tenant's or
+        a system account is `404 not-found`.
+      tags: [People]
+      parameters:
+        - $ref: '#/components/parameters/UserPath'
+      responses:
+        '200':
+          description: The person
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+    patch:
+      operationId: adminEditUser
+      summary: Edit a person
+      description: |
+        Changes the person's names, email, language and time zone, the only
+        things the app's Edit changes, in one transaction
+        (`UserAdministration.update`), and answers the person (Admin app
+        spec section 8.7). A member left out stays as it is. An `email` or
+        `timeZone` of null, or blank, takes it away; a `language` of null,
+        or blank, gives the person the options' `defaultLanguage`. The
+        person's current `language` and `timeZone` are accepted as they are,
+        even when the options don't offer them, so an Edit that sends back
+        what it was given saves. The names and the email have the whitespace
+        at either end taken off. For an
+        account linked to a sign-in provider (`signsInWith`), the names and
+        the email may be set again from the provider at its next sign-in
+        there.
+
+        - `404 not-found` as `adminGetUser` answers.
+        - `422 validation` for `username` (`not-editable`): a username never
+          changes here. For `firstName` or `lastName` null or blank
+          (`required`); and for `adminCreateUser`'s `too-long` and `invalid`,
+          each by its field, but for a `language` or `timeZone` that's the
+          person's current one.
+        - `409 refused` for what Healdan's rules refuse.
+
+        Recorded as `user.changed`, with each field whose value changed,
+        before and after. An edit that changes nothing isn't recorded.
+      tags: [People]
+      parameters:
+        - $ref: '#/components/parameters/UserPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserChange'
+      responses:
+        '200':
+          description: The person, changed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/users/{id}/disable:
+    post:
+      operationId: adminDisableUser
+      summary: Disable a person's account
+      description: |
+        Disables the account, so the person can't sign in until it's
+        enabled, and signs them out everywhere (Admin app spec section 8.7):
+        their device tokens are revoked in the same transaction, and once it
+        has committed their open sessions on this server close, so every app
+        and device signed in as them is signed out at its next request.
+        Answers the person. Takes no body. An account already disabled is
+        answered as it is, before the refusals below, and nothing is
+        recorded.
+
+        - `404 not-found` as `adminGetUser` answers.
+        - `409 refused`, as `refusals.disable` says beforehand: for the
+          `admin` account; for the caller's own; for a change that would
+          leave no enabled administrator, counted once any other such change
+          at the same moment has committed; and for what Healdan's rules
+          refuse.
+
+        Recorded as `user.disabled`.
+      tags: [People]
+      parameters:
+        - $ref: '#/components/parameters/UserPath'
+      responses:
+        '200':
+          description: The person, disabled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/users/{id}/enable:
+    post:
+      operationId: adminEnableUser
+      summary: Enable a person's account
+      description: |
+        Enables a disabled account, so the person can sign in again (Admin
+        app spec section 8.7). The device tokens its disable revoked stay
+        revoked, so each device signs in again. Answers the person. Takes no
+        body. An account already enabled is answered as it is, before the
+        refusals below, and nothing is recorded.
+
+        - `404 not-found` as `adminGetUser` answers.
+        - `409 refused`, as `refusals.enable` says beforehand, for what
+          Healdan's rules refuse.
+
+        Recorded as `user.enabled`.
+      tags: [People]
+      parameters:
+        - $ref: '#/components/parameters/UserPath'
+      responses:
+        '200':
+          description: The person, enabled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/users/{id}/reset-password:
+    post:
+      operationId: adminResetUserPassword
+      summary: Give a person a temporary password
+      description: |
+        Gives the person a new temporary password, which the server's
+        password rules accept and which must be changed at their next
+        sign-in, in one transaction, and answers it, or that it was emailed
+        (Admin app spec section 8.7). As any new password does, it revokes
+        their device tokens and clears the failed sign-ins counted under
+        their username; and once it has committed, their open sessions on
+        this server close, so they're signed out everywhere, as a reset is
+        often because the account may be in someone else's hands.
+
+        `emailPassword`, and what the answer holds, are as for
+        `adminCreateUser`: the temporary password is in this answer only,
+        and only when it wasn't emailed.
+
+        - `404 not-found` as `adminGetUser` answers.
+        - `422 validation` for `emailPassword` missing or null (`required`).
+        - `409 refused`, as `refusals.resetPassword` says beforehand: for an
+          account linked to a sign-in provider, which has no password; for
+          the caller's own, which they change from their person menu; and
+          for what Healdan's rules refuse. Another administrator can reset
+          the `admin` account's.
+
+        Recorded as `user.password-reset`, with the password as changed,
+        with no value, and whether it was emailed.
+      tags: [People]
+      parameters:
+        - $ref: '#/components/parameters/UserPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordReset'
+      responses:
+        '200':
+          description: The temporary password, unless it was emailed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemporaryPassword'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/users/{id}/sign-out:
+    post:
+      operationId: adminSignOutUser
+      summary: Sign a person out everywhere
+      description: |
+        Signs the person out everywhere (Admin app spec section 8.7): their
+        device tokens are revoked, and their open sessions on this server
+        close, so every app and device signed in as them is signed out at
+        its next request. Callers can sign themselves out this way: their
+        own session closes too, and the app's next request is
+        `401 unauthenticated`. Answers how many sessions closed and device
+        tokens were revoked. Takes no body.
+
+        `404 not-found` as `adminGetUser` answers.
+
+        Recorded as `user.signed-out`, with those counts. With nothing to
+        close or revoke, nothing changes and nothing is recorded.
+      tags: [People]
+      parameters:
+        - $ref: '#/components/parameters/UserPath'
+      responses:
+        '200':
+          description: What was signed out
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SignedOut'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/users/{id}/clear-block:
+    post:
+      operationId: adminClearUserBlock
+      summary: Clear a person's sign-in block
+      description: |
+        Clears the failed sign-ins counted under the person's username, so a
+        blocked account (`status` `blocked`) can sign in again now rather
+        than at `blockedUntil` (Admin app spec section 8.7). The failed
+        sign-ins counted against an address stay. Answers the person. Takes
+        no body.
+
+        `404 not-found` as `adminGetUser` answers.
+
+        Recorded as `user.block-cleared`. With no failed sign-in to clear,
+        nothing changes and nothing is recorded.
+      tags: [People]
+      parameters:
+        - $ref: '#/components/parameters/UserPath'
+      responses:
+        '200':
+          description: The person, with no block
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/users/{id}/groups:
+    put:
+      operationId: adminSetUserGroups
+      summary: Set the groups a person is in
+      description: |
+        Sets the groups the person is in to those `groupIds` names, in one
+        transaction (`UserAdministration.setGroups`), and answers the person
+        (Admin app spec section 8.7). Their own group, which isn't listed,
+        stays; so does Everyone, for an account that isn't read-only, and
+        `guest`, for a read-only one, whether or not the list names it. An
+        empty list leaves them in no other group. A list that changes
+        nothing is answered as it is, before the refusals below. For an
+        account linked to a sign-in provider, its
+        membership of each group the provider's group map names
+        (`Group.mappedBy`) may be set again from the provider at its next
+        sign-in there. Adding someone to `admin` lets them use this app and
+        read every document: the app asks first.
+
+        - `400 bad-request` for a `groupIds` that names a group twice or
+          holds a null.
+        - `404 not-found` as `adminGetUser` answers.
+        - `422 validation` for a missing or null `groupIds` (`required`).
+        - `409 refused` for a group that no longer exists, or isn't one
+          `GET /v1/admin/groups` lists; for a read-only account given any
+          group but `guest`; for taking the `admin` account, or the caller,
+          out of `admin`, as `refusals.leaveAdmin` says beforehand; for a
+          change that would leave no enabled administrator, counted once any
+          other such change at the same moment has committed; and for what
+          Healdan's rules refuse.
+
+        Recorded as `user.groups-changed`, with the groups before and after,
+        by name. A change that changes nothing isn't recorded.
+      tags: [People]
+      parameters:
+        - $ref: '#/components/parameters/UserPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserGroups'
+      responses:
+        '200':
+          description: The person, in their new groups
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/users/{id}/devices:
+    get:
+      operationId: adminListUserDevices
+      summary: A person's signed-in devices
+      description: |
+        The person's device tokens that still work, newest first, the whole
+        list (Admin app spec section 8.7): one for each sign-in of an app on
+        a computer, such as the Healdan Helper, that hasn't been revoked or
+        expired. Never a token itself, or anything it could be made again
+        from. The browser's web session isn't a device, and isn't listed.
+
+        `404 not-found` as `adminGetUser` answers.
+      tags: [People]
+      parameters:
+        - $ref: '#/components/parameters/UserPath'
+      responses:
+        '200':
+          description: The devices
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UserDevice'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/users/{id}/devices/{tokenId}:
+    delete:
+      operationId: adminRevokeUserDevice
+      summary: Sign one of a person's devices out
+      description: |
+        Revokes one of the person's device tokens, so that device is signed
+        out at its next request, and answers `204` (Admin app spec section
+        8.7). The person's other devices stay signed in.
+
+        `404 not-found` as `adminGetUser` answers, and for a `tokenId` that
+        isn't one of the person's tokens that still work: another person's,
+        one already revoked, or one that has expired.
+
+        Recorded as `user.device-revoked`, with the device's name.
+      tags: [People]
+      parameters:
+        - $ref: '#/components/parameters/UserPath'
+        - $ref: '#/components/parameters/DeviceTokenPath'
+      responses:
+        '204':
+          description: Revoked
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/users/{id}/checkouts:
+    get:
+      operationId: adminListUserCheckouts
+      summary: The documents a person has checked out
+      description: |
+        The documents the person has checked out, the latest check-out
+        first, the whole list, as `GET /v1/me/checkouts` reads the caller's
+        own (Admin app spec section 8.7): each with its doc # and file
+        version, its title and matter, when it was checked out and, when a
+        device holds the check-out, the computer and app it's held on, so an
+        administrator can say where to check it in. Documents they've only
+        locked aren't listed.
+
+        An administrator releases one with the public API's
+        `DELETE /v1/documents/{docNumber}/checkout`, which keeps nothing the
+        person hasn't saved to Healdan, and records the release in the
+        document's history.
+
+        `404 not-found` as `adminGetUser` answers.
+      tags: [People]
+      parameters:
+        - $ref: '#/components/parameters/UserPath'
+      responses:
+        '200':
+          description: The check-outs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UserCheckout'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
   /v1/admin/groups:
     get:
       operationId: adminListGroups
       summary: The groups
       description: |
-        The groups, for the forms that name one, such as New Store's **who
-        can see it** (Admin app spec section 8.6): live groups only, not a
-        person's own group (`_user_…`), by name, ignoring case. A page of
-        `limit` from `offset`, with the total once `q` has filtered them.
+        The groups, for the Groups list and the forms that name one, such as
+        New Store's **who can see it** and a person's groups (Admin app spec
+        sections 8.6 and 8.7): live groups of the caller's tenant only, not a
+        person's own group (`_user_` and its id), by name, ignoring case. A
+        page of `limit` from `offset`, with the total once `q` has filtered
+        them. Each says how many people are in it, whether it's fixed or the
+        `admin` group, and which sign-in providers' group maps name it.
 
         `q`, read with the whitespace at either end taken off, in any case,
         its `%` and `_` taken as they are, keeps the groups whose name
@@ -3133,6 +3832,292 @@ paths:
         '401':
           $ref: '#/components/responses/Problem'
         '403':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: adminCreateGroup
+      summary: Create a group
+      description: |
+        Makes a group with the name and description given, and answers `201`
+        with it, its address as `Location` (Admin app spec section 8.7). It
+        has no members, and grants nothing until a folder's or a Store's
+        access names it. The name and the description have the whitespace
+        at either end taken off; a null or blank description is none.
+
+        - `422 validation`, each by its field: a name missing, null or blank
+          (`required`); a name over 200 characters, or a description over 255
+          (`too-long`); a name that starts with `_user_`, as a person's own
+          group's does (`invalid`); and a name another group has, in any
+          case (`taken`).
+        - `409 refused` for what Healdan's rules refuse.
+
+        Recorded as `group.created`, with its name and description.
+      tags: [People]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewGroup'
+      responses:
+        '201':
+          description: The new group
+          headers:
+            Location:
+              description: The group's address, such as `/api/v1/admin/groups/7`
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GroupDetail'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/groups/{id}:
+    get:
+      operationId: adminGetGroup
+      summary: A group
+      description: |
+        The group, as the list gives it, with how many folders grant it
+        something, for its page (Admin app spec section 8.7), which lists its
+        members with `GET /v1/admin/groups/{id}/members`.
+
+        A person's own group, a deleted group, another tenant's and an id
+        that names no group are `404 not-found`.
+      tags: [People]
+      parameters:
+        - $ref: '#/components/parameters/GroupPath'
+      responses:
+        '200':
+          description: The group
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GroupDetail'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+    patch:
+      operationId: adminEditGroup
+      summary: Rename a group, or change its description
+      description: |
+        Changes the group's name or description, and answers the group as
+        `adminGetGroup` gives it (Admin app spec section 8.7). A member left
+        out stays as it is; a `description` of null, or blank, takes it
+        away. The group keeps its members, and every folder, Store and
+        sign-in provider's group map that names it, under its new name.
+
+        - `404 not-found` as `adminGetGroup` answers.
+        - `422 validation` for a name that's null or blank (`required`), and
+          for `adminCreateGroup`'s other codes, each by its field: the
+          group's own name, in any case, isn't `taken`.
+        - `409 refused` for a new name for a fixed group (`fixed`), with a
+          sentence that says it keeps its name: `admin`, `guest`, `publisher`
+          and Everyone are never renamed, though their descriptions change,
+          and the name a fixed group has, exactly, changes nothing. And for
+          what Healdan's rules refuse.
+
+        Recorded as `group.changed`, with the name and the description
+        before and after, each that changed. A change that changes nothing
+        isn't recorded.
+      tags: [People]
+      parameters:
+        - $ref: '#/components/parameters/GroupPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GroupChange'
+      responses:
+        '200':
+          description: The group, changed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GroupDetail'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+    delete:
+      operationId: adminDeleteGroup
+      summary: Delete a group
+      description: |
+        Takes every member out of the group and deletes it, in one
+        transaction, and answers `204` (Admin app spec section 8.7). It's
+        then in no list, and the folders and Stores whose access names it
+        grant it to no one, as it has no members. `folders` in
+        `adminGetGroup` says beforehand how many folders grant it something.
+
+        - `404 not-found` as `adminGetGroup` answers.
+        - `409 refused` for a fixed group (`fixed`), with a sentence that
+          says it's never deleted; for a group a sign-in provider's group map
+          names (`mappedBy`), with a sentence that says to take it out of the
+          map first; for a group whose name, given elsewhere, is too long to
+          keep with its id once deleted, with a sentence that says to shorten
+          it first; and for what Healdan's rules refuse.
+
+        Recorded as `group.deleted`, with its name.
+      tags: [People]
+      parameters:
+        - $ref: '#/components/parameters/GroupPath'
+      responses:
+        '204':
+          description: Deleted
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/groups/{id}/members:
+    get:
+      operationId: adminListGroupMembers
+      summary: The people in a group
+      description: |
+        The people in the group, by name, ignoring case, then username, for
+        its page (Admin app spec section 8.7): disabled and read-only
+        accounts included, but not deleted or system accounts, as the Users
+        list lists them. A page of `limit` from `offset`, with the total once
+        `q` has filtered them. `q` is read as the Users list's is.
+
+        - A negative `offset` or a `limit` outside 1 to 200 is
+          `400 bad-request`.
+        - `404 not-found` as `adminGetGroup` answers.
+      tags: [People]
+      parameters:
+        - $ref: '#/components/parameters/GroupPath'
+        - name: q
+          in: query
+          required: false
+          description: Part of a person's name, username or email
+          schema:
+            type: string
+        - $ref: '#/components/parameters/PageOffset'
+        - $ref: '#/components/parameters/PageLimit'
+      responses:
+        '200':
+          description: A page of the group's members
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GroupMemberList'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/groups/{id}/members/{userId}:
+    put:
+      operationId: adminAddGroupMember
+      summary: Add a person to a group
+      description: |
+        Adds the person to the group, and answers `204` (Admin app spec
+        section 8.7). Someone already in it changes nothing, before the
+        refusals below, and nothing is recorded. Adding someone to `admin` lets them use this app and read
+        every document: the app asks first. For an account linked to a
+        sign-in provider, its membership of a group the provider's group map
+        names (`mappedBy`) may be set again from the provider at its next
+        sign-in there. Takes no body.
+
+        - `404 not-found` as `adminGetGroup` answers for the group, and as
+          `adminGetUser` answers for `userId`.
+        - `409 refused` for a read-only account and any group but `guest`;
+          and for what Healdan's rules refuse.
+
+        Recorded as `group.member-added`, with the person, named as
+        `Ann Lee (alee)`.
+      tags: [People]
+      parameters:
+        - $ref: '#/components/parameters/GroupPath'
+        - $ref: '#/components/parameters/MemberPath'
+      responses:
+        '204':
+          description: In the group
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+    delete:
+      operationId: adminRemoveGroupMember
+      summary: Take a person out of a group
+      description: |
+        Takes the person out of the group, and answers `204` (Admin app spec
+        section 8.7). Someone not in it changes nothing, before the refusals
+        below, and nothing is recorded. For an account linked to a sign-in provider, its
+        membership of a group the provider's group map names (`mappedBy`)
+        may be set again from the provider at its next sign-in there.
+
+        - `404 not-found` as `adminGetGroup` answers for the group, and as
+          `adminGetUser` answers for `userId`.
+        - `409 refused` for Everyone, which every account but a read-only
+          one is always in, and for `guest` and a read-only account, which
+          is always in it, each with a sentence that says so; for taking the
+          `admin` account, or the caller, out of
+          `admin`, as the person's `refusals.leaveAdmin` says beforehand; for
+          a change that would leave no enabled administrator, counted once
+          any other such change at the same moment has committed; and for
+          what Healdan's rules refuse.
+
+        Recorded as `group.member-removed`, with the person, named as
+        `Ann Lee (alee)`.
+      tags: [People]
+      parameters:
+        - $ref: '#/components/parameters/GroupPath'
+        - $ref: '#/components/parameters/MemberPath'
+      responses:
+        '204':
+          description: Not in the group
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
           $ref: '#/components/responses/Problem'
         default:
           $ref: '#/components/responses/Problem'
@@ -3232,6 +4217,42 @@ components:
       in: path
       required: true
       description: The storage backend's id; Original's is 1
+      schema:
+        type: integer
+        format: int64
+        minimum: 0
+    UserPath:
+      name: id
+      in: path
+      required: true
+      description: The user's id
+      schema:
+        type: integer
+        format: int64
+        minimum: 0
+    DeviceTokenPath:
+      name: tokenId
+      in: path
+      required: true
+      description: The device token's id, as `GET /v1/admin/users/{id}/devices` gives it
+      schema:
+        type: integer
+        format: int64
+        minimum: 0
+    GroupPath:
+      name: id
+      in: path
+      required: true
+      description: The group's id
+      schema:
+        type: integer
+        format: int64
+        minimum: 0
+    MemberPath:
+      name: userId
+      in: path
+      required: true
+      description: The person's user id
       schema:
         type: integer
         format: int64
@@ -5467,11 +6488,560 @@ components:
         transfers:
           type: integer
           description: From 1 to `limits.transfers.max`
+    UserStatus:
+      type: string
+      description: |
+        Whether the person can sign in: `active`; `disabled`, an account
+        that can't sign in until it's enabled; or `blocked`, an enabled
+        account that can't sign in until `blockedUntil`, or until its block
+        is cleared, after too many failed sign-ins under its username. A
+        disabled account is `disabled`, blocked or not.
+      enum: ['active', 'disabled', 'blocked']
+    ProviderBrief:
+      type: object
+      description: A sign-in provider named in another object
+      additionalProperties: false
+      required: [id, label]
+      properties:
+        id:
+          type: string
+          description: Its id, as the Classic Interface's Sign-In tab and `/api/signin/<id>` name it
+          examples: [entra]
+        label:
+          type: string
+          description: The label of its button; its id once the provider has been removed
+          examples: [Sign In with Microsoft]
+    SignsInWith:
+      type: object
+      description: How a person signs in
+      additionalProperties: false
+      required: [kind, provider]
+      properties:
+        kind:
+          type: string
+          enum: ['password', 'provider']
+          description: |
+            `provider` for an account linked to a sign-in provider, which
+            signs in there and has no password in Healdan; `password` for
+            any other
+        provider:
+          description: The provider the account is linked to; null for `password`
+          oneOf:
+            - $ref: '#/components/schemas/ProviderBrief'
+            - type: 'null'
+    GroupBrief:
+      type: object
+      description: A group named in another object
+      additionalProperties: false
+      required: [id, name]
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+    UserRow:
+      type: object
+      description: A person, as the Users list shows them
+      additionalProperties: false
+      required: [id, username, name, firstName, lastName, email, groups, signsInWith, status, blockedUntil,
+        lastSignIn, devices, readOnly, admin]
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: The user's id
+        username:
+          type: string
+        name:
+          type: string
+          description: The first and last name; the username when both are blank
+        firstName:
+          type: [string, 'null']
+          description: Null for none, a blank one included
+        lastName:
+          type: [string, 'null']
+          description: Null for none, a blank one included
+        email:
+          type: [string, 'null']
+          description: Their email address; null for none, a blank one included
+        groups:
+          type: array
+          description: |
+            The groups they're in, by name, ignoring case: those
+            `GET /v1/admin/groups` lists, so not their own group
+          items:
+            $ref: '#/components/schemas/GroupBrief'
+        signsInWith:
+          $ref: '#/components/schemas/SignsInWith'
+        status:
+          $ref: '#/components/schemas/UserStatus'
+        blockedUntil:
+          type: [string, 'null']
+          format: date-time
+          description: When the block on their username ends of itself; null unless `status` is `blocked`
+        lastSignIn:
+          type: [string, 'null']
+          format: date-time
+          description: |
+            When they last signed in, on any route; null when they never
+            have. An app on a device signs in again, with its token, each
+            time its last session has timed out, so a device in use keeps it
+            recent
+        devices:
+          type: integer
+          format: int64
+          minimum: 0
+          description: |
+            How many device tokens of theirs still work, as
+            `GET /v1/admin/users/{id}/devices` lists them
+        readOnly:
+          type: boolean
+          description: |
+            A read-only account, which is always in its own group and
+            `guest`, and in no other, and which this app neither makes nor
+            changes into another kind
+        admin:
+          type: boolean
+          description: A member of `admin`, who can use this app and read every document
+    UserList:
+      description: A page of people
+      allOf:
+        - $ref: '#/components/schemas/Page'
+        - properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/UserRow'
+      unevaluatedProperties: false
+    User:
+      type: object
+      description: A person, for their page
+      additionalProperties: false
+      required: [id, username, name, firstName, lastName, email, groups, signsInWith, status, blockedUntil,
+        lastSignIn, devices, readOnly, admin, language, timeZone, created, passwordChanged, mustChangePassword,
+        checkedOut, mattersOwned, refusals]
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: The user's id
+        username:
+          type: string
+        name:
+          type: string
+          description: As in `UserRow`
+        firstName:
+          type: [string, 'null']
+          description: As in `UserRow`
+        lastName:
+          type: [string, 'null']
+          description: As in `UserRow`
+        email:
+          type: [string, 'null']
+          description: As in `UserRow`
+        groups:
+          type: array
+          description: As in `UserRow`
+          items:
+            $ref: '#/components/schemas/GroupBrief'
+        signsInWith:
+          $ref: '#/components/schemas/SignsInWith'
+        status:
+          $ref: '#/components/schemas/UserStatus'
+        blockedUntil:
+          type: [string, 'null']
+          format: date-time
+          description: As in `UserRow`
+        lastSignIn:
+          type: [string, 'null']
+          format: date-time
+          description: As in `UserRow`
+        devices:
+          type: integer
+          format: int64
+          minimum: 0
+          description: As in `UserRow`
+        readOnly:
+          type: boolean
+          description: As in `UserRow`
+        admin:
+          type: boolean
+          description: As in `UserRow`
+        language:
+          type: string
+          description: |
+            The code of the language Healdan speaks to them in; the options'
+            `defaultLanguage` when the account has none. It may be one the
+            options don't offer, given elsewhere or since turned off, which
+            Edit accepts as it is
+          examples: [en]
+        timeZone:
+          type: [string, 'null']
+          description: |
+            Their time zone; null for none. It may be one the options'
+            `timeZones` leave out, given elsewhere, which Edit accepts as it
+            is
+          examples: [Europe/London]
+        created:
+          type: string
+          format: date-time
+          description: When the account was made
+        passwordChanged:
+          type: [string, 'null']
+          format: date-time
+          description: |
+            When its password was last set, by anyone; null for an account
+            linked to a sign-in provider, which has no password in Healdan
+        mustChangePassword:
+          type: boolean
+          description: |
+            True while its password must be changed at its next sign-in, as
+            the sign-in page asks for: a password marked so, as New User's and
+            Reset Password's temporary ones are, or one that has expired by
+            age under the server's password settings. False for an account
+            linked to a sign-in provider
+        checkedOut:
+          type: integer
+          format: int64
+          minimum: 0
+          description: |
+            How many documents they have checked out, as
+            `GET /v1/admin/users/{id}/checkouts` lists them
+        mattersOwned:
+          type: integer
+          format: int64
+          minimum: 0
+          description: |
+            How many live matters they own, not deleted or in the Trash, as
+            `GET /v1/admin/matters?ownerId=` lists them
+        refusals:
+          $ref: '#/components/schemas/UserRefusals'
+    UserRefusals:
+      type: object
+      description: |
+        The sentence the server would refuse each of a person's page's
+        actions with, read at the request, so the page can say why before
+        it's tried; null when the server wouldn't refuse it, as for an
+        action that would change nothing, which is answered as it is. A
+        change made meanwhile can make an action refused all the same, with
+        its sentence.
+      additionalProperties: false
+      required: [disable, enable, resetPassword, leaveAdmin]
+      properties:
+        disable:
+          type: [string, 'null']
+          description: '`POST /v1/admin/users/{id}/disable`''s, such as for the `admin` account or your own'
+        enable:
+          type: [string, 'null']
+          description: '`POST /v1/admin/users/{id}/enable`''s'
+        resetPassword:
+          type: [string, 'null']
+          description: |
+            `POST /v1/admin/users/{id}/reset-password`'s, such as for an
+            account linked to a sign-in provider or your own
+        leaveAdmin:
+          type: [string, 'null']
+          description: |
+            Taking them out of `admin`, by
+            `PUT /v1/admin/users/{id}/groups` or
+            `DELETE /v1/admin/groups/{id}/members/{userId}`, such as for the
+            `admin` account, your own or the last enabled administrator;
+            null too when they aren't in it
+    UserOptions:
+      type: object
+      description: What the forms that add and edit a person offer
+      additionalProperties: false
+      required: [languages, defaultLanguage, timeZones, providers, outgoingEmail]
+      properties:
+        languages:
+          type: array
+          description: The languages a person can be given, by name
+          items:
+            $ref: '#/components/schemas/LanguageOption'
+        defaultLanguage:
+          type: string
+          description: The code of the language New User fills in, one of `languages`
+          examples: [en]
+        timeZones:
+          type: array
+          description: |
+            The time zones a person can be given: the IANA region names the
+            server knows, as `Europe/London`, sorted, leaving out older forms
+            such as `PST` and the `SystemV/` names
+          items:
+            type: string
+            examples: [Europe/London]
+        providers:
+          type: array
+          description: |
+            The sign-in providers that are on, in the order of their buttons;
+            empty when none is
+          items:
+            $ref: '#/components/schemas/ProviderBrief'
+        outgoingEmail:
+          type: boolean
+          description: |
+            Whether outgoing email is set up, so a temporary password can be
+            emailed: false while the server has no mail server set up, or
+            keeps every email from it
+    LanguageOption:
+      type: object
+      description: A language a person can be given
+      additionalProperties: false
+      required: [code, name]
+      properties:
+        code:
+          type: string
+          examples: [en, en_US]
+        name:
+          type: string
+          description: Its name, in English
+          examples: [English, English (United States)]
+    NewUser:
+      type: object
+      description: A new person, with a password account
+      additionalProperties: false
+      required: [username, firstName, lastName, emailPassword]
+      properties:
+        username:
+          type: string
+          description: What they sign in with, at most 255 characters, which this app never changes
+        firstName:
+          type: string
+          description: At most 255 characters
+        lastName:
+          type: string
+          description: At most 255 characters
+        email:
+          type: [string, 'null']
+          description: Their email address, at most 255 characters; null, blank or left out for none
+        language:
+          type: [string, 'null']
+          description: |
+            One of the options' `languages`, by its code; null, blank or left
+            out for the options' `defaultLanguage`
+        timeZone:
+          type: [string, 'null']
+          description: One of the options' `timeZones`; null, blank or left out for none
+        groupIds:
+          type: array
+          description: |
+            The groups they're in besides Everyone, which every account but a
+            read-only one is in; left out for none. Adding someone to `admin`
+            lets them use this app and read every document: the app asks
+            first
+          uniqueItems: true
+          items:
+            type: integer
+            format: int64
+        emailPassword:
+          type: boolean
+          description: |
+            True to email them the temporary password; false to have it shown
+            once, in the answer, for the administrator to give them
+    CreatedUser:
+      type: object
+      description: A person just added, and their temporary password unless it was emailed
+      additionalProperties: false
+      required: [user, temporaryPassword, emailed]
+      properties:
+        user:
+          $ref: '#/components/schemas/User'
+        temporaryPassword:
+          type: [string, 'null']
+          description: |
+            The temporary password, which must be changed at the first
+            sign-in, given in this answer only; null when it was emailed
+        emailed:
+          type: boolean
+          description: |
+            True when it was emailed, as `emailPassword` asked; false when
+            it's `temporaryPassword` instead: not asked, or it couldn't be
+            emailed, as `adminCreateUser` says
+    UserChange:
+      type: object
+      description: |
+        What the app's Edit changes, each member left out staying as it is.
+        A username never changes here: `username` is `422 validation`
+        (`not-editable`).
+      additionalProperties: false
+      properties:
+        firstName:
+          type: string
+          description: At most 255 characters; null or blank is `422 validation` (`required`)
+        lastName:
+          type: string
+          description: At most 255 characters; null or blank is `422 validation` (`required`)
+        email:
+          type: [string, 'null']
+          description: At most 255 characters; null or blank for none
+        language:
+          type: [string, 'null']
+          description: |
+            One of the options' `languages`, by its code, or the person's
+            current one; null or blank for the options' `defaultLanguage`
+        timeZone:
+          type: [string, 'null']
+          description: One of the options' `timeZones`, or the person's current one; null or blank for none
+    PasswordReset:
+      type: object
+      description: How a reset's temporary password reaches the person
+      additionalProperties: false
+      required: [emailPassword]
+      properties:
+        emailPassword:
+          type: boolean
+          description: As in `NewUser`
+    TemporaryPassword:
+      type: object
+      description: A reset's temporary password, unless it was emailed
+      additionalProperties: false
+      required: [temporaryPassword, emailed]
+      properties:
+        temporaryPassword:
+          type: [string, 'null']
+          description: |
+            The temporary password, which must be changed at the next
+            sign-in, given in this answer only; null when it was emailed
+        emailed:
+          type: boolean
+          description: As in `CreatedUser`
+    SignedOut:
+      type: object
+      description: What Sign Out Everywhere signed out
+      additionalProperties: false
+      required: [sessions, devices]
+      properties:
+        sessions:
+          type: integer
+          format: int64
+          minimum: 0
+          description: How many open sessions closed, on this server
+        devices:
+          type: integer
+          format: int64
+          minimum: 0
+          description: How many device tokens were revoked
+    UserGroups:
+      type: object
+      description: The groups a person is in
+      additionalProperties: false
+      required: [groupIds]
+      properties:
+        groupIds:
+          type: array
+          description: |
+            Every group they're to be in, as `GET /v1/admin/groups` lists
+            them; Everyone is kept for an account that isn't read-only, and
+            `guest` for a read-only one, named or not
+          uniqueItems: true
+          items:
+            type: integer
+            format: int64
+    UserDevice:
+      type: object
+      description: A device a person is signed in on, by the token it signs in with
+      additionalProperties: false
+      required: [id, name, device, provider, created, lastUsed, expires]
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: The token's id, which `DELETE /v1/admin/users/{id}/devices/{tokenId}` takes
+        name:
+          type: string
+          description: What its sign-in called it
+          examples: [Healdan Helper on MacBook]
+        device:
+          type: [string, 'null']
+          description: |
+            The computer's device id, the same on every sign-in from it, so
+            the tokens of one computer can be told apart from another's; null
+            when its sign-in named none
+        provider:
+          description: The sign-in provider it signed in through; null for a password sign-in
+          oneOf:
+            - $ref: '#/components/schemas/ProviderBrief'
+            - type: 'null'
+        created:
+          type: string
+          format: date-time
+          description: When it signed in
+        lastUsed:
+          type: string
+          format: date-time
+          description: To within a few minutes
+        expires:
+          type: string
+          format: date-time
+          description: When it stops working of itself, unless it's revoked first
+    MatterBrief:
+      type: object
+      description: A matter named in another object
+      additionalProperties: false
+      required: [id, number, name]
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: The matter's id, not its folder's
+        number:
+          type: string
+          description: Its number with its client's
+          examples: ['1001.1']
+        name:
+          type: string
+          description: Its own name, without its number
+    UserCheckout:
+      type: object
+      description: A document a person has checked out
+      additionalProperties: false
+      required: [docNumber, fileVersion, title, matter, since, device, app]
+      properties:
+        docNumber:
+          type: integer
+          format: int64
+          description: The document's number, which the User app's links take
+        fileVersion:
+          type: string
+          description: |
+            The version its file was last saved as, as the User app's Version
+            column shows it: `DocumentView`'s `fileVersion` in `openapi.yaml`
+          examples: ['2.1']
+        title:
+          type: string
+          description: Its name, as the User app's Title column shows it
+        matter:
+          description: The matter it's in; null for none
+          oneOf:
+            - $ref: '#/components/schemas/MatterBrief'
+            - type: 'null'
+        since:
+          type: [string, 'null']
+          format: date-time
+          description: |
+            When it was checked out, as the public API's `hold.since` says: a
+            save that keeps it checked out moves it on. Null when the
+            server's data doesn't say
+        device:
+          type: [string, 'null']
+          description: |
+            The computer the check-out is held on, named as the token it last
+            wrote through is; null when no device holds it, as for a
+            check-out from the web page
+          examples: [Healdan Helper on MacBook]
+        app:
+          type: [string, 'null']
+          description: The app its check-out named; null when no device holds it, or it named none
+          examples: [LibreOffice]
     Group:
       type: object
-      description: A group, not a person's own
+      description: |
+        A group, not a person's own, for the Groups list and the forms that
+        name one, which read `id`, `name` and `description`
       additionalProperties: false
-      required: [id, name, description]
+      required: [id, name, description, members, fixed, admin, mappedBy]
       properties:
         id:
           type: integer
@@ -5481,6 +7051,31 @@ components:
         description:
           type: [string, 'null']
           description: Its description; null for none, an empty one included
+        members:
+          type: integer
+          format: int64
+          minimum: 0
+          description: |
+            How many people are in it, as `GET /v1/admin/groups/{id}/members`
+            lists them: disabled and read-only accounts included, not deleted
+            or system accounts
+        fixed:
+          type: boolean
+          description: |
+            `admin`, `guest`, `publisher` or Everyone, which is never renamed
+            or deleted
+        admin:
+          type: boolean
+          description: It's the `admin` group, whose members can use this app and read every document
+        mappedBy:
+          type: array
+          description: |
+            The labels of the sign-in providers whose group map names it, by
+            label, ignoring case; empty for none. A member who signs in
+            through one of them is put in it, or taken out, at each sign-in
+            there, and a group a map names isn't deleted
+          items:
+            type: string
     GroupList:
       description: A page of groups
       allOf:
@@ -5490,4 +7085,95 @@ components:
               type: array
               items:
                 $ref: '#/components/schemas/Group'
+      unevaluatedProperties: false
+    GroupDetail:
+      type: object
+      description: A group, for its page
+      additionalProperties: false
+      required: [id, name, description, members, fixed, admin, mappedBy, folders]
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        description:
+          type: [string, 'null']
+          description: As in `Group`
+        members:
+          type: integer
+          format: int64
+          minimum: 0
+          description: As in `Group`
+        fixed:
+          type: boolean
+          description: As in `Group`
+        admin:
+          type: boolean
+          description: As in `Group`
+        mappedBy:
+          type: array
+          description: As in `Group`
+          items:
+            type: string
+        folders:
+          type: integer
+          format: int64
+          minimum: 0
+          description: |
+            How many folders and search folders, not in the Trash, give it a
+            permission of their own: Stores and workspace templates' folders
+            among them
+    NewGroup:
+      type: object
+      description: A new group
+      additionalProperties: false
+      required: [name]
+      properties:
+        name:
+          type: string
+          description: At most 200 characters
+        description:
+          type: [string, 'null']
+          description: At most 255 characters; null, blank or left out for none
+    GroupChange:
+      type: object
+      description: A group's new name or description, each member left out staying as it is
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          description: At most 200 characters; null or blank is `422 validation` (`required`)
+        description:
+          type: [string, 'null']
+          description: At most 255 characters; null or blank for none
+    GroupMember:
+      type: object
+      description: A person in a group
+      additionalProperties: false
+      required: [id, username, name, status, readOnly]
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: The user's id
+        username:
+          type: string
+        name:
+          type: string
+          description: As in `UserRow`
+        status:
+          $ref: '#/components/schemas/UserStatus'
+        readOnly:
+          type: boolean
+          description: As in `UserRow`
+    GroupMemberList:
+      description: A page of a group's members
+      allOf:
+        - $ref: '#/components/schemas/Page'
+        - properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/GroupMember'
       unevaluatedProperties: false

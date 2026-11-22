@@ -58,8 +58,9 @@ Each helper signs in once with the person's username and password, and keeps a d
 
 - **The usual limits apply.** A sign-in unused for 30 days stops working, and none lasts more than 365 days. Change
   both in [Healdan Settings](../../admin/healdan-settings/#device-sign-ins).
-- **Changing someone's password,** or disabling them, signs out every helper of theirs. The helper then asks for
-  the password again, and keeps any saves waiting on the Mac meanwhile.
+- **Changing someone's password,** or disabling them, signs out every helper of theirs, and so does
+  **Sign Out Everywhere** on their page in the Admin app. The helper then asks for the password again, and keeps any
+  saves waiting on the Mac meanwhile.
 - **The sign-in throttle** counts the helper's wrong passwords like any others.
 
 ## The Comments Property
