@@ -421,6 +421,40 @@ public class AdminUsersResourceTest extends ApiTestCase {
 				"not-found", null);
 	}
 
+	/**
+	 * A first name that's blank now, as a provider account's can be, stays blank when the edit sends it as null, blank
+	 * or leaves it out, and isn't recorded as changed; once a name is typed over it, null is required again
+	 */
+	@Test
+	public void testEditKeepsABlankStoredName() throws Exception {
+		User ben = named(fx.user("ben"), " ", "Hale", "ben@firm.example");
+		String one = one(ben);
+
+		JsonNode user = patch(one).webSession(web).json(new Body().with("email", "ben@hale.example")).send().json();
+		assertTrue(user.path("firstName").isNull());
+		assertEquals("ben@hale.example", user.path("email").textValue());
+		assertFalse(detail("user.changed"), detail("user.changed").contains("firstName"));
+		ApiResponse response = patch(one).webSession(web).json(new Body().with("firstName", null)
+				.with("lastName", "Hales")).send();
+		assertEquals(response.toString(), 200, response.status());
+		assertTrue(response.json().path("firstName").isNull());
+		assertEquals("Hales", response.json().path("lastName").textValue());
+		response = patch(one).webSession(web).json(new Body().with("firstName", "  ")).send();
+		assertEquals(response.toString(), 200, response.status());
+		assertTrue(response.json().path("firstName").isNull());
+		assertEquals(List.of("user.changed", "user.changed"), actions("user"));
+
+		// A name typed over it, which is then required
+		assertEquals("Ben", patch(one).webSession(web).json(new Body().with("firstName", "Ben")).send().json()
+				.path("firstName").textValue());
+		assertFields(patch(one).webSession(web).json(new Body().with("firstName", null)).send(),
+				"firstName:required");
+		assertFields(patch(one).webSession(web).json(new Body().with("firstName", " ")).send(),
+				"firstName:required");
+		// As is the last name, which was never blank
+		assertFields(patch(one).webSession(web).json(new Body().with("lastName", null)).send(), "lastName:required");
+	}
+
 	// Disable and Enable
 
 	@Test

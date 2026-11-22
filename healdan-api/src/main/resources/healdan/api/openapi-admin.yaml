@@ -3184,11 +3184,12 @@ paths:
         - name: groupId
           in: query
           required: false
-          description: Only the members of this group
+          description: |
+            Only the members of this group, by its id as
+            `GET /v1/admin/groups` gives it; `publisher`'s is negative
           schema:
             type: integer
             format: int64
-            minimum: 0
         - name: status
           in: query
           required: false
@@ -3378,19 +3379,20 @@ paths:
         `timeZone` of null, or blank, takes it away; a `language` of null,
         or blank, gives the person the options' `defaultLanguage`. The
         person's current `language` and `timeZone` are accepted as they are,
-        even when the options don't offer them, so an Edit that sends back
-        what it was given saves. The names and the email have the whitespace
-        at either end taken off. For an
-        account linked to a sign-in provider (`signsInWith`), the names and
-        the email may be set again from the provider at its next sign-in
-        there.
+        even when the options don't offer them, and so is a first or last
+        name that's blank now, as a provider account's can be: sent as null,
+        blank or left out, it stays blank. So an Edit that sends back what
+        it was given saves. The names and the email have the whitespace at
+        either end taken off. For an account linked to a sign-in provider
+        (`signsInWith`), the names and the email may be set again from the
+        provider at its next sign-in there.
 
         - `404 not-found` as `adminGetUser` answers.
-        - `422 validation` for `username` (`not-editable`): a username never
-          changes here. For `firstName` or `lastName` null or blank
-          (`required`); and for `adminCreateUser`'s `too-long` and `invalid`,
-          each by its field, but for a `language` or `timeZone` that's the
-          person's current one.
+        - `422 validation`, each by its field: `username` (`not-editable`),
+          as a username never changes here; a `firstName` or `lastName` that's
+          null or blank where the person's isn't blank now (`required`); and
+          `adminCreateUser`'s `too-long` and `invalid`, but for a `language`
+          or `timeZone` that's the person's current one.
         - `409 refused` for what Healdan's rules refuse.
 
         Recorded as `user.changed`, with each field whose value changed,
@@ -6868,10 +6870,16 @@ components:
       properties:
         firstName:
           type: string
-          description: At most 255 characters; null or blank is `422 validation` (`required`)
+          description: |
+            At most 255 characters; null or blank is `422 validation`
+            (`required`), unless the person's first name is blank now, which then
+            stays blank
         lastName:
           type: string
-          description: At most 255 characters; null or blank is `422 validation` (`required`)
+          description: |
+            At most 255 characters; null or blank is `422 validation`
+            (`required`), unless the person's last name is blank now, which then
+            stays blank
         email:
           type: [string, 'null']
           description: At most 255 characters; null or blank for none
