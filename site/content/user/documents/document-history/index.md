@@ -56,7 +56,7 @@ Each event reads as it does on the tab:
 | The document has been locked, The document has been unlocked | a [lock](../locking-a-document/). Releasing a [check-out](../checking-out-and-checking-in/#giving-up-a-check-out) in the app records "The document has been unlocked" too, and when one of your computers held it, the comment names that computer and its app, such as "Released while checked out on Healdan Helper on MacBook (Word)" |
 | The document has been protected by a password | a password was set |
 | The document has been downloaded | someone downloaded it |
-| Document has been viewed | someone opened its preview: at most once every 30 seconds in each session |
+| Document has been viewed | someone opened its preview: in the Healdan app, at most once every half hour for each person, and in the Classic Interface at most once every 30 seconds in each session. Reading a filed email in the app, or previewing one of its attachments, counts as viewing the email |
 | A ticket has been created | someone made a [download link](../sharing-a-document/) for it |
 | The document permissions have been modified | its [Security](../../working-with-matters/document-permissions/) changed |
 | The document has been deleted, The document has been restored | it went to [the trash](../the-trash/) and back |

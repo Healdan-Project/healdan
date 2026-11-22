@@ -3,15 +3,27 @@ title: Troubleshooting
 weight: 12
 ---
 
-Start with the app's log:
+Where to look first:
 
-```bash
-docker compose logs app
-```
+- **While Healdan is running,** open the Admin app's [Errors](../../admin/monitoring/errors/), under **Monitoring** in
+  its left pane. It lists the errors the server has logged, one row for each kind of fault, with its message, its
+  stack and the documents it names, and **Show in Server Log** opens the
+  [Server Log](../../admin/monitoring/server-log/) on the log it was written to, for what happened around it. A job that
+  failed shows on [Background Jobs](../../admin/monitoring/background-jobs/). The Server Log shows Healdan's own log,
+  `repository/logs/dms.log` in the repository volume, and the tasks' logs.
+- **When the app doesn't start,** start with the container's output, where the start-up tool says why it stopped:
 
-Healdan's own log is `repository/logs/dms.log`, in the repository volume. PostgreSQL's is
-`docker compose logs db`. Its error lines can quote the row a statement failed on, with names, subjects and comments
-in it, so read what you copy from it before you post it anywhere, such as in an issue.
+  ```bash
+  docker compose logs app
+  ```
+
+  Once the server has started, its own log is `repository/logs/dms.log`: read it there when the Admin app can't be
+  opened.
+
+<!-- P5 docs pass 2 -->
+
+PostgreSQL's log is `docker compose logs db`. Its error lines can quote the row a statement failed on, with names,
+subjects and comments in it, so read what you copy from it before you post it anywhere, such as in an issue.
 
 ## The Build Stops with "Illegal Instruction"
 

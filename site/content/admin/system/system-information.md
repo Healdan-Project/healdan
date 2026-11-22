@@ -18,6 +18,11 @@ menu, are Healdan's version and the installation ID; give both when you report a
 | Log | the server's log, `dms.log`, with **Download the logs** |
 | Environment | the settings the server runs with, the container's environment among them, with secrets masked |
 
+The Admin app's [Server Log](../../monitoring/server-log/) shows the log the **Log** tab shows, and the tasks' logs,
+follows them live and goes back through the files they rolled over to. Its [Errors](../../monitoring/errors/) lists
+the errors the server logged, one row for each kind of fault, kept until you resolve them. Start there when something
+goes wrong.
+
 The **Environment** tab shows `********` in place of anything that looks secret: a variable or setting whose name
 has *password*, *secret*, *token*, *credential*, *API key*, *access key*, *private key*, *security key*,
 *licence key*, *encryption key* or *anonymous key* in it, such as `DB_PASSWORD`, a `-D` option named that way
@@ -31,7 +36,11 @@ share it.
 
 ## Downloading the Logs
 
-**Download the logs**, on the **Log** tab, makes a zip for whoever helps you with a problem. It holds:
+**Download the logs**, on the **Log** tab, makes a zip for whoever helps you with a problem. For one log's files
+alone, as the server wrote them, use **Download** on the Admin app's
+[Server Log](../../monitoring/server-log/#download). This zip holds more:
+
+<!-- P5 docs pass 2 -->
 
 - the server's logs and Tomcat's
 - the server's settings, as it runs with them and as `context.properties` and the other files in its

@@ -6,6 +6,10 @@ weight: 8
 LogicalDOC's reports are under **Administration → Reports**. Only admins have them to begin with, and each can be
 given to a group, as [Giving a Report to Others](#giving-a-report-to-others) says.
 
+The Admin app's [Audit Trail](../../monitoring/audit-trail/) lists what **Last Changes** does, what people did to
+documents and folders, with sign-ins, accounts' history and every change made through the Admin app in one list, which
+it filters by matter too, and exports as CSV. Last Changes stays for now.
+
 ![The Reports menu, with Deleted documents open: three documents in the Trash, with their version, size, when they were last changed and who deleted them](reports.png)
 
 ## The Reports
