@@ -118,6 +118,15 @@ public class JobStatus {
 
 	/**
 	 * @param name the job's name
+	 * @return when it runs next, as it last reported: null if it doesn't, that
+	 *         isn't known, or it reported nothing
+	 */
+	public Instant nextRun(String name) {
+		return report(name).nextRun();
+	}
+
+	/**
+	 * @param name the job's name
 	 * @return what it reported, an empty report if it reported nothing
 	 */
 	Report report(String name) {

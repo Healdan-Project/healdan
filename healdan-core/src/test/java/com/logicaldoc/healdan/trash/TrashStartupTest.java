@@ -5,6 +5,7 @@ package com.logicaldoc.healdan.trash;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assume.assumeNotNull;
@@ -20,7 +21,9 @@ import java.time.zone.ZoneOffsetTransition;
 import java.util.List;
 import java.util.TimeZone;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.sql.DataSource;
 
@@ -28,9 +31,11 @@ import org.junit.Test;
 import org.springframework.transaction.PlatformTransactionManager;
 
 import com.logicaldoc.healdan.AbstractHealdanTestCase;
+import com.logicaldoc.healdan.admin.jobs.JobStatus;
 import com.logicaldoc.healdan.admin.jobs.JobView;
 import com.logicaldoc.healdan.admin.jobs.Jobs;
 import com.logicaldoc.healdan.setting.HealdanSettings;
+import com.logicaldoc.healdan.support.LogCapture;
 import com.logicaldoc.healdan.util.CacheEvictor;
 import com.logicaldoc.util.spring.Context;
 
@@ -198,6 +203,135 @@ public class TrashStartupTest extends AbstractHealdanTestCase {
 		assertEquals(JobView.SUCCEEDED, succeeded.result());
 		assertNull(succeeded.error());
 		assertEquals(next.toInstant(), succeeded.nextRun());
+	}
+
+	/**
+	 * Run Now (Admin app ruling P5-R16) runs the job off the caller's thread and reports as a night's run does, with
+	 * the night it was scheduled for left as its next run; one that fails says so, as a night's does
+	 */
+	@Test
+	public void testRunNowReportsAsANightsRun() throws Exception {
+		Jobs jobs = Context.get(Jobs.class);
+		Instant night = TrashStartup.nightlyAfter(ZonedDateTime.now().plusDays(1)).toInstant();
+		JobStatus.get().scheduled(TrashStartup.JOB, night);
+		HeldDestroyer destroyer = new HeldDestroyer(null);
+		TrashStartup startup = new TrashStartup(destroyer);
+		assertTrue(startup.canRunNow());
+		Instant before = Instant.now();
+
+		assertTrue(startup.runNow());
+		Thread ran = destroyer.awaitStarted();
+		assertNotSame(Thread.currentThread(), ran);
+		JobView running = jobs.one(TrashStartup.JOB);
+		assertTrue(running.running());
+		assertFalse(running.lastStart().isBefore(before));
+		assertFalse("refused while it runs", startup.runNow());
+		destroyer.release();
+		ran.join(20_000);
+
+		JobView succeeded = jobs.one(TrashStartup.JOB);
+		assertFalse(succeeded.running());
+		assertEquals(JobView.SUCCEEDED, succeeded.result());
+		assertEquals(night, succeeded.nextRun());
+		assertEquals(1, destroyer.runs.get());
+
+		HeldDestroyer failing = new HeldDestroyer(new IllegalStateException("Trash item 12 can't be read"));
+		failing.release();
+		try (LogCapture capture = LogCapture.of(TrashStartup.class)) {
+			assertTrue(new TrashStartup(failing).runNow());
+			failing.awaitStarted().join(20_000);
+			assertEquals(List.of("ERROR The Trash's nightly job failed: IllegalStateException"), capture.lines());
+		}
+		JobView failed = jobs.one(TrashStartup.JOB);
+		assertEquals(JobView.FAILED, failed.result());
+		assertEquals("IllegalStateException", failed.error());
+		assertEquals(night, failed.nextRun());
+	}
+
+	/** A night's run that comes due while a run asked for now goes on waits for it, then runs, as scheduled */
+	@Test
+	public void testANightsRunWaitsForARunAskedForNow() throws Exception {
+		HeldDestroyer destroyer = new HeldDestroyer(null);
+		TrashStartup startup = new TrashStartup(destroyer);
+		ZonedDateTime next = TrashStartup.nightlyAfter(ZonedDateTime.now().plusDays(1));
+		assertTrue(startup.runNow());
+		Thread now = destroyer.awaitStarted();
+
+		Thread night = new Thread(() -> startup.scheduledRun(next));
+		night.start();
+		long deadline = System.currentTimeMillis() + 20_000;
+		while (night.getState() != Thread.State.WAITING && System.currentTimeMillis() < deadline)
+			Thread.sleep(5);
+		assertEquals(Thread.State.WAITING, night.getState());
+		assertEquals("it waits", 1, destroyer.runs.get());
+
+		destroyer.release();
+		now.join(20_000);
+		night.join(20_000);
+		assertEquals("then runs", 2, destroyer.runs.get());
+		JobView view = Context.get(Jobs.class).one(TrashStartup.JOB);
+		assertEquals(JobView.SUCCEEDED, view.result());
+		assertEquals(next.toInstant(), view.nextRun());
+	}
+
+	/** While a night's run goes on, nothing runs now */
+	@Test
+	public void testNoRunNowBesideANightsRun() throws Exception {
+		HeldDestroyer destroyer = new HeldDestroyer(null);
+		TrashStartup startup = new TrashStartup(destroyer);
+		ZonedDateTime next = TrashStartup.nightlyAfter(ZonedDateTime.now().plusDays(1));
+		Thread night = new Thread(() -> startup.scheduledRun(next));
+		night.start();
+		destroyer.awaitStarted();
+
+		assertFalse(startup.runNow());
+		destroyer.release();
+		night.join(20_000);
+		assertEquals(1, destroyer.runs.get());
+	}
+
+	/** A destroyer whose runs wait until the test releases them, and fail with an exception it's given */
+	private static class HeldDestroyer extends TrashDestroyer {
+
+		private final RuntimeException failure;
+
+		private final CountDownLatch started = new CountDownLatch(1);
+
+		private final CountDownLatch release = new CountDownLatch(1);
+
+		private volatile Thread thread;
+
+		final AtomicInteger runs = new AtomicInteger();
+
+		HeldDestroyer(RuntimeException failure) {
+			super(TrashStore.get(), Context.get(DataSource.class), Context.get(PlatformTransactionManager.class),
+					HealdanSettings.get(), CacheEvictor.get());
+			this.failure = failure;
+		}
+
+		@Override
+		public int runOnce(Instant now) {
+			runs.incrementAndGet();
+			thread = Thread.currentThread();
+			started.countDown();
+			try {
+				release.await(20, TimeUnit.SECONDS);
+			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+			}
+			if (failure != null)
+				throw failure;
+			return 0;
+		}
+
+		Thread awaitStarted() throws InterruptedException {
+			assertTrue("a run began", started.await(20, TimeUnit.SECONDS));
+			return thread;
+		}
+
+		void release() {
+			release.countDown();
+		}
 	}
 
 	/** The first night is known as soon as it is scheduled, before the job has run */

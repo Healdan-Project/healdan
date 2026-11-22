@@ -27,14 +27,20 @@ import java.time.Instant;
  *        of Healdan's that doesn't run on this server is off
  *        ({@link HealdanJob#enabled()})
  * @param running whether a run has begun and not ended
- * @param canRun whether it can be made to run now
- * @param canStop whether a run of it can be stopped now
+ * @param canRun whether it can be made to run now: one of CE's tasks while
+ *        it's enabled and idle, and one of Healdan's that can
+ *        ({@link HealdanJob#canRunNow()}) while it's switched on and not
+ *        running
+ * @param canStop whether a run of it can be stopped now: one of CE's tasks
+ *        while it runs and hasn't been asked to stop
  * @param canDisable whether it can be enabled and disabled
  * @param logicalDocTask whether it is one of CE's scheduled tasks
+ * @param schedule for one of CE's tasks, its schedule (Admin app ruling
+ *        P5-R18); null for Healdan's, which keep their own
  */
 public record JobView(String name, String label, Instant lastStart, Instant lastEnd, String result, String error,
 		Instant nextRun, boolean enabled, boolean running, boolean canRun, boolean canStop, boolean canDisable,
-		boolean logicalDocTask) {
+		boolean logicalDocTask, JobSchedule schedule) {
 
 	/** The last run ended as it should */
 	public static final String SUCCEEDED = "succeeded";

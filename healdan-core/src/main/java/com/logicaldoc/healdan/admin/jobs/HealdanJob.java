@@ -33,16 +33,25 @@ public interface HealdanJob {
 	}
 
 	/**
-	 * @return whether {@link #runNow()} makes it run now
+	 * @return whether it's a job that runs now when asked ({@link #runNow()}),
+	 *         which the Admin app offers while it's switched on and isn't
+	 *         running (Admin app ruling P5-R16); false for one that only ever
+	 *         runs by itself, as there's work for it
 	 */
 	default boolean canRunNow() {
 		return false;
 	}
 
 	/**
-	 * Asks it to run now, where {@link #canRunNow()} says it can; otherwise
-	 * does nothing.
+	 * Starts a run now, off the caller's thread, where {@link #canRunNow()}
+	 * says it can: one that reports to {@link JobStatus} as the job's
+	 * scheduled runs do, leaves its next scheduled run as it was, and never
+	 * runs beside another run of the job.
+	 *
+	 * @return whether it started one: false while a run of it goes on, and
+	 *         for a job that can't run now
 	 */
-	default void runNow() {
+	default boolean runNow() {
+		return false;
 	}
 }

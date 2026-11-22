@@ -31,6 +31,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import com.logicaldoc.core.searchengine.indexer.IndexerTask;
 import com.logicaldoc.core.task.Task;
 import com.logicaldoc.core.task.TaskManager;
+import com.logicaldoc.core.task.TaskScheduling;
+import com.logicaldoc.core.task.TaskTrigger;
 import com.logicaldoc.healdan.AbstractHealdanTestCase;
 import com.logicaldoc.healdan.admin.errors.CapturedError;
 import com.logicaldoc.healdan.admin.errors.ErrorStore;
@@ -97,6 +99,7 @@ public class JobsTest extends AbstractHealdanTestCase {
 		assertFalse(failed.canRun());
 		assertFalse(failed.canStop());
 		assertFalse(failed.canDisable());
+		assertNull("Healdan's jobs have no schedule here", failed.schedule());
 
 		// The next run keeps the last one's end and result while it runs, and one that succeeds clears the error
 		status.started(PreviewWorker.JOB);
@@ -229,6 +232,48 @@ public class JobsTest extends AbstractHealdanTestCase {
 		assertTrue(switchedOn.overdue(now));
 	}
 
+	/** Run Now is offered for one of Healdan's jobs that offers it, while it's switched on and isn't running */
+	@Test
+	public void testAHealdanJobCanRunNowWhileOnAndIdle() {
+		boolean[] on = { true };
+		HealdanJob job = new HealdanJob() {
+			@Override
+			public String name() {
+				return "test-run-now";
+			}
+
+			@Override
+			public String label() {
+				return "Test Run Now";
+			}
+
+			@Override
+			public boolean enabled() {
+				return on[0];
+			}
+
+			@Override
+			public boolean canRunNow() {
+				return true;
+			}
+		};
+		Jobs listed = new Jobs(
+				new StaticListableBeanFactory(Map.<String, Object>of("job", job)).getBeanProvider(HealdanJob.class),
+				status, Context.get(ErrorStore.class), Context.get(TaskManager.class));
+
+		assertTrue(listed.one("test-run-now").canRun());
+		status.started("test-run-now");
+		assertFalse("not while it runs", listed.one("test-run-now").canRun());
+		status.finished("test-run-now", null);
+		assertTrue(listed.one("test-run-now").canRun());
+		on[0] = false;
+		assertFalse("not while it's switched off", listed.one("test-run-now").canRun());
+		// One that doesn't offer it never does
+		assertFalse(listed.one("test-run-now").canStop());
+		assertFalse(jobs.one(PreviewWorker.JOB).canRun());
+		assertTrue(jobs.one(TrashStartup.JOB).canRun());
+	}
+
 	@Test
 	public void testEmailIndexIsDoneOnceItsSettingSaysSo() {
 		HealdanSettings settings = HealdanSettings.get();
@@ -289,7 +334,19 @@ public class JobsTest extends AbstractHealdanTestCase {
 			assertNull(view.result());
 			assertNull(view.error());
 			assertEquals(view, jobs.one(view.name()));
+			// Its schedule, as CE holds it
+			TaskScheduling scheduling = task.getScheduling();
+			JobSchedule schedule = view.schedule();
+			assertNotNull(view.name(), schedule);
+			if (TaskTrigger.MODE_SIMPLE.equals(scheduling.getMode()))
+				assertEquals(view.name(), new JobSchedule("simple", scheduling.getIntervalSeconds(), null), schedule);
+			else
+				assertEquals(view.name(), new JobSchedule("cron", null, scheduling.getCronExpression()), schedule);
 		}
+		assertEquals(new JobSchedule("simple", 1800L, null), jobs.one("IndexerTask").schedule());
+		assertEquals(new JobSchedule("cron", null, "00 00 4/4 * * ?"), jobs.one("IndexOptimizer").schedule());
+		assertEquals("every 1800 seconds", jobs.one("IndexerTask").schedule().describe());
+		assertEquals("cron 00 00 4/4 * * ?", jobs.one("IndexOptimizer").schedule().describe());
 		assertEquals("Indexer", jobs.one("IndexerTask").label());
 		assertEquals("Index Optimizer", jobs.one("IndexOptimizer").label());
 
@@ -413,12 +470,12 @@ public class JobsTest extends AbstractHealdanTestCase {
 		// keeps the run's own time as its next run until it ends
 		Instant due = now.minus(Duration.ofHours(5));
 		JobView firstNight = new JobView("job", "Job", due, null, null, null, due, true, true, false, false, false,
-				false);
+				false, null);
 		assertFalse(firstNight.overdue(now));
 		assertTrue("the same once it has ended without setting a next run", new JobView("job", "Job", due, null, null,
-				null, due, true, false, false, false, false, false).overdue(now));
+				null, due, true, false, false, false, false, false, null).overdue(now));
 		JobView taskRunning = new JobView("Task", "Task", due.minus(Duration.ofHours(1)), null, null, null, due, true,
-				true, false, true, true, true);
+				true, false, true, true, true, JobSchedule.simple(3600));
 		assertFalse(taskRunning.overdue(now));
 	}
 
@@ -426,14 +483,14 @@ public class JobsTest extends AbstractHealdanTestCase {
 	private static JobView healdan(Instant lastEnd, Instant nextRun, boolean enabled) {
 		Instant lastStart = lastEnd != null ? lastEnd.minusSeconds(1) : null;
 		return new JobView("job", "Job", lastStart, lastEnd, lastEnd != null ? JobView.SUCCEEDED : null, null, nextRun,
-				enabled, false, false, false, false, false);
+				enabled, false, false, false, false, false, null);
 	}
 
 	/** A view of one of CE's tasks, idle, as a run that started at a time left it */
 	private static JobView task(Instant lastStart, Instant nextRun, boolean enabled) {
 		Instant lastEnd = lastStart != null ? lastStart.plusSeconds(1) : null;
 		return new JobView("Task", "Task", lastStart, lastEnd, lastStart != null ? JobView.SUCCEEDED : null, null,
-				nextRun, enabled, false, enabled, false, true, true);
+				nextRun, enabled, false, enabled, false, true, true, JobSchedule.simple(3600));
 	}
 
 	/** @return CE's tasks' names, as TaskManager lists them */

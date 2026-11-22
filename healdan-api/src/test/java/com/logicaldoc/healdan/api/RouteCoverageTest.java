@@ -57,14 +57,7 @@ public class RouteCoverageTest extends AbstractHealdanTestCase {
 			"GET /v1/admin/logs/{name}/file",
 			// The Audit Trail
 			"GET /v1/admin/audit",
-			"GET /v1/admin/audit/export",
-			// The background jobs
-			"GET /v1/admin/jobs",
-			"POST /v1/admin/jobs/{name}/run",
-			"POST /v1/admin/jobs/{name}/stop",
-			"POST /v1/admin/jobs/{name}/enable",
-			"POST /v1/admin/jobs/{name}/disable",
-			"PUT /v1/admin/jobs/{name}/schedule");
+			"GET /v1/admin/audit/export");
 
 	@Test
 	public void testEveryRouteIsDescribed() {
