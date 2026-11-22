@@ -3382,10 +3382,12 @@ paths:
         `timeZone` of null, or blank, takes it away; a `language` of null,
         or blank, gives the person the options' `defaultLanguage`. The
         person's current `language` and `timeZone` are accepted as they are,
-        even when the options don't offer them, and so is a first or last
-        name that's blank now, as a provider account's can be: sent as null,
-        blank or left out, it stays blank. So an Edit that sends back what
-        it was given saves. The names and the email have the whitespace at
+        even when the options don't offer them; so is their current `email`,
+        even one set elsewhere that isn't an email address as
+        `adminCreateUser` takes one; and so is a first or last name that's
+        blank now, as a provider account's can be: sent as null, blank or
+        left out, it stays blank. So an Edit that sends back what it was
+        given saves. The names and the email have the whitespace at
         either end taken off. For an account linked to a sign-in provider
         (`signsInWith`), the names and the email may be set again from the
         provider at its next sign-in there.
@@ -3394,8 +3396,8 @@ paths:
         - `422 validation`, each by its field: `username` (`not-editable`),
           as a username never changes here; a `firstName` or `lastName` that's
           null or blank where the person's isn't blank now (`required`); and
-          `adminCreateUser`'s `too-long` and `invalid`, but for a `language`
-          or `timeZone` that's the person's current one.
+          `adminCreateUser`'s `too-long` and `invalid`, but for an `email`, a
+          `language` or a `timeZone` that's the person's current one.
         - `409 refused` for what Healdan's rules refuse.
 
         Recorded as `user.changed`, with each field whose value changed,

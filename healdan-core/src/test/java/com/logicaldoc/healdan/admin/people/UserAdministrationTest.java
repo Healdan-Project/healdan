@@ -19,12 +19,16 @@ import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -59,6 +63,7 @@ import com.logicaldoc.core.security.user.UserEvent;
 import com.logicaldoc.core.security.user.UserSource;
 import com.logicaldoc.healdan.AbstractHealdanTestCase;
 import com.logicaldoc.healdan.HealdanConstants;
+import com.logicaldoc.healdan.HealdanOperation;
 import com.logicaldoc.healdan.HealdanRuleException;
 import com.logicaldoc.healdan.admin.FieldRefusal;
 import com.logicaldoc.healdan.admin.Page;
@@ -677,6 +682,32 @@ public class UserAdministrationTest extends AbstractHealdanTestCase {
 		assertEquals(List.of(field("lastName", FieldRefusal.REQUIRED)), codes(refusal));
 	}
 
+	/**
+	 * Ruling P4-R42: a stored email that isn't one Healdan would take, set elsewhere, is taken as it is by an edit that
+	 * sends it back unchanged, as a stored blank name is; one that differs is judged
+	 */
+	@Test
+	public void testAnEditKeepsAStoredEmailAsItIs() throws Exception {
+		User carol = named(fx.user("carol"), "Carol", "Ng", "carol at firm");
+
+		assertTrue(service.update(carol.getId(), UserDraft.edit("Caroline", "Ng", " carol at firm ", null, null),
+				admin));
+		assertEquals("carol at firm", service.person(carol.getId(), admin).row().email());
+		assertEquals(List.of("PEOPLE user.changed user %d Caroline Ng (carol) %s".formatted(carol.getId(),
+				"{\"firstName\":{\"before\":\"Carol\",\"after\":\"Caroline\"}}")), events("user"));
+		assertFalse(service.update(carol.getId(), UserDraft.edit("Caroline", "Ng", "carol at firm", null, null),
+				admin));
+
+		FieldRefusal refusal = assertThrows(FieldRefusal.class, () -> service.update(carol.getId(),
+				UserDraft.edit("Caroline", "Ng", "carol at the firm", null, null), admin));
+		assertEquals(List.of(field("email", FieldRefusal.INVALID)), codes(refusal));
+		// It can still be taken away, or replaced with one Healdan takes
+		assertTrue(service.update(carol.getId(), UserDraft.edit("Caroline", "Ng", "carol@firm.example", null, null),
+				admin));
+		assertEquals("carol@firm.example", service.person(carol.getId(), admin).row().email());
+		assertEquals(2, events("user").size());
+	}
+
 	@Test
 	public void testAProviderAccountCanBeEditedButGetsNoPassword() throws Exception {
 		User jane = providerAccount("jane");
@@ -823,14 +854,22 @@ public class UserAdministrationTest extends AbstractHealdanTestCase {
 		disableDirectly(bob);
 		assertEquals(1, enabledAdmins());
 
-		// bob's account is disabled, so ann is the last enabled administrator
-		HealdanRuleException e = assertThrows(HealdanRuleException.class,
-				() -> service.setGroups(ann.getId(), List.of(), bob));
+		// bob's account is disabled, so ann is the last enabled administrator. A seed counts as an administrator,
+		// so carol's changes in one meet the guard
+		User carol = fx.user("carol");
+		HealdanRuleException e = assertThrows(HealdanRuleException.class, () -> HealdanOperation
+				.run(HealdanOperation.Kind.SEED, () -> service.setGroups(ann.getId(), List.of(), carol)));
 		assertEquals(UserAdministration.LAST_ADMIN, e.getMessage());
-		e = assertThrows(HealdanRuleException.class, () -> service.disable(ann.getId(), bob));
+		e = assertThrows(HealdanRuleException.class, () -> HealdanOperation.run(HealdanOperation.Kind.SEED,
+				() -> service.disable(ann.getId(), carol)));
 		assertEquals(UserAdministration.LAST_ADMIN, e.getMessage());
 		assertEquals(UserAdministration.LAST_ADMIN, service.person(ann.getId(), bob).refusals().disable());
 		assertEquals(UserAdministration.LAST_ADMIN, service.person(ann.getId(), bob).refusals().leaveAdmin());
+		// bob, an administrator whose own account is disabled, changes nothing
+		e = assertThrows(HealdanRuleException.class, () -> service.setGroups(ann.getId(), List.of(), bob));
+		assertEquals(UserAdministration.YOUR_ACCOUNT_DISABLED, e.getMessage());
+		e = assertThrows(HealdanRuleException.class, () -> service.disable(ann.getId(), bob));
+		assertEquals(UserAdministration.YOUR_ACCOUNT_DISABLED, e.getMessage());
 		assertEquals(1, enabledAdmins());
 		assertEquals(List.of(), events("user"));
 
@@ -867,12 +906,101 @@ public class UserAdministrationTest extends AbstractHealdanTestCase {
 		List<Object> outcomes = concurrently(() -> service.disable(bob.getId(), ann),
 				() -> service.disable(ann.getId(), bob));
 
+		// The second finds its caller's own account disabled by the first
 		assertEquals(outcomes.toString(), 1, outcomes.stream().filter(Boolean.TRUE::equals).count());
 		HealdanRuleException refused = (HealdanRuleException) outcomes.stream()
 				.filter(HealdanRuleException.class::isInstance).findFirst()
 				.orElseThrow(() -> new AssertionError(outcomes.toString()));
-		assertEquals(UserAdministration.LAST_ADMIN, refused.getMessage());
+		assertEquals(UserAdministration.YOUR_ACCOUNT_DISABLED, refused.getMessage());
 		assertEquals(1, enabledAdmins());
+	}
+
+	/**
+	 * With three enabled administrators, two disabling each other at once leave one of them and the third: the second
+	 * change finds its caller's own account disabled, and changes nothing. Nor does a change of someone's groups made
+	 * by an administrator disabled while it waited its turn.
+	 */
+	@Test
+	public void testAnAdministratorDisabledMeanwhileChangesNothing() throws Exception {
+		User ann = fx.user("ann", "admin");
+		User bob = fx.user("bob", "admin");
+		assertEquals(3, enabledAdmins());
+
+		List<Object> outcomes = concurrently(() -> service.disable(bob.getId(), ann),
+				() -> service.disable(ann.getId(), bob));
+
+		assertEquals(outcomes.toString(), 1, outcomes.stream().filter(Boolean.TRUE::equals).count());
+		HealdanRuleException refused = (HealdanRuleException) outcomes.stream()
+				.filter(HealdanRuleException.class::isInstance).findFirst()
+				.orElseThrow(() -> new AssertionError(outcomes.toString()));
+		assertEquals(UserAdministration.YOUR_ACCOUNT_DISABLED, refused.getMessage());
+		assertEquals(2, enabledAdmins());
+		assertEquals(List.of("user.disabled"), actions("user"));
+
+		User cid = fx.user("cid", "admin");
+		User dee = fx.user("dee", "admin");
+		Turns turns = inTurn(() -> service.disable(dee.getId(), admin),
+				() -> service.setGroups(cid.getId(), List.of(), dee));
+
+		assertTrue(turns.toString(), turns.waited());
+		assertEquals(turns.toString(), Boolean.TRUE, turns.first());
+		assertTrue(turns.toString(), turns.second() instanceof HealdanRuleException);
+		assertEquals(UserAdministration.YOUR_ACCOUNT_DISABLED, ((HealdanRuleException) turns.second()).getMessage());
+		assertTrue(row(cid).admin());
+		// A group's members too
+		for (HealdanOperation.ThrowingRunnable change : List.<HealdanOperation.ThrowingRunnable>of(
+				() -> GroupAdministration.get().addMember(partners.getId(), cid.getId(), dee),
+				() -> GroupAdministration.get().removeMember(adminGroup.getId(), cid.getId(), dee))) {
+			HealdanRuleException e = assertThrows(HealdanRuleException.class, change::run);
+			assertEquals(UserAdministration.YOUR_ACCOUNT_DISABLED, e.getMessage());
+		}
+		assertEquals(List.of("admin", "Everyone"), groupNames(row(cid)));
+		assertEquals(List.of("user.disabled", "user.disabled"), actions("user"));
+		assertEquals(List.of(), actions("group"));
+	}
+
+	/**
+	 * Ruling P4-R36: Edit, Enable, Reset Password and a group's delete take turns with a change of the person's
+	 * groups, so neither undoes the other
+	 */
+	@Test
+	public void testTheAppsStoresOfAPersonTakeTurns() throws Exception {
+		User carol = fx.user("carol");
+		Group litigation = fx.group("Litigation");
+
+		Turns turns = inTurn(() -> service.setGroups(carol.getId(), List.of(partners.getId()), admin),
+				() -> service.update(carol.getId(), UserDraft.edit("Caroline", "Ng", null, null, null), admin));
+		assertTrue(turns.toString(), turns.waited());
+		assertEquals(turns.toString(), List.of(true, true), Arrays.asList(turns.first(), turns.second()));
+		assertEquals(List.of("Everyone", "Partners"), groupNames(row(carol)));
+		assertEquals("Caroline", row(carol).firstName());
+
+		disableDirectly(carol);
+		turns = inTurn(
+				() -> service.setGroups(carol.getId(), List.of(partners.getId(), litigation.getId()), admin),
+				() -> service.enable(carol.getId(), admin));
+		assertTrue(turns.toString(), turns.waited());
+		assertEquals(turns.toString(), List.of(true, true), Arrays.asList(turns.first(), turns.second()));
+		assertEquals(List.of("Everyone", "Litigation", "Partners"), groupNames(row(carol)));
+		assertEquals(PersonStatus.ACTIVE, row(carol).status());
+
+		turns = inTurn(() -> service.setGroups(carol.getId(), List.of(litigation.getId()), admin),
+				() -> service.resetPassword(carol.getId(), false, admin));
+		assertTrue(turns.toString(), turns.waited());
+		assertEquals(turns.toString(), Boolean.TRUE, turns.first());
+		assertTrue(turns.toString(), turns.second() instanceof ResetResult);
+		assertEquals(List.of("Everyone", "Litigation"), groupNames(row(carol)));
+		assertTrue(service.person(carol.getId(), admin).mustChangePassword());
+
+		turns = inTurn(
+				() -> service.setGroups(carol.getId(), List.of(litigation.getId(), partners.getId()), admin),
+				() -> {
+					GroupAdministration.get().delete(litigation.getId(), admin);
+					return "deleted";
+				});
+		assertTrue(turns.toString(), turns.waited());
+		assertEquals(turns.toString(), List.of(true, "deleted"), Arrays.asList(turns.first(), turns.second()));
+		assertEquals(List.of("Everyone", "Partners"), groupNames(row(carol)));
 	}
 
 	// Reset Password
@@ -973,6 +1101,38 @@ public class UserAdministrationTest extends AbstractHealdanTestCase {
 		// Signing yourself out closes your own session too
 		assertEquals(new SignedOut(1, 0), service.signOut(admin.getId(), admin));
 		assertFalse(SessionManager.get().isOpen(mine.getSid()));
+	}
+
+	/**
+	 * Ruling P4-R35: a session the person opened as another account that lets them, with their own password
+	 * ({@code carol>bob}), closes with theirs at Sign Out Everywhere, Disable and Reset Password. The other account's
+	 * own sessions stay open.
+	 */
+	@Test
+	public void testTheSessionsAPersonOpenedAsAnotherAccountCloseToo() throws Exception {
+		User carol = fx.user("carol");
+		User bob = fx.user("bob");
+		User loaded = UserDAO.get().findById(bob.getId(), true);
+		loaded.getImpersonators().add("carol");
+		UserDAO.get().store(loaded);
+		Session bobsOwn = SessionManager.get().newSession("bob", HealdanFixtures.PASSWORD, client);
+
+		Session asBob = SessionManager.get().newSession("carol>bob", HealdanFixtures.PASSWORD, client);
+		assertEquals("bob", asBob.getUsername());
+		assertEquals("carol", asBob.getImpersonator());
+		assertEquals(new SignedOut(1, 0), service.signOut(carol.getId(), admin));
+		assertFalse(SessionManager.get().isOpen(asBob.getSid()));
+
+		asBob = SessionManager.get().newSession("carol>bob", HealdanFixtures.PASSWORD, client);
+		assertTrue(service.disable(carol.getId(), admin));
+		assertFalse(SessionManager.get().isOpen(asBob.getSid()));
+		assertTrue(service.enable(carol.getId(), admin));
+
+		asBob = SessionManager.get().newSession("carol>bob", HealdanFixtures.PASSWORD, client);
+		assertEquals(STRONG.get(0), service.resetPassword(carol.getId(), false, admin).temporaryPassword());
+		assertFalse(SessionManager.get().isOpen(asBob.getSid()));
+
+		assertTrue(SessionManager.get().isOpen(bobsOwn.getSid()));
 	}
 
 	@Test
@@ -1177,6 +1337,70 @@ public class UserAdministrationTest extends AbstractHealdanTestCase {
 			thread.join(60_000);
 		assertEquals(outcomes.toString(), 2, outcomes.size());
 		return outcomes;
+	}
+
+	/**
+	 * What two changes made in turn returned or threw, and whether the second waited for
+	 * {@link UserAdministration#ADMIN_CHANGES} while the first held it
+	 */
+	private record Turns(Object first, Object second, boolean waited) {
+	}
+
+	/**
+	 * Runs the first change on a thread of its own, held inside {@link UserAdministration#ADMIN_CHANGES} once it has
+	 * written, then the second on another, started once the first is held; the first goes on once the second is
+	 * waiting for the lock, or after 10 seconds, as without the lock the second would run meanwhile
+	 */
+	private Turns inTurn(Change first, Change second) throws Exception {
+		CountDownLatch held = new CountDownLatch(1);
+		AtomicReference<Thread> holder = new AtomicReference<>();
+		AtomicReference<Thread> waiter = new AtomicReference<>();
+		AtomicBoolean waited = new AtomicBoolean();
+		UserAdministration.whileLocked = () -> {
+			if (Thread.currentThread() != holder.get())
+				return;
+			held.countDown();
+			long deadline = System.currentTimeMillis() + 10_000;
+			while (System.currentTimeMillis() < deadline) {
+				Thread other = waiter.get();
+				if (other != null && waitingFor(other, UserAdministration.ADMIN_CHANGES)) {
+					waited.set(true);
+					return;
+				}
+				try {
+					Thread.sleep(5);
+				} catch (InterruptedException e) {
+					Thread.currentThread().interrupt();
+					return;
+				}
+			}
+		};
+		Object[] outcomes = new Object[2];
+		try {
+			Thread one = outcomeOf(first, outcomes, 0);
+			holder.set(one);
+			one.start();
+			assertTrue("The first change never reached its lock", held.await(60, TimeUnit.SECONDS));
+			Thread two = outcomeOf(second, outcomes, 1);
+			waiter.set(two);
+			two.start();
+			one.join(60_000);
+			two.join(60_000);
+		} finally {
+			UserAdministration.whileLocked = UserAdministration.NOTHING;
+		}
+		return new Turns(outcomes[0], outcomes[1], waited.get());
+	}
+
+	/** A thread, not yet started, that puts what the change returns or throws into its place */
+	private static Thread outcomeOf(Change change, Object[] outcomes, int place) {
+		return new Thread(() -> {
+			try {
+				outcomes[place] = change.run();
+			} catch (Exception e) {
+				outcomes[place] = e;
+			}
+		});
 	}
 
 	/**

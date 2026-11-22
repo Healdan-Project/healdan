@@ -66,18 +66,19 @@ import com.logicaldoc.util.spring.Context;
  * account made there, through LogicalDOC's DAOs, so its listeners and Healdan's run as on every route.
  * <p>
  * <b>Who is a person:</b> an account of the reader's tenant, not deleted, and not a system account. A system account
- * is never changed: LogicalDOC's store would make it an ordinary one. A read-only account belongs only to its own group
- * and {@code guest}.
+ * is never changed here. A read-only account belongs only to its own group and {@code guest}.
  * <p>
  * <b>The guards:</b> the {@code admin} account is never disabled or taken out of the {@code admin} group, nobody
- * disables or takes themselves out of it, and no change leaves the tenant without an enabled administrator. Every
- * change that could lower their count holds {@link #ADMIN_CHANGES}, runs in a transaction of its own, counts them
- * after its write and commits before it lets go, so two administrators taking each other out at once leave one.
+ * disables or takes themselves out of it, and no change made here leaves the tenant without an enabled administrator.
+ * Every change that could lower their count holds {@link #ADMIN_CHANGES}, runs in a transaction of its own, refuses a
+ * caller whose own account is no longer enabled, counts them after its write and commits before it lets go, so two
+ * administrators taking each other out at once leave one. Edit, Enable, Reset Password and a group's delete hold it
+ * too, so this app's stores of a person take turns and none puts back groups another has just changed.
  * <p>
  * <b>Signing out:</b> Disable and Reset Password revoke the person's device tokens in their store, through
- * {@code TokenUserListener}, and once they commit close every open session of the person on this server
- * ({@link PersonSessions}); Sign Out Everywhere does both. A session is closed by its id, never through the request
- * that asks.
+ * {@code TokenUserListener}, and once they commit close every open session on this server that the person opened, as
+ * themselves or as another account ({@link PersonSessions}); Sign Out Everywhere does both. A session is closed by its
+ * id, never through the request that asks.
  * <p>
  * <b>Temporary passwords:</b> New User and Reset Password give the account a temporary password the person changes at
  * their next sign-in, made and emailed by {@link TemporaryPasswords} once the change has committed. It's in their
@@ -91,7 +92,10 @@ import com.logicaldoc.util.spring.Context;
 @Service
 public class UserAdministration {
 
-	/** Every change that could lower the number of enabled administrators holds it until it has committed */
+	/**
+	 * Every change that could lower the number of enabled administrators, and every other store of a person made here,
+	 * takes it outside its transaction and holds it until it has committed
+	 */
 	static final Object ADMIN_CHANGES = new Object();
 
 	/** New User holds it until it has committed, so two accounts can't take one username in two cases */
@@ -108,6 +112,9 @@ public class UserAdministration {
 	static volatile Runnable whileLocked = NOTHING;
 
 	public static final String ONLY_ADMINS = "Only an administrator can change people's accounts and groups.";
+
+	public static final String YOUR_ACCOUNT_DISABLED = "Your own account has been disabled, so you can't change "
+			+ "people's accounts and groups.";
 
 	public static final String NO_PERSON = "That person doesn't exist.";
 
@@ -366,9 +373,9 @@ public class UserAdministration {
 	 * @param actor who changes them
 	 * @return false if they had these details already, which changes nothing
 	 * @throws PersistenceException a refusal: {@link #ONLY_ADMINS}, {@link #NO_PERSON}, {@link #SYSTEM_ACCOUNT}, or a
-	 *         {@link FieldRefusal} for the draft's fields, a username among them, which never changes. A name, a
-	 *         language or a time zone the person has already is taken as it is, a blank name among them. Or an error at
-	 *         data layer
+	 *         {@link FieldRefusal} for the draft's fields, a username among them, which never changes. A name, an
+	 *         email, a language or a time zone the person has already is taken as it is, a blank name among them. Or an
+	 *         error at data layer
 	 * @throws IllegalArgumentException for a draft with groups, which an edit doesn't change
 	 */
 	public boolean update(long id, UserDraft draft, User actor) throws PersistenceException {
@@ -376,55 +383,60 @@ public class UserAdministration {
 		Objects.requireNonNull(draft, "draft");
 		if (draft.groupIds() != null)
 			throw new IllegalArgumentException("An edit changes no groups");
-		return inTransaction(() -> {
-			User user = changeable(id, actor.getTenantId());
-			UserForm form = UserForm.check(draft, user.getTenantId(), user, this::taken);
-			String language = StringUtils.isBlank(user.getLanguage()) ? UserForm.defaultLanguage(user.getTenantId())
-					: user.getLanguage();
-			Map<String, Change> changes = new HashMap<>();
-			// A stored blank name, which a provider's claims can leave, stays blank until one is typed
-			changed(changes, "firstName", blankless(user.getFirstName()), blankless(form.firstName()));
-			changed(changes, "lastName", blankless(user.getName()), blankless(form.lastName()));
-			changed(changes, "email", blankless(user.getEmail()), form.email());
-			changed(changes, "language", language, form.language());
-			changed(changes, "timeZone", blankless(user.getTimeZone()), form.timeZone());
-			if (changes.isEmpty())
-				return false;
+		synchronized (ADMIN_CHANGES) {
+			return inTransaction(() -> {
+				User user = changeable(id, actor.getTenantId());
+				UserForm form = UserForm.check(draft, user.getTenantId(), user, this::taken);
+				String language = StringUtils.isBlank(user.getLanguage())
+						? UserForm.defaultLanguage(user.getTenantId())
+						: user.getLanguage();
+				Map<String, Change> changes = new HashMap<>();
+				// A stored blank name, which a provider's claims can leave, stays blank until one is typed
+				changed(changes, "firstName", blankless(user.getFirstName()), blankless(form.firstName()));
+				changed(changes, "lastName", blankless(user.getName()), blankless(form.lastName()));
+				changed(changes, "email", blankless(user.getEmail()), form.email());
+				changed(changes, "language", language, form.language());
+				changed(changes, "timeZone", blankless(user.getTimeZone()), form.timeZone());
+				if (changes.isEmpty())
+					return false;
 
-			user.setFirstName(StringUtils.defaultString(form.firstName()));
-			user.setName(StringUtils.defaultString(form.lastName()));
-			user.setEmail(StringUtils.defaultString(form.email()));
-			user.setLanguage(form.language());
-			user.setTimeZone(form.timeZone());
-			evictor.evictUsersOnRollback(List.of(id));
-			UserDAO.get().store(user, history(actor, UserEvent.UPDATED));
-			events.record(new AdminEvent(AdminArea.PEOPLE, "user.changed", USER, id, PersonNames.recorded(user),
-					changes), actor);
-			return true;
-		});
+				user.setFirstName(StringUtils.defaultString(form.firstName()));
+				user.setName(StringUtils.defaultString(form.lastName()));
+				user.setEmail(StringUtils.defaultString(form.email()));
+				user.setLanguage(form.language());
+				user.setTimeZone(form.timeZone());
+				evictor.evictUsersOnRollback(List.of(id));
+				UserDAO.get().store(user, history(actor, UserEvent.UPDATED));
+				events.record(new AdminEvent(AdminArea.PEOPLE, "user.changed", USER, id, PersonNames.recorded(user),
+						changes), actor);
+				return true;
+			});
+		}
 	}
 
 	/**
 	 * Disable: the person can't sign in on any route. Their device tokens are revoked in the store and, once it
-	 * commits, every open session of theirs closes. Call it outside a transaction.
+	 * commits, every open session they opened, as themselves or as another account, closes. Call it outside a
+	 * transaction.
 	 *
 	 * @param id a person
 	 * @param actor who disables them
 	 * @return false if they were disabled already, which changes nothing, whoever they are; their sessions close all
 	 *         the same
-	 * @throws PersistenceException a refusal: {@link #ONLY_ADMINS}, {@link #NO_PERSON}, {@link #SYSTEM_ACCOUNT},
-	 *         {@link #DISABLE_ADMIN}, {@link #DISABLE_YOURSELF} or {@link #LAST_ADMIN}. Or an error at data layer
+	 * @throws PersistenceException a refusal: {@link #ONLY_ADMINS}, {@link #YOUR_ACCOUNT_DISABLED}, {@link #NO_PERSON},
+	 *         {@link #SYSTEM_ACCOUNT}, {@link #DISABLE_ADMIN}, {@link #DISABLE_YOURSELF} or {@link #LAST_ADMIN}. Or an
+	 *         error at data layer
 	 */
 	public boolean disable(long id, User actor) throws PersistenceException {
 		Objects.requireNonNull(actor, "actor");
-		boolean disabled;
+		Disabling outcome;
 		synchronized (ADMIN_CHANGES) {
-			disabled = inTransaction(() -> {
-				requireAdmin(actor);
+			outcome = inTransaction(() -> {
+				requireEnabledAdmin(actor);
 				User user = changeable(id, actor.getTenantId());
 				// Nothing to change comes before the guards: disabling a disabled account, admin's too, does nothing
 				if (!user.isEnabled())
-					return false;
+					return new Disabling(user.getUsername(), false);
 				if (ADMIN_ACCOUNT.equals(user.getUsername()))
 					throw new HealdanRuleException(DISABLE_ADMIN);
 				if (user.getId() == actor.getId())
@@ -439,11 +451,20 @@ public class UserAdministration {
 				checkAdminsLeft(lowersAdmins, user.getTenantId());
 				events.record(new AdminEvent(AdminArea.PEOPLE, "user.disabled", USER, id, PersonNames.recorded(user),
 						null), actor);
-				return true;
+				return new Disabling(user.getUsername(), true);
 			});
 		}
-		PersonSessions.closeAll(id);
-		return disabled;
+		PersonSessions.closeAll(id, outcome.username());
+		return outcome.disabled();
+	}
+
+	/**
+	 * What a Disable found
+	 *
+	 * @param username the person's username, as stored, whose sessions close
+	 * @param disabled whether it disabled them, false if they were disabled already
+	 */
+	private record Disabling(String username, boolean disabled) {
 	}
 
 	/**
@@ -457,23 +478,26 @@ public class UserAdministration {
 	 */
 	public boolean enable(long id, User actor) throws PersistenceException {
 		requireAdmin(actor);
-		return inTransaction(() -> {
-			User user = changeable(id, actor.getTenantId());
-			if (user.isEnabled())
-				return false;
-			user.setEnabled(true);
-			evictor.evictUsersOnRollback(List.of(id));
-			UserDAO.get().store(user, history(actor, UserEvent.ENABLED));
-			events.record(new AdminEvent(AdminArea.PEOPLE, "user.enabled", USER, id, PersonNames.recorded(user), null),
-					actor);
-			return true;
-		});
+		synchronized (ADMIN_CHANGES) {
+			return inTransaction(() -> {
+				User user = changeable(id, actor.getTenantId());
+				if (user.isEnabled())
+					return false;
+				user.setEnabled(true);
+				evictor.evictUsersOnRollback(List.of(id));
+				UserDAO.get().store(user, history(actor, UserEvent.ENABLED));
+				events.record(new AdminEvent(AdminArea.PEOPLE, "user.enabled", USER, id, PersonNames.recorded(user),
+						null), actor);
+				return true;
+			});
+		}
 	}
 
 	/**
 	 * Reset Password: gives a password account a temporary password that has to change at the next sign-in. The store
 	 * revokes the person's device tokens and lifts their username's sign-in block; once it commits, every open session
-	 * of theirs closes and the password is emailed, if asked. Call it outside a transaction.
+	 * they opened, as themselves or as another account, closes and the password is emailed, if asked. Call it outside
+	 * a transaction.
 	 *
 	 * @param id a person
 	 * @param email whether to email the temporary password
@@ -488,15 +512,18 @@ public class UserAdministration {
 		checkResettable(target, actor);
 		String password = TemporaryPasswords.make(target.getTenantId());
 
-		User user = inTransaction(() -> {
-			User current = changeable(id, actor.getTenantId());
-			checkResettable(current, actor);
-			setPassword(current, password);
-			evictor.evictUsersOnRollback(List.of(id));
-			UserDAO.get().store(current, history(actor, UserEvent.PASSWORDCHANGED));
-			return current;
-		});
-		PersonSessions.closeAll(id);
+		User user;
+		synchronized (ADMIN_CHANGES) {
+			user = inTransaction(() -> {
+				User current = changeable(id, actor.getTenantId());
+				checkResettable(current, actor);
+				setPassword(current, password);
+				evictor.evictUsersOnRollback(List.of(id));
+				UserDAO.get().store(current, history(actor, UserEvent.PASSWORDCHANGED));
+				return current;
+			});
+		}
+		PersonSessions.closeAll(id, user.getUsername());
 
 		NotEmailed notEmailed = email ? email(user, password) : NotEmailed.NOT_ASKED;
 		events.recordAfter(new AdminEvent(AdminArea.PEOPLE, "user.password-reset", USER, id,
@@ -507,8 +534,8 @@ public class UserAdministration {
 	}
 
 	/**
-	 * Sign Out Everywhere: closes every open session of the person on this server and revokes their device tokens.
-	 * One's own is allowed, and closes one's own session too.
+	 * Sign Out Everywhere: closes every open session on this server that the person opened, as themselves or as another
+	 * account, and revokes their device tokens. One's own is allowed, and closes one's own session too.
 	 *
 	 * @param id a person
 	 * @param actor who signs them out
@@ -521,7 +548,7 @@ public class UserAdministration {
 		User user = changeable(id, actor.getTenantId());
 		// The devices their page shows; every token of theirs is revoked, expired and idle ones too
 		int devices = ApiTokens.get().list(id).size();
-		int sessions = PersonSessions.closeAll(id);
+		int sessions = PersonSessions.closeAll(id, user.getUsername());
 		ApiTokens.get().revokeAll(id);
 		if (sessions > 0 || devices > 0)
 			events.recordAfter(new AdminEvent(AdminArea.PEOPLE, "user.signed-out", USER, id,
@@ -569,9 +596,9 @@ public class UserAdministration {
 	 * @param groupIds the groups, each once
 	 * @param actor who changes them
 	 * @return false if they were in these groups already, which changes nothing
-	 * @throws PersistenceException a refusal: {@link #ONLY_ADMINS}, {@link #NO_PERSON}, {@link #SYSTEM_ACCOUNT},
-	 *         {@link #NO_GROUP}, {@link #READ_ONLY_GROUPS}, {@link #ADMIN_STAYS}, {@link #LEAVE_ADMIN_YOURSELF} or
-	 *         {@link #LAST_ADMIN}. Or an error at data layer
+	 * @throws PersistenceException a refusal: {@link #ONLY_ADMINS}, {@link #YOUR_ACCOUNT_DISABLED}, {@link #NO_PERSON},
+	 *         {@link #SYSTEM_ACCOUNT}, {@link #NO_GROUP}, {@link #READ_ONLY_GROUPS}, {@link #ADMIN_STAYS},
+	 *         {@link #LEAVE_ADMIN_YOURSELF} or {@link #LAST_ADMIN}. Or an error at data layer
 	 * @throws IllegalArgumentException for a group listed twice, or a null one
 	 */
 	public boolean setGroups(long id, List<Long> groupIds, User actor) throws PersistenceException {
@@ -628,16 +655,16 @@ public class UserAdministration {
 
 	/**
 	 * Changes a person's memberships of the listed groups (live groups of the tenant but people's own), under
-	 * {@link #ADMIN_CHANGES}, in a transaction of its own: the groups must be listed ones, a read-only account gets
-	 * none but {@code guest}, and the admin group's guards hold. The groups a row doesn't list (their own, others'
-	 * own groups, deleted ones) stay as they are.
+	 * {@link #ADMIN_CHANGES}, in a transaction of its own: the caller's own account must be enabled still, the groups
+	 * must be listed ones, a read-only account gets none but {@code guest}, and the admin group's guards hold. The
+	 * groups a row doesn't list (their own, others' own groups, deleted ones) stay as they are.
 	 *
 	 * @return false if their groups were these already, which changes nothing
 	 */
 	boolean memberships(long id, User actor, Wanted wanted, Recorded recorded) throws PersistenceException {
 		synchronized (ADMIN_CHANGES) {
 			return inTransaction(() -> {
-				requireAdmin(actor);
+				requireEnabledAdmin(actor);
 				User user = changeable(id, actor.getTenantId());
 				long tenantId = user.getTenantId();
 				Set<Long> current = listedGroups(id, tenantId);
@@ -724,6 +751,19 @@ public class UserAdministration {
 		// FilingRules reloads the user's groups, which are transient
 		if (!FilingRules.get().isAdmin(actor))
 			throw new HealdanRuleException(ONLY_ADMINS);
+	}
+
+	/**
+	 * Inside {@link #ADMIN_CHANGES}: {@link #requireAdmin}, and the caller's own account, as stored now, must still be
+	 * enabled, so an administrator disabled while their change waited its turn changes nothing
+	 *
+	 * @throws HealdanRuleException {@link #ONLY_ADMINS}, or {@link #YOUR_ACCOUNT_DISABLED} for a caller whose stored
+	 *         account is disabled or deleted; a seed's caller too
+	 */
+	void requireEnabledAdmin(User actor) throws PersistenceException {
+		requireAdmin(actor);
+		if (!reads.enabled(actor.getId()))
+			throw new HealdanRuleException(YOUR_ACCOUNT_DISABLED);
 	}
 
 	/**

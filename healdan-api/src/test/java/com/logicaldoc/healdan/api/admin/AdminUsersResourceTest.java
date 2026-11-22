@@ -455,6 +455,25 @@ public class AdminUsersResourceTest extends ApiTestCase {
 		assertFields(patch(one).webSession(web).json(new Body().with("lastName", null)).send(), "lastName:required");
 	}
 
+	/**
+	 * Ruling P4-R42: an edit of a name alone saves for a person whose stored email, set elsewhere, isn't one Healdan
+	 * would take, as the route sends the stored one back unchanged; an email sent that differs is judged
+	 */
+	@Test
+	public void testEditKeepsAStoredEmailAsItIs() throws Exception {
+		User ben = named(fx.user("ben"), "Ben", "Hale", "ben at firm");
+		String one = one(ben);
+
+		ApiResponse response = patch(one).webSession(web).json(new Body().with("firstName", "Benjamin")).send();
+		assertEquals(response.toString(), 200, response.status());
+		assertEquals("Benjamin", response.json().path("firstName").textValue());
+		assertEquals("ben at firm", response.json().path("email").textValue());
+		assertFalse(detail("user.changed"), detail("user.changed").contains("email"));
+		assertFields(patch(one).webSession(web).json(new Body().with("email", "ben at the firm")).send(),
+				"email:invalid");
+		assertEquals(List.of("user.changed"), actions("user"));
+	}
+
 	// Disable and Enable
 
 	@Test
@@ -516,7 +535,8 @@ public class AdminUsersResourceTest extends ApiTestCase {
 
 	/**
 	 * With the admin account disabled, two administrators are the only enabled ones; each disables the other at the
-	 * same moment, through the routes: one is refused, or finds itself signed out, so one stays
+	 * same moment, through the routes: the second finds its caller's own account disabled, or finds itself signed out,
+	 * so one stays
 	 */
 	@Test
 	public void testTwoAdminsCannotDisableEachOther() throws Exception {
@@ -542,7 +562,7 @@ public class AdminUsersResourceTest extends ApiTestCase {
 		assertTrue(answers.toString(), statuses.get(1) == 401 || statuses.get(1) == 409);
 		for (ApiResponse answer : answers)
 			if (answer.status() == 409)
-				assertEquals(UserAdministration.LAST_ADMIN, answer.json().path("detail").textValue());
+				assertEquals(UserAdministration.YOUR_ACCOUNT_DISABLED, answer.json().path("detail").textValue());
 		UserDAO.get().evict(ann.getId());
 		UserDAO.get().evict(boss.getId());
 		assertEquals(1, (UserDAO.get().findById(ann.getId()).isEnabled() ? 1 : 0)

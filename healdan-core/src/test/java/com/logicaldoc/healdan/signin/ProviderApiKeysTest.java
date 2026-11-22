@@ -292,6 +292,27 @@ public class ProviderApiKeysTest extends AbstractHealdanTestCase {
 	}
 
 	/**
+	 * Ruling P4-R35: linking closes the sessions the account opened as
+	 * another account that lets it, with its password ({@code jane>bob}),
+	 * too. The other account's own sessions stay open.
+	 */
+	@Test
+	public void testLinkingClosesTheSessionsTheAccountOpenedAsAnother() throws Exception {
+		User loaded = UserDAO.get().findById(bob.getId(), true);
+		loaded.getImpersonators().add("jane");
+		UserDAO.get().store(loaded);
+		Session asBob = SessionManager.get().newSession("jane>bob", HealdanFixtures.PASSWORD, client);
+		assertEquals("bob", asBob.getUsername());
+		assertEquals("jane", asBob.getImpersonator());
+		Session bobsOwn = SessionManager.get().newSession("bob", HealdanFixtures.PASSWORD, client);
+
+		link();
+
+		assertFalse(SessionManager.get().isOpen(asBob.getSid()));
+		assertTrue(SessionManager.get().isOpen(bobsOwn.getSid()));
+	}
+
+	/**
 	 * Ruling R31: a later sign-in or a re-check that makes an account a
 	 * provider account again closes its open sessions too
 	 */

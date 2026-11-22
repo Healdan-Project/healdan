@@ -33,6 +33,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+import com.logicaldoc.core.security.authentication.AuthenticationChain;
+import com.logicaldoc.core.security.authentication.AuthenticationException;
+
 /**
  * Copies every error the server logs onto a bounded queue in memory, which
  * {@link ErrorWriter}'s one thread drains (Admin app spec section 9.4).
@@ -51,6 +54,13 @@ import org.springframework.stereotype.Component;
  * queue, counting what doesn't fit. It ignores what this package's loggers log
  * and what is logged on the writer's thread, so a failure to write the errors
  * can't feed itself.
+ * <p>
+ * A sign-in refused is no fault: an error of the sign-in chain's logger
+ * ({@link AuthenticationChain}) whose exception is an
+ * {@link AuthenticationException}, such as a password that has to change or
+ * a disabled account, is left out, as the person's history and the sign-in
+ * throttle record it. Anything else that logger logs as an error, such as a
+ * {@code PersistenceException}, is caught.
  */
 @Component
 public class ErrorCapture {
@@ -62,6 +72,9 @@ public class ErrorCapture {
 
 	/** The loggers never captured: this package's */
 	private static final String OWN = ErrorCapture.class.getPackageName() + ".";
+
+	/** The sign-in chain's logger, whose refused sign-ins aren't faults */
+	static final String SIGN_IN_CHAIN = AuthenticationChain.class.getName();
 
 	private final BlockingQueue<CapturedError> queue = new ArrayBlockingQueue<>(QUEUE_SIZE);
 
@@ -217,6 +230,9 @@ public class ErrorCapture {
 			if (logger != null && logger.startsWith(OWN))
 				return;
 			if (ErrorWriter.THREAD.equals(Thread.currentThread().getName()))
+				return;
+			// A sign-in refused, which the person's history and the throttle record
+			if (SIGN_IN_CHAIN.equals(logger) && event.getThrown() instanceof AuthenticationException)
 				return;
 			// A full queue drops the event before the work of copying it
 			if (queue.remainingCapacity() == 0) {

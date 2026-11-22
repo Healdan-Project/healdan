@@ -25,13 +25,14 @@ import com.logicaldoc.util.spring.Context;
 /**
  * A person's details as New User or Edit gives them ({@link UserDraft}), checked: each text without the whitespace at
  * either end, and every field Healdan doesn't take refused at once, in the form's order ({@link FieldRefusal}). An
- * edit takes the person's current names, language and time zone as they are, as the app sends back what it was
- * given: a provider account's blank name, or a language turned off since, saves.
+ * edit takes the person's current names, email, language and time zone as they are, as the app sends back what it
+ * was given: a provider account's blank name, an email set elsewhere that isn't one Healdan would take, or a language
+ * turned off since, saves.
  *
  * @param username the username, null for an edit
  * @param firstName the first name; on an edit, the stored one when it's unchanged, a blank one among them
  * @param lastName the last name; on an edit, the stored one when it's unchanged, a blank one among them
- * @param email the email address, null for none
+ * @param email the email address, null for none; on an edit, the stored one when it's unchanged
  * @param language the language, never null
  * @param timeZone the time zone, null for none
  */
@@ -104,6 +105,9 @@ public record UserForm(String username, String firstName, String lastName, Strin
 		String email = StringUtils.strip(draft.email());
 		if (StringUtils.isEmpty(email))
 			email = null;
+		else if (current != null && email.equals(StringUtils.strip(current.getEmail())))
+			// Unchanged, the whitespace at either end aside: the stored one, as it is
+			email = current.getEmail();
 		else if (email.length() > MAX_TEXT)
 			fields.add(new FieldRefusal.Field("email", FieldRefusal.TOO_LONG, LONG_EMAIL));
 		else if (!email.contains("@") || email.startsWith("@") || email.endsWith("@") || !StorableText.holds(email)

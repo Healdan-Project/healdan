@@ -105,10 +105,8 @@ public final class TemporaryPasswords {
 	}
 
 	/**
-	 * Makes a temporary password the tenant's password rules accept. LogicalDOC's generator reads
-	 * {@code password.sequence} as 4 when it isn't set, where the rules read it as 3, so it can make a password with a
-	 * sequence of 4, such as {@code abcd}, which the rules refuse: about one in 10,000. Storing it would roll the
-	 * change back, so it gets a second try.
+	 * Makes a temporary password and checks it against the tenant's password rules, with a second try when the first
+	 * doesn't pass them, as storing a password they refuse would roll the change back.
 	 * <p>
 	 * Call it before the change's transaction: LogicalDOC's check refuses with a runtime exception, which would mark
 	 * that transaction for rollback. It checks a stand-in account of the tenant, as LogicalDOC checks a ticket's
