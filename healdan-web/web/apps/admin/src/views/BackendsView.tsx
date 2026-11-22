@@ -10,6 +10,7 @@ import { Button, formatCount, formatSize, Icon, StatusDot, Table, type TableColu
 import { routes } from '../addresses'
 import { Fact } from '../facts/Fact'
 import { useFocusWhenGone } from '../focus'
+import { useRowsHeight } from '../lists/useRowsHeight'
 import { BackendDialog } from '../storage/BackendDialog'
 import { isStorageUnavailable, storageKeys, useBackends, useStorageSettings } from '../storage/queries'
 import { RecoveryKeyDialog } from '../storage/RecoveryKeyDialog'
@@ -27,8 +28,6 @@ interface BackendRow extends TableRow {
   backend: A['Backend']
 }
 
-/** --row-height in tokens.css, which the list's height is counted in: the virtualiser needs one of its own */
-const ROW = 34
 /** The rows the list shows before it scrolls */
 const ROWS_SHOWN = 8
 
@@ -154,7 +153,7 @@ function Backends({ overview, open, onKey }: { overview: A['BackendOverview']; o
 
   const columns = useMemo(() => backendColumns(), [])
   const rows = useMemo(() => overview.backends.map((backend): BackendRow => ({ id: String(backend.id), textValue: backend.name, backend })), [overview.backends])
-  const height = (Math.min(Math.max(rows.length, 1), ROWS_SHOWN) + 1) * ROW + 2
+  const { boxRef, height } = useRowsHeight(rows.length, ROWS_SHOWN)
 
   return (
     <div className={styles.page}>
@@ -177,7 +176,7 @@ function Backends({ overview, open, onKey }: { overview: A['BackendOverview']; o
         </div>
       </div>
       <p className={styles.about}>{t('admin.backends.about')}</p>
-      <div className={styles.list} style={{ height }}>
+      <div ref={boxRef} className={styles.list} style={{ height }}>
         <Table
           aria-labelledby={headingId}
           columns={columns}

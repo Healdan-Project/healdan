@@ -34,6 +34,14 @@
   font-weight: var(--hd-weight-medium);
 }
 
+/* A Store's matters: their count, then their list, which takes the page's width as the Matters list does. Not a
+   section: that's a form's width, too narrow for the list's columns. */
+.matters {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hd-space-3);
+}
+
 /* A section under the list, or of a page: its heading, then what it holds */
 .section {
   display: flex;

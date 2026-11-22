@@ -228,6 +228,11 @@ What the screens from Phase 2 on share (the spec's section 7.2):
   that someone thought they had cancelled. `dialogs/Confirm.tsx`, the question with the warning sign that a delete,
   Follow Parent, Apply to Subfolders and the Leave question use, does it, and so do the forms, such as `ClientDialog`,
   New Matter and the Workspace Editor's `FolderDialogs`.
+- **Lists as high as their rows.** A list on a page that scrolls as a whole (the Stores and Backends lists, a Store's
+  matters) takes its box's height from `lists/useRowsHeight(rows, shown)`: a heading and its rows, up to `shown` of
+  them, plus the room a sideways scroll bar takes where the browser's takes any, so the bar never covers the last row.
+  Its `boxRef` goes on the box around the `Table`. Such a list takes the page's width, never a form section's
+  (`Storage.module.css`'s `.section`, 760 pixels), which is too narrow for the matter columns.
 - **Paged lists.** `lists/usePagedList(path, query, pageSize, ids)` is a list that comes a page at a time, the Clients,
   Matters, Users and Groups lists and a group's members (whose `{id}` segment `ids` fills, the key holding the id as a
   number, so the members are under the group's own key): TanStack Query's infinite query over the route by `offset`,

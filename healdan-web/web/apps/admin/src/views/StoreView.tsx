@@ -11,6 +11,7 @@ import { matterHref, routes } from '../addresses'
 import { Confirm } from '../dialogs/Confirm'
 import { Fact } from '../facts/Fact'
 import type { SortOrder } from '../lists/usePagedList'
+import { useRowsHeight } from '../lists/useRowsHeight'
 import { matterColumns, matterRowOf } from '../matters/columns'
 import { NewMatterDialog } from '../matters/NewMatterDialog'
 import { isMatterSort, useMatterList, type MatterSort } from '../matters/useMatterList'
@@ -215,8 +216,6 @@ function Store({ store, search }: { store: A['StoreInfo']; search: StoreSearch }
   )
 }
 
-/** --row-height in tokens.css, which the list's height is counted in: the virtualiser needs one of its own */
-const ROW = 34
 /** The rows the list shows before it scrolls, and asks for more as its end comes into view */
 const ROWS_SHOWN = 12
 
@@ -228,7 +227,7 @@ function StoreMatters({ store, search }: { store: A['StoreInfo']; search: StoreS
   const columns = useMemo(() => matterColumns(['store']), [])
   const rows = useMemo(() => listing.matters.map(matterRowOf), [listing.matters])
   const shown: TableSort = { column: search.sort ?? 'number', direction: search.order === 'desc' ? 'descending' : 'ascending' }
-  const height = (Math.min(Math.max(rows.length, 1), ROWS_SHOWN) + 1) * ROW + 2
+  const { boxRef, height } = useRowsHeight(rows.length, ROWS_SHOWN)
 
   function sortBy(next: TableSort) {
     if (!isStoreMatterSort(next.column)) return
@@ -239,9 +238,9 @@ function StoreMatters({ store, search }: { store: A['StoreInfo']; search: StoreS
 
   if (listing.isError) return <ErrorPanel error={listing.error} onRetry={listing.refetch} />
   return (
-    <div className={styles.section}>
+    <div className={styles.matters}>
       {!listing.isStale && listing.total !== undefined && <p className={clientStyles.count}>{plural('matters', listing.total)}</p>}
-      <div className={styles.list} style={{ height }}>
+      <div ref={boxRef} className={styles.list} style={{ height }}>
         <Table
           aria-label={t('admin.store.mattersOf', { name: store.name })}
           columns={columns}
