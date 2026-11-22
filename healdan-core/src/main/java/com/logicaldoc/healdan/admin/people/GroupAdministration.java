@@ -329,10 +329,11 @@ public class GroupAdministration {
 	}
 
 	/**
-	 * Deletes a group, taking its members out first, in one transaction, as the Classic Interface does. The people are
-	 * stored, so LogicalDOC's listeners and Healdan's run; an account that isn't a person, such as a system account,
-	 * has its membership taken out without being stored, as LogicalDOC's store would make it an ordinary account.
-	 * Folders' rows for the group stay, granting nobody.
+	 * Deletes a group, taking its members out first, in one transaction, as the Classic Interface does, under
+	 * {@link UserAdministration#ADMIN_CHANGES}, so it takes turns with this app's other stores of a person. The
+	 * people are stored, so LogicalDOC's listeners and Healdan's run; an account that isn't a person, such as a system
+	 * account, has only its membership taken out, with no store of the account, as a system account is never changed
+	 * here. Folders' rows for the group stay, granting nobody. Call it outside a transaction.
 	 *
 	 * @param id a group
 	 * @param actor who deletes it
@@ -343,35 +344,37 @@ public class GroupAdministration {
 	public void delete(long id, User actor) throws PersistenceException {
 		UserAdministration.requireAdmin(actor);
 		long tenantId = actor.getTenantId();
-		people.inTransaction(() -> {
-			// Read where it's deleted: a provider's map could name it meanwhile, or another route rename it
-			GroupRecord now = existing(id, tenantId);
-			if (FIXED.contains(now.name()))
-				throw new HealdanRuleException(FIXED_DELETE.formatted(now.name()));
-			if (mappedBy().containsKey(id))
-				throw new HealdanRuleException(MAPPED);
-			// A deleted group is kept as <name>.<id>, which the column must hold
-			if ((now.name() + "." + id).length() > MAX_TEXT)
-				throw new HealdanRuleException(
-						NAME_TOO_LONG_TO_DELETE.formatted(MAX_TEXT - 1 - String.valueOf(id).length()));
+		synchronized (UserAdministration.ADMIN_CHANGES) {
+			people.inTransaction(() -> {
+				// Read where it's deleted: a provider's map could name it meanwhile, or another route rename it
+				GroupRecord now = existing(id, tenantId);
+				if (FIXED.contains(now.name()))
+					throw new HealdanRuleException(FIXED_DELETE.formatted(now.name()));
+				if (mappedBy().containsKey(id))
+					throw new HealdanRuleException(MAPPED);
+				// A deleted group is kept as <name>.<id>, which the column must hold
+				if ((now.name() + "." + id).length() > MAX_TEXT)
+					throw new HealdanRuleException(
+							NAME_TOO_LONG_TO_DELETE.formatted(MAX_TEXT - 1 - String.valueOf(id).length()));
 
-			evictor.evictGroupsOnRollback(List.of(id));
-			List<Account> members = reads.accounts(tenantId, null, id);
-			evictor.evictUsersOnRollback(members.stream().map(Account::id).toList());
-			for (Account member : members) {
-				User user = UserDAO.get().findById(member.id(), true);
-				user.removeGroup(id);
-				UserHistory history = new UserHistory();
-				history.setEvent(UserEvent.UPDATED);
-				history.setAuthor(actor.getUsername());
-				history.setComment("Taken out of the group " + now.name() + ", deleted in the Admin app");
-				UserDAO.get().store(user, history);
-			}
-			reads.removeMemberships(id, reads.otherMembers(tenantId, id));
-			GroupDAO.get().delete(id, PersistentObject.DELETED_CODE_DEFAULT);
-			events.record(new AdminEvent(AdminArea.PEOPLE, "group.deleted", GROUP, id, now.name(), null), actor);
-			return null;
-		});
+				evictor.evictGroupsOnRollback(List.of(id));
+				List<Account> members = reads.accounts(tenantId, null, id);
+				evictor.evictUsersOnRollback(members.stream().map(Account::id).toList());
+				for (Account member : members) {
+					User user = UserDAO.get().findById(member.id(), true);
+					user.removeGroup(id);
+					UserHistory history = new UserHistory();
+					history.setEvent(UserEvent.UPDATED);
+					history.setAuthor(actor.getUsername());
+					history.setComment("Taken out of the group " + now.name() + ", deleted in the Admin app");
+					UserDAO.get().store(user, history);
+				}
+				reads.removeMemberships(id, reads.otherMembers(tenantId, id));
+				GroupDAO.get().delete(id, PersistentObject.DELETED_CODE_DEFAULT);
+				events.record(new AdminEvent(AdminArea.PEOPLE, "group.deleted", GROUP, id, now.name(), null), actor);
+				return null;
+			});
+		}
 	}
 
 	/**
@@ -382,8 +385,9 @@ public class GroupAdministration {
 	 * @param actor who adds them
 	 * @return false if they were in it already
 	 * @throws PersistenceException a refusal: {@link UserAdministration#ONLY_ADMINS}, {@link #NOT_A_GROUP},
-	 *         {@link UserAdministration#NO_PERSON}, {@link UserAdministration#SYSTEM_ACCOUNT} or
-	 *         {@link UserAdministration#READ_ONLY_GROUPS}. Or an error at data layer
+	 *         {@link UserAdministration#YOUR_ACCOUNT_DISABLED}, {@link UserAdministration#NO_PERSON},
+	 *         {@link UserAdministration#SYSTEM_ACCOUNT} or {@link UserAdministration#READ_ONLY_GROUPS}. Or an error at
+	 *         data layer
 	 */
 	public boolean addMember(long groupId, long userId, User actor) throws PersistenceException {
 		UserAdministration.requireAdmin(actor);
@@ -403,9 +407,9 @@ public class GroupAdministration {
 	 * @param actor who takes them out
 	 * @return false if they weren't in it
 	 * @throws PersistenceException a refusal: {@link UserAdministration#ONLY_ADMINS}, {@link #NOT_A_GROUP},
-	 *         {@link UserAdministration#NO_PERSON}, {@link UserAdministration#SYSTEM_ACCOUNT},
-	 *         {@link #EVERYONE_STAYS}, {@link #GUEST_STAYS}, or the admin group's
-	 *         ({@link UserAdministration#ADMIN_STAYS}, {@link UserAdministration#LEAVE_ADMIN_YOURSELF},
+	 *         {@link UserAdministration#YOUR_ACCOUNT_DISABLED}, {@link UserAdministration#NO_PERSON},
+	 *         {@link UserAdministration#SYSTEM_ACCOUNT}, {@link #EVERYONE_STAYS}, {@link #GUEST_STAYS}, or the admin
+	 *         group's ({@link UserAdministration#ADMIN_STAYS}, {@link UserAdministration#LEAVE_ADMIN_YOURSELF},
 	 *         {@link UserAdministration#LAST_ADMIN}). Or an error at data layer
 	 */
 	public boolean removeMember(long groupId, long userId, User actor) throws PersistenceException {

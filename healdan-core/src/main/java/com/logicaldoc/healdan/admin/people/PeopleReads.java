@@ -413,7 +413,7 @@ final class PeopleReads {
 	/**
 	 * @param groupId a group
 	 * @return every account in it that isn't a person of the tenant, such as a system account: their memberships
-	 *         go without storing them, as LogicalDOC's store would make a system account an ordinary one
+	 *         go without storing them, so the accounts themselves stay as they are
 	 */
 	List<Long> otherMembers(long tenantId, long groupId) {
 		return jdbc.queryForList("select ug.ld_userid from ld_usergroup ug where ug.ld_groupid = :group and "
@@ -446,6 +446,17 @@ final class PeopleReads {
 				 where g.ld_name = 'admin' and g.ld_deleted = 0 and g.ld_tenantid = :tenant and g.ld_type = 0
 				   and u.ld_enabled = 1 and not u.ld_id = :except and""" + " " + PERSON, params, Integer.class);
 		return count != null ? count : 0;
+	}
+
+	/**
+	 * @param userId an account
+	 * @return whether its stored account is enabled and not deleted, as committed now
+	 */
+	boolean enabled(long userId) {
+		Integer count = jdbc.queryForObject(
+				"select count(*) from ld_user where ld_id = :id and ld_enabled = 1 and ld_deleted = 0",
+				new MapSqlParameterSource("id", userId), Integer.class);
+		return count != null && count > 0;
 	}
 
 	/**

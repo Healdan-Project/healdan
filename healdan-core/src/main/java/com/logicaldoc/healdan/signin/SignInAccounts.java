@@ -427,14 +427,14 @@ public class SignInAccounts {
 	 * What making an account a provider account ends besides its password and
 	 * impersonators: its LogicalDOC API keys, as {@link #deleteApiKeys} deletes
 	 * them, and, once the transaction commits, every open CE session of the
-	 * account on this node as well as the sessions its keys opened (ruling
-	 * R31).
+	 * account on this node, every one it opened as another account, and the
+	 * sessions its keys opened (rulings R31, P4-R35).
 	 */
 	private static void becomesProviderAccount(User user, SignInProvider p, Journal journal)
 			throws PersistenceException {
 		Set<String> deleted = deleteKeys(user, signsInThrough(p), journal);
 		long userId = user.getId();
-		String username = printable(user.getUsername());
+		String username = user.getUsername();
 		journal.afterCommit(() -> closeSessions(deleted, userId, username));
 	}
 
@@ -461,7 +461,7 @@ public class SignInAccounts {
 		Set<String> deleted = deleteKeys(user, why, journal);
 		if (deleted.isEmpty())
 			return;
-		String username = printable(user.getUsername());
+		String username = user.getUsername();
 		journal.afterCommit(() -> closeSessions(deleted, null, username));
 	}
 
@@ -488,17 +488,18 @@ public class SignInAccounts {
 
 	/**
 	 * Closes this node's open CE sessions that one of the keys opened, and,
-	 * given an account, every one of its own ({@link PersonSessions#close}).
-	 * It never throws: a failure here is logged, and the decision, already
-	 * committed, stands.
+	 * given an account, every one of its own and every one it opened as
+	 * another account ({@link PersonSessions#close}). It never throws: a
+	 * failure here is logged, and the decision, already committed, stands.
 	 *
 	 * @param hashes the SHA-256 of the keys deleted, possibly none
 	 * @param userId the account whose sessions all close, or null for only the
 	 *        keys' sessions
-	 * @param username the account's username, printable, for the log
+	 * @param stored the account's username, as stored
 	 */
-	private static void closeSessions(Set<String> hashes, Long userId, String username) {
-		PersonSessions.Closed result = PersonSessions.close(userId, hashes);
+	private static void closeSessions(Set<String> hashes, Long userId, String stored) {
+		PersonSessions.Closed result = PersonSessions.close(userId, userId != null ? stored : null, hashes);
+		String username = printable(stored);
 		int closed = result.closed();
 		String sessions = closed == 1 ? "session" : "sessions";
 		if (closed > 0 && userId != null)

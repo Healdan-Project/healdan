@@ -25,11 +25,16 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
+import com.logicaldoc.core.PersistenceException;
+import com.logicaldoc.core.security.authentication.AccountDisabledException;
+import com.logicaldoc.core.security.authentication.PasswordExpiredException;
+
 /**
  * The appender that copies every error onto the writer's queue (Admin app spec
  * section 9.4), on a real Log4j context of its own: on the root and on every
  * logger whose additivity is false, again after a reload, never blocking the
- * thread that logs, and never taking what its own classes log.
+ * thread that logs, and never taking what its own classes log or a sign-in
+ * refused.
  */
 public class ErrorCaptureTest {
 
@@ -167,6 +172,25 @@ public class ErrorCaptureTest {
 		writer.join();
 
 		assertEquals(List.of(), capture.drain(10));
+		assertEquals(0, capture.dropped());
+	}
+
+	/**
+	 * Ruling P4-R40: a sign-in the sign-in chain refused, a password that has
+	 * to change or a disabled account, is no fault; anything else its logger
+	 * logs as an error is, and so is a refusal's exception logged elsewhere
+	 */
+	@Test
+	public void testASignInRefusedIsNoFault() {
+		Logger chain = context.getLogger("com.logicaldoc.core.security.authentication.AuthenticationChain");
+		chain.error(PasswordExpiredException.CODE, new PasswordExpiredException());
+		chain.error("accountdisabled", new AccountDisabledException());
+		chain.error("Can't read the account", new PersistenceException("down"));
+		chain.error("A sign-in note with no exception");
+		context.getLogger("test.additive").error("Refused elsewhere", new AccountDisabledException());
+
+		assertEquals(List.of("Can't read the account", "A sign-in note with no exception", "Refused elsewhere"),
+				capture.drain(10).stream().map(CapturedError::message).toList());
 		assertEquals(0, capture.dropped());
 	}
 
