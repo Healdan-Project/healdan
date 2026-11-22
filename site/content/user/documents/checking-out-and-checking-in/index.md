@@ -123,7 +123,7 @@ checked out to you, in [Checked Out to Me](#checked-out-to-me) say, to release t
 
 The details' **Check-Out Info** names who has the document and since when. The app never takes someone else's
 check-out over, and offers no **Check In** or **Release** for it. It's released by the person who made it, or by an
-administrator in the Classic Interface, with **Unlock**.
+administrator: with **Release** on that person's page in the Admin app, or with **Unlock** in the Classic Interface.
 
 A locked document's **Lock Info** says who locked it, and when. A lock is taken off in the Classic Interface (see
 [Locking a Document](../locking-a-document/)).

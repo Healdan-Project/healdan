@@ -24,9 +24,11 @@ first, then brings you to that page. This works with the password form and with 
 
 ## Your First Sign-In
 
-Your administrator sets your user name and a first password. Change the password once you're in, from your
-profile: see [Your Profile and Password](../your-profile-and-password/). If you sign in through a provider
-instead, there's no first password: your administrator tells you which button to choose.
+Your administrator sets your user name and a first password, and gives you the password or has Healdan email it to
+you. If it's a temporary password, as a new account's usually is, the sign-in page asks you for a new one when you
+sign in with it. Otherwise, change the password once you're in, from your profile: see
+[Your Profile and Password](../your-profile-and-password/). If you sign in through a provider instead, there's no
+first password: your administrator tells you which button to choose.
 
 - **Remember me** saves your user name and password in this browser, and fills them in next time. Leave it unticked
   on a computer others use.

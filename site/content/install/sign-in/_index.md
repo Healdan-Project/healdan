@@ -30,6 +30,12 @@ account has none.
 - **The groups decide who gets in.** Each provider has a map from its groups to Healdan's. Someone whose groups map
   to no Healdan group is refused, and nothing is made or linked, so the map is also the list of who may sign in. At
   each sign-in the person is put in the Healdan groups the map gives them, and taken out of those it doesn't.
+- **Nobody needs adding first.** A person's account appears in the Admin app's **Users** at their first sign-in
+  through the provider, with the groups the map gives them, and is adjusted on their page from then on, as anyone's
+  is: see [Users and Groups](../../admin/users-and-groups/). Groups the map doesn't name stay as you set them there. A
+  group the map names is the provider's to decide: a change you make to someone's membership of it is put back at
+  their next sign-in. To have an account ready before a first sign-in, see
+  [Adding Someone Before Their First Provider Sign-In](../../admin/users-and-groups/#adding-someone-before-their-first-provider-sign-in).
 - **The Healdan Helper signs in through the browser.** It opens the system browser at the provider, the person signs
   in there, and the helper gets its own device sign-in from Healdan. It uses the same redirect address as the web
   page, so there's nothing more to register.
@@ -49,6 +55,8 @@ account has none.
 - **A plan for the groups.** Decide which provider groups may sign in, and which Healdan group each maps to. Any
   Healdan group can be mapped, `admin` included, but an admin skips every permission check: see
   [Day-to-Day Accounts Shouldn't Be Admins](../../admin/users-and-groups/#day-to-day-accounts-shouldnt-be-admins).
+  Make any Healdan group you need first, with **New Group** under **Groups** in the Admin app (see
+  [New Group](../../admin/users-and-groups/#new-group)). A group a map names can't be deleted there while it does.
 - **Menus for the Classic Interface.** The User app, where a sign-in lands unless **Start In** in
   [Healdan Settings](../../admin/healdan-settings/) says otherwise, needs nothing more. The Classic Interface shows
   each person only the menus their groups have (an admin sees every menu), and a group you make has none, so
@@ -90,8 +98,9 @@ fills in the rest. **Save**, and then **Check**, which tests the saved settings,
 
 ### Try It Before You Tell Anyone
 
-In a private browser window, sign in with a test person who's in a mapped group. If it fails, `admin` signs in with
-its password and puts it right.
+In a private browser window, sign in with a test person who's in a mapped group. Then find them under **Users** in
+the Admin app: their page shows the provider they sign in with and the groups the map gave them. If the sign-in
+fails, `admin` signs in with its password and puts it right.
 
 {{% /steps %}}
 
