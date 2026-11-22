@@ -10,7 +10,7 @@ import { ErrorPanel } from '../frame/ErrorPanel'
 import { messageFor } from '../frame/errors'
 import { fileIcon } from '../kindIcons'
 import { keys, useFolder } from '../queries'
-import { useApi } from '../services'
+import { useApi, useReportSignedOut } from '../services'
 import { attachmentShownAs } from './drawn'
 import { EmailBodyFrame } from './EmailBodyFrame'
 import { NoPreview } from './NoPreview'
@@ -44,6 +44,7 @@ function Detail({ label, value }: { label: string; value: string | null }) {
  */
 function Chip({ attachment, docNumber, version, folderId, canOpen, noFiling, onPreview }: { attachment: Attachment; docNumber: number; version?: string; folderId: number; canOpen: boolean; noFiling?: string; onPreview: () => void }) {
   const api = useApi()
+  const signedOut = useReportSignedOut()
   const queryClient = useQueryClient()
   const [saving, setSaving] = useState(false)
   // The attachment's own control, which stays when Save to Matter gives way to the # it was filed as
@@ -105,7 +106,7 @@ function Chip({ attachment, docNumber, version, folderId, canOpen, noFiling, onP
           className={styles.chipMain}
           disabled={!canOpen}
           aria-label={t('email.downloadAttachment', { name: attachment.name })}
-          onClick={() => launchDownload(api.url(apiPath`/v1/documents/${docNumber}/message/parts/${attachment.index}`, versionQuery(version)))}
+          onClick={() => launchDownload(api.url(apiPath`/v1/documents/${docNumber}/message/parts/${attachment.index}`, versionQuery(version)), signedOut)}
         >
           {label}
         </button>
@@ -131,6 +132,7 @@ function Chip({ attachment, docNumber, version, folderId, canOpen, noFiling, onP
  */
 export function EmailView({ document, version, showActions }: PreviewProps) {
   const api = useApi()
+  const signedOut = useReportSignedOut()
   const message = useQuery({
     // Its own key, by file version, apart from the document's: the lists' refreshes (an upload's finish, a rename) never
     // read the whole email again on the server, and a new version is a new key. Save to Matter asks for it again.
@@ -195,7 +197,7 @@ export function EmailView({ document, version, showActions }: PreviewProps) {
               {t('email.backToMessage')}
             </Button>
             {/* The file itself, which the server records, whether or not its preview could be drawn; a button, as on the chips */}
-            <Button variant="quiet" isDisabled={!document.canOpen} aria-label={t('email.downloadAttachment', { name: viewing.name })} onPress={() => launchDownload(api.url(part, versionQuery(version)))}>
+            <Button variant="quiet" isDisabled={!document.canOpen} aria-label={t('email.downloadAttachment', { name: viewing.name })} onPress={() => launchDownload(api.url(part, versionQuery(version)), signedOut)}>
               <Icon name="download" size={18} />
               {t('details.download')}
             </Button>

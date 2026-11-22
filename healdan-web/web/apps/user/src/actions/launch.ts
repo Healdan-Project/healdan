@@ -7,8 +7,12 @@ import { messageFor } from '../frame/errors'
 
 // The two places the page goes to an address, a `healdan:` link and a download, so tests replace this module.
 
-/** How long a download's frame stays, in milliseconds: far longer than the server takes to start its answer, after which the download no longer needs it */
-export const FRAME_KEPT = 5 * 60 * 1000
+/**
+ * How long a download's frame stays, in milliseconds. Taking it away stops a download the server hasn't begun to answer,
+ * and says nothing, so it stays far longer than any answer takes to start: a file in cloud storage that isn't in the
+ * server's read cache is fetched whole before its first byte is sent. A download that has begun no longer needs it.
+ */
+export const FRAME_KEPT = 60 * 60 * 1000
 
 /** Follows a `healdan:` link the way a click on a link does: it goes to the helper without leaving the page. */
 export function launch(href: string): void {
@@ -31,9 +35,10 @@ export function launch(href: string): void {
  * the attribute, which would put a refusal's page in the app's place.
  *
  * When the server answers a page in place of a file (a problem, as while storage is unreachable), the frame shows it to
- * nobody, so the person is told here. Chromium and WebKit say when that page has loaded; Firefox says nothing.
+ * nobody, so the person is told here. Chromium and WebKit say when that page has loaded; Firefox says nothing. A `401`
+ * goes to `onSignedOut`, as every request's does, for the app to show its signed-out page, which says so itself.
  */
-export function launchDownload(href: string): void {
+export function launchDownload(href: string, onSignedOut?: () => void): void {
   const frame = window.document.createElement('iframe')
   frame.hidden = true
   frame.tabIndex = -1
@@ -51,7 +56,9 @@ export function launchDownload(href: string): void {
       text = undefined
     }
     frame.remove()
-    toast(messageFor(problem(text)))
+    const refusal = problem(text)
+    if (refusal?.status === 401 && onSignedOut) onSignedOut()
+    else toast(messageFor(refusal))
   })
   frame.src = href
   window.document.body.append(frame)

@@ -218,7 +218,8 @@ export async function expectListUnder(field: Locator) {
 /**
  * Starts a download with `start`, waits for it, and checks the server answered it with the file (`200`). The download
  * alone proves little: a browser can save a refusal's body as readily as a file's, and under the name the page gave it,
- * as WebKit did while the app's link had the `download` attribute.
+ * as WebKit did while the app's link had the `download` attribute. The page then says nothing went wrong: the app takes a
+ * frame that loads a page for a refusal, and each browser must tell it of none for a file.
  */
 export async function downloadBy(page: Page, start: () => Promise<unknown>): Promise<Download> {
   const answers = new Map<string, number>()
@@ -227,6 +228,7 @@ export async function downloadBy(page: Page, start: () => Promise<unknown>): Pro
   try {
     const [download] = await Promise.all([page.waitForEvent('download'), start()])
     await expect.poll(() => answers.get(download.url()), { message: `the server's answer to the download of ${download.url()}` }).toBe(200)
+    await expect(page.getByText('Something went wrong.')).toHaveCount(0)
     return download
   } finally {
     page.off('response', note)

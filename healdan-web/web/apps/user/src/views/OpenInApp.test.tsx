@@ -47,7 +47,7 @@ describe('opening a document from a list', () => {
     expect(launch).toHaveBeenLastCalledWith(link(10431))
 
     enter(await row(/Site Photo/))
-    expect(launchDownload).toHaveBeenLastCalledWith('/api/v1/documents/10500/content')
+    expect(launchDownload).toHaveBeenLastCalledWith('/api/v1/documents/10500/content', expect.any(Function))
   })
 
   it('opens in the app with a double-click on a folder\'s row', async () => {
@@ -111,7 +111,7 @@ describe("the toolbar's Open, Preview, Download and Check Out", () => {
     await userEvent.click(bar.getByRole('button', { name: 'Open' }))
     expect(launch).toHaveBeenLastCalledWith(link(10431))
     await userEvent.click(bar.getByRole('button', { name: 'Download' }))
-    expect(launchDownload).toHaveBeenLastCalledWith('/api/v1/documents/10431/content')
+    expect(launchDownload).toHaveBeenLastCalledWith('/api/v1/documents/10431/content', expect.any(Function))
   })
 
   it('checks the selected document out', async () => {

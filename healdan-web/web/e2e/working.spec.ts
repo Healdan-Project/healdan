@@ -253,6 +253,22 @@ test('A download the server refuses says why, and saves no file', async ({ page 
   await expect(details.getByRole('heading', { name: WORK_NAME })).toBeVisible()
 })
 
+test('A download after the session has ended saves no file, and shows the signed-out page', async ({ page }) => {
+  const details = await selectWorkingDocument(page)
+  // The session ends under the page, as a timeout would end it. The page asks the API nothing more, so only the download learns
+  await page.evaluate(() => fetch('/api/v1/session', { method: 'DELETE', headers: { 'X-Healdan-Client': 'web' } }))
+  let downloads = 0
+  page.on('download', () => downloads++)
+  // The refusal is the server's own this time: the 401 that WebKit once saved under the document's name
+  const [answer] = await Promise.all([
+    page.waitForResponse((response) => /\/api\/v1\/documents\/\d+\/content$/.test(response.url())),
+    details.getByRole('button', { name: 'Download', exact: true }).click(),
+  ])
+  expect(answer.status()).toBe(401)
+  await expect(page.getByRole('heading', { level: 1, name: "You've been signed out." })).toBeVisible()
+  expect(downloads).toBe(0)
+})
+
 test('Check Out holds the document for you, and Release lets it go', async ({ page }) => {
   const details = await selectWorkingDocument(page)
   await details.getByRole('button', { name: 'Check Out' }).click()

@@ -46,16 +46,28 @@ describe('Open and Download in the details', () => {
     await renderApp('/folders/7?sel=10500', routes(photo))
     await userEvent.click(await button('Open'))
 
-    expect(launchDownload).toHaveBeenCalledExactlyOnceWith('/api/v1/documents/10500/content')
+    expect(launchDownload).toHaveBeenCalledExactlyOnceWith('/api/v1/documents/10500/content', expect.any(Function))
     expect(screen.queryByText(/If nothing opened/)).toBeNull()
   })
 
-  it('downloads through a link to /content, which no script reads', async () => {
+  it("downloads through a hidden frame's navigation to /content, which no script reads", async () => {
     const { api } = await renderApp('/folders/7?sel=10388', routes())
     await userEvent.click(await button('Download'))
 
-    expect(launchDownload).toHaveBeenCalledExactlyOnceWith('/api/v1/documents/10388/content')
+    expect(launchDownload).toHaveBeenCalledExactlyOnceWith('/api/v1/documents/10388/content', expect.any(Function))
     expect(api.callsTo('GET /v1/documents/*/content')).toHaveLength(0)
+  })
+
+  it('shows the signed-out page when a download finds the session has ended', async () => {
+    await renderApp('/folders/7?sel=10388', routes())
+    await userEvent.click(await button('Download'))
+
+    // What launchDownload calls for a 401 in its frame, which no request of the API client's sees
+    const onSignedOut = vi.mocked(launchDownload).mock.lastCall?.[1]
+    act(() => onSignedOut?.())
+
+    expect(await screen.findByRole('heading', { level: 1, name: "You've been signed out." })).toBeTruthy()
+    expect(screen.queryByRole('region', { name: 'Details' })).toBeNull()
   })
 
   it('disables both for a document the person may not download', async () => {

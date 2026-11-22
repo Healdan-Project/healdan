@@ -524,10 +524,11 @@ view.
     Chromium and Firefox send the headers. Without the attribute a link's navigation carries them in every browser,
     but a refusal's page would then take the app's place, so the navigation is a hidden frame's
     (`Sec-Fetch-Dest: iframe`), which `AppServlet`'s policy allows (`frame-src 'self'`).
-  - **A frame is a download's own,** so two started together don't stop each other. It's removed after five
-    minutes (`FRAME_KEPT`): a download that has begun doesn't need it, in Chromium, WebKit or Firefox. It's
-    sandboxed (`allow-same-origin allow-downloads`), so a page that comes in a file's place runs no script, and
-    the app can still read it.
+  - **A frame is a download's own,** so two started together don't stop each other. It's removed after an hour
+    (`FRAME_KEPT`): a download that has begun doesn't need it, in Chromium, WebKit or Firefox, but taking it away
+    stops one the server hasn't begun to answer, and says nothing, and a cloud file that isn't in the read cache is
+    fetched whole before its first byte is sent. It's sandboxed (`allow-same-origin allow-downloads`), so a page
+    that comes in a file's place runs no script, and the app can still read it.
 - **Open** (`openInApp.ts`, ported from the old UI's `HealdanOpenInApp` with the same cases in its test) builds
   `healdan://open/<doc #>?server=<host>` for the kinds the helper opens, and downloads any other. `OpenInAppProvider`,
   in the frame, shows the notice ("If nothing opened, install the Healdan Helper") as a toast with a link, for 15
@@ -540,8 +541,10 @@ view.
   refusal the server makes after the click (a `503 storage-unreachable`, a `500`, a session that has ended) is a
   problem, which is a page and no download: Chromium and WebKit load it in the hidden frame, and `launchDownload`
   then shows the problem's message from the catalogue as a toast, or "Something went wrong." for a page that holds
-  no problem. Firefox neither saves a file nor tells the frame, so there the person sees nothing. `canOpen` disables
-  the button for the usual refusal, a missing permission or a password.
+  no problem. A `401` goes to the caller's `onSignedOut` instead, which is the signed-out state's `mark`
+  (`useReportSignedOut`), so the app shows its signed-out page as after any request's `401`. Firefox neither saves a
+  file nor tells the frame, so there the person sees nothing. `canOpen` disables the button for the usual refusal, a
+  missing permission or a password.
 - **Check Out, Check In and Release** (`checkout.ts`, `useCheckout.ts`, `CheckoutControls.tsx`) follow the document's
   `hold`. The web session is no device, so the app never takes over a check-out a device holds (`409 held-elsewhere`);
   it only releases the person's own, after a warning (below). `details/HoldInfo.tsx` is the hold's own section above the

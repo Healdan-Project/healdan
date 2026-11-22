@@ -155,7 +155,7 @@ describe('QuickLook', () => {
     await userEvent.click(within(dialog).getByRole('button', { name: 'Open' }))
     expect(launch).toHaveBeenLastCalledWith(`healdan://open/10391?server=${window.location.host}`)
     await userEvent.click(within(dialog).getByRole('button', { name: 'Download' }))
-    expect(launchDownload).toHaveBeenLastCalledWith('/api/v1/documents/10391/content')
+    expect(launchDownload).toHaveBeenLastCalledWith('/api/v1/documents/10391/content', expect.any(Function))
   })
 
   it('shows the helper notice above Quick Look, outside what the dialog hides, with its link and dismiss reachable', async () => {
@@ -188,7 +188,7 @@ describe('QuickLook', () => {
     await waitFor(() => expect(api.callsTo('GET /v1/documents/10391/preview').map((call) => call.query)).toContainEqual({ version: '2.0' }))
     expect((within(dialog).getByRole('button', { name: 'Open' }) as HTMLButtonElement).disabled).toBe(true)
     await userEvent.click(within(dialog).getByRole('button', { name: 'Download' }))
-    expect(launchDownload).toHaveBeenLastCalledWith('/api/v1/documents/10391/content?version=2.0')
+    expect(launchDownload).toHaveBeenLastCalledWith('/api/v1/documents/10391/content?version=2.0', expect.any(Function))
   })
 
   it('docks as the reading pane in the right region', async () => {

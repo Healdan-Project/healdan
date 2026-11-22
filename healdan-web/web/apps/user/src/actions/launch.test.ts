@@ -112,10 +112,29 @@ describe('launchDownload', () => {
     expect(frames()).toEqual([])
   })
 
-  it('says a sign-out as one', () => {
+  it('tells the app of a sign-out, whose own page says so, and takes the frame away', () => {
+    const onSignedOut = vi.fn()
+    launchDownload(CONTENT, onSignedOut)
+    answer(frames()[0]!, JSON.stringify({ status: 401, code: 'unauthenticated', detail: 'Sign in first.' }))
+
+    expect(onSignedOut).toHaveBeenCalledExactlyOnceWith()
+    expect(toast).not.toHaveBeenCalled()
+    expect(frames()).toEqual([])
+  })
+
+  it('says a sign-out as one when nothing listens for it', () => {
     launchDownload(CONTENT)
     answer(frames()[0]!, JSON.stringify({ status: 401, code: 'unauthenticated', detail: 'Sign in first.' }))
     expect(toast).toHaveBeenCalledExactlyOnceWith("You've been signed out.")
+  })
+
+  it('tells the app of no sign-out for any other problem', () => {
+    const onSignedOut = vi.fn()
+    launchDownload(CONTENT, onSignedOut)
+    answer(frames()[0]!, JSON.stringify({ status: 503, code: 'storage-unreachable', detail: "The server's own words" }))
+
+    expect(onSignedOut).not.toHaveBeenCalled()
+    expect(toast).toHaveBeenCalledExactlyOnceWith('Files are unavailable for now. Try again in a few minutes.')
   })
 
   it.each([

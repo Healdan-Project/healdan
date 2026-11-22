@@ -5,7 +5,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { createContext, useContext, useMemo, type ReactNode } from 'react'
 import type { components } from '@healdan/api'
 import { t, toastWithLink } from '@healdan/ui'
-import { useApi } from '../services'
+import { useApi, useReportSignedOut } from '../services'
 import { download } from './download'
 import { launch } from './launch'
 import { handlesInApp, healdanLink, HELPER_DOCS } from './openInApp'
@@ -31,6 +31,7 @@ const Context = createContext<OpenInApp | null>(null)
 export function OpenInAppProvider({ children }: { children: ReactNode }) {
   const api = useApi()
   const queryClient = useQueryClient()
+  const signedOut = useReportSignedOut()
   const value = useMemo<OpenInApp>(
     () => ({
       open: (document) => {
@@ -38,11 +39,11 @@ export function OpenInAppProvider({ children }: { children: ReactNode }) {
           launch(healdanLink(document.docNumber, window.location.host))
           toastWithLink(t('open.notice'), HELPER_DOCS)
           markDocumentListsStale(queryClient)
-        } else download(api, document)
+        } else download(api, document, undefined, signedOut)
       },
-      download: (document, version) => download(api, document, version),
+      download: (document, version) => download(api, document, version, signedOut),
     }),
-    [api, queryClient],
+    [api, queryClient, signedOut],
   )
   return <Context.Provider value={value}>{children}</Context.Provider>
 }

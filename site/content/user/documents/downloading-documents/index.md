@@ -13,14 +13,17 @@ You need the Download permission on a document to download it. Without it, **Dow
 ## One Document in the App
 
 Select the document and choose **Download**, in the toolbar above the list or in its details, or in Quick Look's bar.
-Your browser saves the file under the document's name, as it does for any link to a file. Healdan doesn't open the
+Your browser saves the file under the document's name, as it does any file it downloads. Healdan doesn't open the
 file in the page or keep a copy of it there.
 
 ![The web page in the Due Diligence folder of matter 1002.1 – Commercial Lease, with Site Plan – Unit 4 Weir Lane.odg selected: the toolbar above the list, with Upload, New Folder, Open, Preview, Download, Check Out and the ⋯ (More) button, the document count and Filters below it, and the document's details at the right, with its name and Favorites star above Open, Download and Copy Link, then Check Out and the Properties and Versions (1) tabs](download-toolbar.png)
 
-If the file can't be reached right now, because it's in cloud storage or on a share that's down, the download fails.
-Your browser shows that in its list of downloads, and some browsers save a small file saying why instead. The app
-itself says nothing, as it doesn't see the answer. Try again in a few minutes.
+If the file can't be reached right now, because it's in cloud storage or on a share that's down, nothing is saved and
+the app says "Files are unavailable for now. Try again in a few minutes." If you've been signed out since you opened
+the page, nothing is saved either, and the app shows its signed-out page, where you sign in again.
+
+Firefox doesn't tell the app that a download was refused, so there nothing is saved and the app says nothing. Reload
+the page, which asks you to sign in if you've been signed out, and try again in a few minutes.
 
 **Open** downloads too, for a kind of file the helper doesn't open, such as a picture or a zip file. Double-clicking a
 document, or pressing **Enter** on it, does what **Open** does. See [Opening Documents](../../office/opening-documents/).
