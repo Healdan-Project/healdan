@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { useQuery, type QueryClient } from '@tanstack/react-query'
+import { useRef } from 'react'
 import { apiPath, type Api, type adminComponents } from '@healdan/api'
 import { ASK_ON_RETURN, useApi } from '@healdan/shell'
 import { adminKey, adminKeys, POLL_MS } from '../queries'
@@ -24,21 +25,34 @@ export const jobKeys = {
 /**
  * Every background job (spec 8.8, 9.5): a short list, so not a page. While any job is running it asks again every 30
  * seconds while the page is visible (spec 7.2; P5-R21), and nothing on a timer otherwise. `askedAt`, when a Run Now or a
- * Stop was answered, has it ask again SOON_MS later, once, as their answers may not show what they started yet: an answer,
- * or a failure, newer than it ends that. Each return to the window asks again however fresh it is, as jobs start and end
- * on their own. A failed re-read keeps the last answer, and the poll goes on.
+ * Stop was last answered, has it ask again SOON_MS later, whatever else runs, as a Run Now's answer may not show the run
+ * yet, and a Stop's shows it going on until its next check. Only a read sent after that answer ends the wait, once it's
+ * answered or has failed: not another change's answer put in the list meanwhile, nor a read cancelled on its way, so the
+ * wait goes on through both. Each return to the window asks again however fresh it is, as jobs start and end on their
+ * own. A failed re-read keeps the last answer, and the poll goes on.
  */
 export function useJobs(askedAt?: number) {
   const api = useApi()
+  // The `askedAt` the last read that ended was sent under
+  const answeredFor = useRef<number | undefined>(undefined)
   return useQuery({
     queryKey: jobKeys.jobs,
-    queryFn: ({ signal }) => api.get<A['Job'][]>('/v1/admin/jobs', undefined, { signal }),
+    queryFn: async ({ signal }) => {
+      const sentFor = askedAt
+      try {
+        const jobs = await api.get<A['Job'][]>('/v1/admin/jobs', undefined, { signal })
+        if (!signal.aborted) answeredFor.current = sentFor
+        return jobs
+      } catch (error) {
+        if (!signal.aborted) answeredFor.current = sentFor
+        throw error
+      }
+    },
     // TanStack Query asks on its interval only while its focusManager says the page is visible, which the shell's query
     // client tells it, and works the interval out again after each answer and each change of `askedAt`
     refetchInterval: (query) => {
-      if (query.state.data?.some((job) => job.running)) return POLL_MS
-      const soon = askedAt !== undefined && Math.max(query.state.dataUpdatedAt, query.state.errorUpdatedAt) <= askedAt
-      return soon ? SOON_MS : false
+      if (askedAt !== undefined && answeredFor.current !== askedAt) return SOON_MS
+      return query.state.data?.some((job) => job.running) ? POLL_MS : false
     },
     refetchIntervalInBackground: false,
     meta: ASK_ON_RETURN,

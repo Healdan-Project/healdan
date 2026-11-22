@@ -70,8 +70,12 @@ export function ScheduleDialog({ job, onClose }: ScheduleDialogProps) {
   const [every, setEvery] = useState(start.every)
   const [unit, setUnit] = useState<Unit>(start.unit)
   const [cron, setCron] = useState(start.cron)
-  // A field shows what's wrong with it once the person has typed in it
-  const [typed, setTyped] = useState({ every: false, cron: false })
+  // A field shows what's wrong with it once the person has typed in it, or at once when it opens on what the server
+  // wouldn't take now, so Save isn't greyed out with no reason given
+  const [typed, setTyped] = useState(() => ({
+    every: start.mode === 'simple' && secondsOf(start.every, start.unit) === undefined,
+    cron: start.mode === 'cron' && start.cron.trim() === '',
+  }))
   const [failure, setFailure] = useState<unknown>()
   const [busy, setBusy] = useState(false)
 

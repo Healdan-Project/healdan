@@ -22,8 +22,8 @@ function rowOf(list: HTMLElement | null, job: string): HTMLElement | undefined {
  * says it follows the one that went (`data-follows`, naming the other's `data-action`: Stop, in Run Now's place), else to
  * the job's name (its row's `th`, with `tabIndex={-1}`), or to `fallback` when the row went too. A button kept as its
  * words change (Enable becoming Disable) keeps the focus as it is. A dialog opened from a row gives the focus back to its
- * button once it closes, or to where the button's would go once the button has gone. Focus the person moved elsewhere,
- * or off the page's controls, is left where it is.
+ * button once it closes, as React Aria's own restore does where it runs, or to where the button's would go once the
+ * button has gone. Focus the person moved elsewhere, or off the page's controls, is left where it is.
  *
  * Call it in the component that draws the list, so it looks again after each of its renders.
  */
@@ -65,7 +65,9 @@ export function useKeptFocus(list: RefObject<HTMLElement | null>, fallback: RefO
     const was = held.current
     if (was === undefined || !focusLost()) return
     if (was.element.isConnected) {
-      // A dialog opened from it has closed
+      // A dialog opened from it has closed. React Aria's dialog gives the focus back to its trigger itself, in an animation
+      // frame, and this only covers where that restore doesn't run, as in jsdom; the browser specs check the focus there
+      // after Stop, Disable and Cancel
       if (was.dialog) was.element.focus()
       return
     }

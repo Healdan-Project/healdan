@@ -11,6 +11,7 @@ import { expectNoAxeViolations } from '../test/axe'
 import { jobFieldProblem, jobOf, jobOfHealdan, jobRoutes, jobRows, problem, type JobRoutesOptions, type Routes } from '../test/fakeApi'
 import { hidePage, returnToPage } from '../test/visibility'
 import { renderApp } from '../test/renderApp'
+import { slowAnswer } from '../test/slowAnswer'
 
 type A = adminComponents['schemas']
 
@@ -51,15 +52,6 @@ async function openJobs(rows: A['Job'][] = jobRows, over: Routes = {}, options: 
   const rendered = await renderApp('/jobs', { ...jobRoutes(rows, options), ...over })
   await within(await screen.findByRole('table', { name: 'Background Jobs' })).findAllByRole('rowheader')
   return rendered
-}
-
-/** A change the server answers only when the test says, as a slow one would be */
-function slowAnswer<T>() {
-  let answer!: (value: T) => void
-  const answered = new Promise<T>((resolve) => {
-    answer = resolve
-  })
-  return { answered, answer }
 }
 
 describe('Background Jobs', () => {
@@ -134,7 +126,7 @@ describe('Background Jobs', () => {
     expect(actions('Storage Retests')).toEqual([])
   })
 
-  it('says when there are no jobs, and why a first read failed, with Try Again', async () => {
+  it('says why a first read failed, with Try Again', async () => {
     let failing = true
     await renderApp('/jobs', { ...jobRoutes(), 'GET /v1/admin/jobs': () => (failing ? problem(500, 'server-error') : jobRows) })
     expect(await screen.findByText('Something went wrong.')).toBeTruthy()
@@ -233,6 +225,28 @@ describe('Run Now', () => {
     expect(actions('Trash Destroyer')).toEqual(['Run Now'])
   })
 
+  it('takes the refusal away once a new read shows the job changed since, and keeps it while it hasn\'t', async () => {
+    let ran = false
+    const routes = jobRoutes()
+    const list = routes['GET /v1/admin/jobs'] as () => A['Job'][]
+    await openJobs(jobRows, {
+      'POST /v1/admin/jobs/*/run': problem(409, 'refused', 'Trash Destroyer is already running.'),
+      'GET /v1/admin/jobs': () => list().map((job) => (ran && job.name === 'trash-destroyer' ? { ...job, lastStart: '2026-11-19T10:42:00Z', lastEnd: '2026-11-19T10:42:04Z' } : job)),
+    })
+    await userEvent.click(within(row('Trash Destroyer')).getByRole('button', { name: 'Run Now: Trash Destroyer' }))
+    expect((await screen.findByRole('alert')).textContent).toBe('Trash Destroyer is already running.')
+    // A read that finds the job as it was keeps the refusal
+    await act(async () => void window.dispatchEvent(new Event('focus')))
+    await settle()
+    expect(screen.getByRole('alert').textContent).toBe('Trash Destroyer is already running.')
+    // The run it was refused against has ended since, and Run Now is offered again
+    ran = true
+    await act(async () => void window.dispatchEvent(new Event('focus')))
+    await waitFor(() => expect(cells('Trash Destroyer')[0]).toBe(formatDateTime('2026-11-19T10:42:00Z')))
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(row('Trash Destroyer').nextElementSibling?.hasAttribute('data-job') ?? true).toBe(true)
+  })
+
   it("asks again shortly after, as the answer may not show the run yet, then every 30 seconds while it runs, and stops once it's done", async () => {
     vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
     let ended = false
@@ -266,6 +280,65 @@ describe('Run Now', () => {
     await waitSeconds(120)
     expect(reads(api)).toBe(before + 3)
   })
+
+  it('asks again shortly after while another job runs, as the answer may not show the run yet', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+    const rows = [jobOfHealdan('storage-mover', 'Storage Mover', { running: true }), jobOfHealdan('trash-destroyer', 'Trash Destroyer', { canRun: true })]
+    const { api } = await openJobs(rows, {}, { runAnswersBefore: true })
+    await settle()
+    const before = reads(api)
+    await userEvent.click(within(row('Trash Destroyer')).getByRole('button', { name: 'Run Now: Trash Destroyer' }))
+    await settle()
+    expect(cells('Trash Destroyer')[1]).toBe('Succeeded')
+    await waitSeconds(SOON_MS / 1000)
+    expect(reads(api)).toBe(before + 1)
+    expect(cells('Trash Destroyer')[1]).toBe('Running')
+    // Then every 30 seconds, as jobs run
+    await waitSeconds(29)
+    expect(reads(api)).toBe(before + 1)
+    await waitSeconds(1)
+    expect(reads(api)).toBe(before + 2)
+  })
+
+  it('asks again shortly after even when another change comes within the wait, or takes the place of a read on its way', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+    const slowRead = slowAnswer<A['Job'][]>()
+    let slow = false
+    const routes = jobRoutes(jobRows, { runAnswersBefore: true })
+    const list = routes['GET /v1/admin/jobs'] as () => A['Job'][]
+    const { api } = await openJobs(jobRows, { ...routes, 'GET /v1/admin/jobs': () => (slow ? slowRead.answered : list()) })
+    await settle()
+    const before = reads(api)
+    await userEvent.click(within(row('Trash Destroyer')).getByRole('button', { name: 'Run Now: Trash Destroyer' }))
+    await settle()
+    // Another change within the two seconds, whose answer is newer than the Run Now's
+    await userEvent.click(within(row('Tags Processor')).getByRole('button', { name: 'Enable Tags Processor' }))
+    await waitFor(() => expect(cells('Tags Processor')[3]).toBe('Yes'))
+    await waitSeconds(SOON_MS / 1000)
+    expect(reads(api)).toBe(before + 1)
+    expect(cells('Trash Destroyer')[1]).toBe('Running')
+
+    // A Run Now whose re-read is on its way when another change comes: that change cancels the read, and it's asked again
+    await userEvent.click(within(row('Storage Purge')).getByRole('button', { name: 'Run Now: Storage Purge' }))
+    await settle()
+    slow = true
+    await waitSeconds(SOON_MS / 1000)
+    expect(reads(api)).toBe(before + 2)
+    slow = false
+    await userEvent.click(within(row('Tags Processor')).getByRole('button', { name: 'Disable Tags Processor' }))
+    await userEvent.click(within(await screen.findByRole('alertdialog', { name: 'Disable Tags Processor?' })).getByRole('button', { name: 'Disable' }))
+    await waitFor(() => expect(screen.queryByRole('alertdialog', { name: 'Disable Tags Processor?' })).toBeNull())
+    await waitFor(() => expect(cells('Tags Processor')[3]).toBe('No'))
+    // The cancelled read's answer comes after all, and counts for nothing, even once a further change is put in the list
+    await act(async () => slowRead.answer(list().map((job) => (job.name === 'storage-purge' ? { ...job, running: false } : job))))
+    await settle()
+    await userEvent.click(within(row('Tags Processor')).getByRole('button', { name: 'Enable Tags Processor' }))
+    await waitFor(() => expect(cells('Tags Processor')[3]).toBe('Yes'))
+    expect(reads(api)).toBe(before + 2)
+    await waitSeconds(SOON_MS / 1000)
+    expect(reads(api)).toBe(before + 3)
+    expect(cells('Storage Purge')[1]).toBe('Running')
+  })
 })
 
 describe('Stop and Disable', () => {
@@ -296,6 +369,50 @@ describe('Stop and Disable', () => {
     await waitFor(() => expect(document.activeElement).toBe(nameCell('Indexer')))
     expect(await screen.findByText('Asked Indexer to stop')).toBeTruthy()
     await waitFor(() => expect(api.callsTo('GET /v1/admin/dashboard').length).toBeGreaterThan(dashboardReads))
+  })
+
+  it("asks again shortly after a Stop, though its answer shows the run going on, and nothing more once it has stopped", async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+    let stopped = false
+    const routes = jobRoutes(running())
+    const list = routes['GET /v1/admin/jobs'] as () => A['Job'][]
+    const { api } = await openJobs([], {
+      ...routes,
+      'GET /v1/admin/jobs': () => list().map((job) => (stopped && job.name === 'IndexerTask' ? { ...job, running: false, canRun: true, result: 'succeeded' as const, lastEnd: '2026-11-19T10:42:05Z' } : job)),
+    })
+    await settle()
+    const before = reads(api)
+    await userEvent.click(within(row('Indexer')).getByRole('button', { name: 'Stop Indexer' }))
+    await userEvent.click(within(await screen.findByRole('alertdialog', { name: 'Stop Indexer?' })).getByRole('button', { name: 'Stop' }))
+    await waitFor(() => expect(screen.queryByRole('alertdialog', { name: 'Stop Indexer?' })).toBeNull())
+    await settle()
+    expect(cells('Indexer')[1]).toBe('Running')
+    // The run stopped at its next check, a moment after
+    stopped = true
+    await waitSeconds(SOON_MS / 1000)
+    expect(reads(api)).toBe(before + 1)
+    expect(cells('Indexer')[1]).toBe('Succeeded')
+    expect(actions('Indexer')).toEqual(['Run Now', 'Disable', 'Schedule…'])
+    // Nothing runs now, so nothing more is asked on a timer
+    await waitSeconds(120)
+    expect(reads(api)).toBe(before + 1)
+  })
+
+  it('asks again shortly after a Stop, then every 30 seconds while the run goes on', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+    const { api } = await openJobs(running())
+    await settle()
+    const before = reads(api)
+    await userEvent.click(within(row('Indexer')).getByRole('button', { name: 'Stop Indexer' }))
+    await userEvent.click(within(await screen.findByRole('alertdialog', { name: 'Stop Indexer?' })).getByRole('button', { name: 'Stop' }))
+    await waitFor(() => expect(screen.queryByRole('alertdialog', { name: 'Stop Indexer?' })).toBeNull())
+    await settle()
+    await waitSeconds(SOON_MS / 1000)
+    expect(reads(api)).toBe(before + 1)
+    await waitSeconds(29)
+    expect(reads(api)).toBe(before + 1)
+    await waitSeconds(1)
+    expect(reads(api)).toBe(before + 2)
   })
 
   it('Disable asks first, naming the job, then disables it; the focus is on Enable, which takes its place', async () => {
@@ -402,6 +519,16 @@ describe('Schedule…', () => {
     expect((save() as HTMLButtonElement).disabled).toBe(true)
     expect(document.activeElement).toBe(every())
     await expectNoAxeViolationsInBothThemes(view.container.ownerDocument.body)
+  })
+
+  it('says at once why Save waits when the schedule it opens on is one the server would refuse now', async () => {
+    await openJobs([jobOf({ schedule: { mode: 'simple', intervalSeconds: 40_000_000, cron: null } })])
+    await openSchedule()
+    expect(every().value).toBe('40000000')
+    expect(unit().value).toBe('seconds')
+    expect(within(dialog()).getByText('Type a whole number from 1 to 31,536,000.')).toBeTruthy()
+    expect(every().getAttribute('aria-invalid')).toBe('true')
+    expect((save() as HTMLButtonElement).disabled).toBe(true)
   })
 
   it('opens on a cron expression, as it is', async () => {

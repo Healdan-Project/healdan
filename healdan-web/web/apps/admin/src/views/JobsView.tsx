@@ -49,6 +49,11 @@ function Schedule({ schedule }: { schedule: A['JobSchedule'] | null }) {
   return schedule.intervalSeconds === null ? null : intervalWords(schedule.intervalSeconds)
 }
 
+/** What a refusal is said against: the job's state when its button was pressed, which a new read showing changed ends */
+function stateOf(job: A['Job']): string {
+  return JSON.stringify([job.running, job.lastStart, job.canRun, job.canStop, job.enabled])
+}
+
 interface JobRowProps {
   job: A['Job']
   /** Runs an action and says it's done; throws its refusal */
@@ -60,7 +65,7 @@ interface JobRowProps {
 
 /**
  * A job's row, and under it, when there's anything to say, its last error and what the server refused of a button
- * pressed in it. Each button is offered only while the job allows it (the contract's flags): Run Now while it can run, in
+ * pressed in it, until a new read shows the job's run or what it allows changed since. Each button is offered only while the job allows it (the contract's flags): Run Now while it can run, in
  * whose place Stop comes while it can be stopped; Enable or Disable for a task that can be switched, whichever applies;
  * Schedule… for a task with a schedule. Run Now and Enable go at once, holding their button while on their way; Stop and
  * Disable ask first. Enable and Disable are one button whose words follow the task, so the focus stays on it.
@@ -68,16 +73,17 @@ interface JobRowProps {
 function JobRow({ job, act, ask, schedule }: JobRowProps) {
   const nameId = useId()
   const [busy, setBusy] = useState<JobAction>()
-  const [failure, setFailure] = useState<unknown>()
+  const [refused, setRefused] = useState<{ failure: unknown; against: string }>()
+  const failure = refused !== undefined && refused.against === stateOf(job) ? refused.failure : undefined
   const result = resultOf(job)
 
   async function press(action: JobAction) {
     setBusy(action)
-    setFailure(undefined)
+    setRefused(undefined)
     try {
       await act(job, action)
     } catch (error) {
-      setFailure(error)
+      setRefused({ failure: error, against: stateOf(job) })
     } finally {
       setBusy(undefined)
     }
@@ -181,8 +187,8 @@ function Group({ title, jobs, ...row }: { title: string; jobs: A['Job'][] } & Om
  * a dozen or so jobs need no paging. A failed run's error is under its row, as text. Stop and Disable ask first, naming
  * the job (spec 7.2); each action's answer is the job, which the list then shows, and the Dashboard's answer, whose Needs
  * Attention and the left pane's count count failed and overdue jobs, is asked again (P5-R20). While a job runs the list
- * asks again every 30 seconds while the page is visible, and shortly after a Run Now or a Stop (P5-R21); a return to the
- * window asks again too. While a new read fails, the list it had stays, with a note (P4-R15).
+ * asks again every 30 seconds while the page is visible, and shortly after a Run Now or a Stop, whatever else runs
+ * (P5-R21); a return to the window asks again too. While a new read fails, the list it had stays, with a note (P4-R15).
  */
 export function JobsView() {
   const api = useApi()
@@ -190,7 +196,8 @@ export function JobsView() {
   const headingId = useId()
   const heading = useRef<HTMLHeadingElement>(null)
   const list = useRef<HTMLTableElement>(null)
-  // When a Run Now or a Stop was answered: the list asks again soon after, until an answer comes that's newer
+  // When a Run Now or a Stop was last answered: the list asks again soon after, whatever else runs, until a read sent
+  // after it has been answered
   const [askedAt, setAskedAt] = useState<number>()
   const [asking, setAsking] = useState<{ job: A['Job']; action: 'stop' | 'disable' }>()
   const [scheduling, setScheduling] = useState<A['Job']>()
