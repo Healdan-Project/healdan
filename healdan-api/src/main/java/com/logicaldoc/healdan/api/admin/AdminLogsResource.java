@@ -20,12 +20,15 @@ import com.logicaldoc.healdan.api.admin.MonitoringView.LogInfoView;
 import com.logicaldoc.healdan.api.admin.MonitoringView.LogLinesView;
 
 import jakarta.ws.rs.GET;
+import jakarta.ws.rs.HttpMethod;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.QueryParam;
+import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.Request;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.StreamingOutput;
 
@@ -78,16 +81,18 @@ public class AdminLogsResource {
 	}
 
 	/**
-	 * Download: the log's files, as they are, zipped. They're opened before the answer starts, so a file that can't
-	 * be read fails the request rather than the download.
+	 * Download: the log's files, as they are, zipped. They're opened and closed again before the answer starts, so a
+	 * file that can't be read fails the request rather than the download, and opened again only while the body is
+	 * written, which a {@code HEAD}'s answer leaves out.
 	 *
 	 * @param name the log's name
+	 * @param request the request, which JAX-RS answers with this method for a {@code HEAD} too
 	 * @return the zip, as an attachment
 	 */
 	@GET
 	@Path("{name}/file")
 	@Produces(ZIP)
-	public Response file(@PathParam("name") String name) {
+	public Response file(@PathParam("name") String name, @Context Request request) {
 		LogZip zip;
 		try {
 			zip = LogFiles.get().zip(name, Caller.current().user())
@@ -95,11 +100,9 @@ public class AdminLogsResource {
 		} catch (PersistenceException e) {
 			throw new IllegalStateException("Can't read a log", e);
 		}
-		StreamingOutput body = out -> {
-			try (zip) {
-				zip.writeTo(out);
-			}
-		};
+		// A HEAD's headers alone: CXF would write the body for it too
+		StreamingOutput body = HttpMethod.HEAD.equals(request.getMethod()) ? out -> {
+		} : zip::writeTo;
 		return Response.ok(body, ZIP)
 				.header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"%s\"".formatted(zip.fileName()))
 				.build();

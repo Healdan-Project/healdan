@@ -14,6 +14,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.junit.Test;
@@ -55,6 +56,20 @@ public class CachedTest {
 		assertTrue(kept.isDone());
 		assertSame(first, kept.get());
 		assertEquals(1, asked.get());
+	}
+
+	@Test
+	public void testAChangeItsToldOfIsReadAtTheNextAsk() throws Exception {
+		AtomicLong changes = new AtomicLong(5);
+		Cached<Integer> cached = new Cached<>("a count", MAX_AGE, asked::incrementAndGet, now::get, changes::get);
+		assertEquals(Integer.valueOf(1), get(cached.outcome()).value());
+		assertEquals(Integer.valueOf(1), get(cached.outcome()).value());
+
+		// Within the period, but the count moved on: worked out afresh, not what's kept
+		changes.incrementAndGet();
+		assertEquals(Integer.valueOf(2), get(cached.outcome()).value());
+		assertEquals(Integer.valueOf(2), get(cached.outcome()).value());
+		assertEquals(2, asked.get());
 	}
 
 	@Test

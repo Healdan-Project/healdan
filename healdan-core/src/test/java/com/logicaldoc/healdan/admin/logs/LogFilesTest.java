@@ -18,6 +18,7 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.AccessDeniedException;
 import java.nio.file.Files;
@@ -29,6 +30,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
@@ -39,6 +43,7 @@ import org.junit.Test;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.healdan.AbstractHealdanTestCase;
 import com.logicaldoc.healdan.HealdanRuleException;
+import com.logicaldoc.healdan.admin.jobs.Jobs;
 import com.logicaldoc.healdan.admin.logs.LogQuery.Level;
 import com.logicaldoc.healdan.support.HealdanFixtures;
 import com.logicaldoc.healdan.support.LogCapture;
@@ -110,6 +115,7 @@ public class LogFilesTest extends AbstractHealdanTestCase {
 		assertEquals(List.of("DMS", "CMIS", "IndexerTask", "SPRING"), logs.stream().map(LogInfo::name).toList());
 		// The main log's label, a task's log by its job's label, and any other by its name
 		assertEquals(List.of("Main Log", "CMIS", "Indexer", "SPRING"), logs.stream().map(LogInfo::label).toList());
+		assertEquals(Jobs.label("IndexerTask"), logs.get(2).label());
 		// The size of all its files together, and when the current one changed
 		assertEquals(Files.size(dms) + Files.size(folder.resolve("dms.log.1")), logs.get(0).size());
 		assertEquals(changed, logs.get(0).modified());
@@ -375,18 +381,25 @@ public class LogFilesTest extends AbstractHealdanTestCase {
 
 	@Test
 	public void testAReadLooksAtABoundedNumberOfLines() throws Exception {
-		// An entry with a stack of more short lines than a read looks at, and an entry after it
+		// An entry, then one with a stack of more short lines than a read looks at, and an entry after it
+		append(dms, line("INFO", "The zero"));
 		append(dms, line("ERROR", "The first"));
 		append(dms, "x\n".repeat(LogReader.MAX_LINES_LOOKED + 10_000));
 		append(dms, line("INFO", "The second"));
 
+		// The entry it was reading when it stopped isn't given in part: the next read starts with it
 		LogLines forward = read(query(null, LogPosition.currentStart()));
-		assertEquals(List.of("The first"), messages(forward));
-		assertEquals(LogReader.MAX_LINES_LOOKED - 1, forward.lines().get(0).continuation().size());
+		assertEquals(List.of("The zero"), messages(forward));
 		assertFalse(forward.atEnd());
-		LogLines more = read(query(null, forward.after()));
+		LogLines first = read(query(null, forward.after()));
+		assertEquals(forward.after(), first.lines().get(0).position());
+		// But for the read's first entry, so that a read always moves on
+		assertEquals(List.of("The first"), messages(first));
+		assertEquals(LogReader.MAX_LINES_LOOKED - 1, first.lines().get(0).continuation().size());
+		assertFalse(first.atEnd());
+		LogLines more = read(query(null, first.after()));
 		assertEquals(LogFiles.MAX_LINES, more.lines().size());
-		assertEquals(forward.after(), more.lines().get(0).position());
+		assertEquals(first.after(), more.lines().get(0).position());
 
 		LogLines newest = read(query(null, null));
 		assertEquals(List.of("The second"), messages(newest));
@@ -398,10 +411,94 @@ public class LogFilesTest extends AbstractHealdanTestCase {
 	}
 
 	@Test
+	public void testAForwardReadStoppedByWhatItLooksThroughLeavesTheEntryItWasReadingWhole() throws Exception {
+		// Entries up to just short of what a read looks through, then an error whose stack the read stops in
+		StringBuilder text = new StringBuilder();
+		while (text.length() < LogFiles.MAX_SCAN_BYTES - 2_000)
+			text.append(line("INFO", "f".repeat(1_000)));
+		text.append(line("ERROR", "The preview failed"));
+		List<String> stack = new ArrayList<>();
+		for (int i = 0; i < 100; i++)
+			stack.add("\tat a.B.c(B.java:%d) %s".formatted(i, i == 50 ? "IllegalStateException" : "x".repeat(80)));
+		stack.forEach(l -> text.append(l).append('\n'));
+		text.append(line("INFO", "After"));
+		append(dms, text.toString());
+
+		for (LogQuery from : List.of(new LogQuery(null, LogPosition.currentStart(), Level.ERROR, null),
+				new LogQuery(null, LogPosition.currentStart(), Level.ALL, "illegalstate"))) {
+			LogLines first = read(from);
+			assertEquals(List.of(), first.lines());
+			assertFalse(first.atEnd());
+			// The next read starts at the error, and gives its whole stack
+			LogLines next = read(new LogQuery(null, first.after(), from.level(), from.text()));
+			assertEquals(List.of("The preview failed"), messages(next));
+			assertEquals(first.after(), next.lines().get(0).position());
+			assertEquals(stack, next.lines().get(0).continuation());
+			assertTrue(next.atEnd());
+		}
+	}
+
+	@Test
+	public void testAFileThatShrinksWhileItsReadEndsTheRead() throws Exception {
+		for (LogQuery query : List.of(query(null, LogPosition.currentStart()), query(null, null))) {
+			Files.deleteIfExists(dms);
+			List<String> messages = writeEntries(dms, 100, "INFO");
+			assertTrue(Files.size(dms) > 4_000);
+			LogTestHooks.shrinkAfterOpening(dms, 1_000);
+
+			LogLines lines = within(query);
+
+			assertTrue(lines.lines().size() < 100);
+			assertEquals(messages.subList(0, lines.lines().size()), messages(lines));
+			assertFalse(lines.rolled());
+			// Read again as it is now
+			LogTestHooks.openAsUsual();
+			assertFalse(read(query(null, null)).lines().isEmpty());
+		}
+
+		// A download whose file is cut while it's written: the zip holds what was there
+		Files.delete(dms);
+		writeEntries(dms, 100, "INFO");
+		LogFiles.LogZip zip = files.zip("DMS", admin).orElseThrow();
+		LogTestHooks.shrinkAfterOpening(dms, 1_000);
+		ByteArrayOutputStream out = new ByteArrayOutputStream();
+		ExecutorService executor = Executors.newSingleThreadExecutor(task -> {
+			Thread thread = new Thread(task, "log-zip");
+			thread.setDaemon(true);
+			return thread;
+		});
+		try {
+			executor.submit(() -> {
+				zip.writeTo(out);
+				return null;
+			}).get(1, TimeUnit.MINUTES);
+		} finally {
+			executor.shutdownNow();
+		}
+		try (ZipInputStream in = new ZipInputStream(new ByteArrayInputStream(out.toByteArray()))) {
+			assertEquals("dms.log", in.getNextEntry().getName());
+			assertEquals(1_000, in.readAllBytes().length);
+		}
+	}
+
+	/** @return what the read gives, which mustn't take more than a minute */
+	private LogLines within(LogQuery query) throws Exception {
+		ExecutorService executor = Executors.newSingleThreadExecutor(task -> {
+			Thread thread = new Thread(task, "log-read");
+			thread.setDaemon(true);
+			return thread;
+		});
+		try {
+			return executor.submit(() -> read(query)).get(1, TimeUnit.MINUTES);
+		} finally {
+			executor.shutdownNow();
+		}
+	}
+
+	@Test
 	public void testBackAcrossTheFilesItRolledOverTo() throws Exception {
 		Path older = folder.resolve("dms.log.1");
 		List<String> old = writeEntries(older, 150, "INFO");
-		modified(older, start.plusSeconds(60));
 		List<String> current = writeEntries(dms, 100, "INFO");
 		List<String> all = new ArrayList<>(old);
 		all.addAll(current);
@@ -425,17 +522,36 @@ public class LogFilesTest extends AbstractHealdanTestCase {
 	}
 
 	@Test
-	public void testTheFilesItRolledOverToByWhenTheyChanged() throws Exception {
-		// Rolled over to with the newest at 1, as a fixed window would
-		Path newer = folder.resolve("dms.log.1");
-		Path older = folder.resolve("dms.log.2");
-		append(older, line("INFO", "Oldest"));
-		append(newer, line("INFO", "Older"));
+	public void testTheFilesItRolledOverToByTheirNumbers() throws Exception {
+		// log4j's default, the highest number the newest; whatever the times they last changed
+		append(folder.resolve("dms.log.1"), line("INFO", "Oldest"));
+		append(folder.resolve("dms.log.2"), line("INFO", "Older"));
 		append(dms, line("INFO", "Newest"));
-		modified(older, start.plusSeconds(10));
-		modified(newer, start.plusSeconds(20));
-
+		modified(folder.resolve("dms.log.1"), start.plusSeconds(20));
+		modified(folder.resolve("dms.log.2"), start.plusSeconds(10));
 		assertEquals(List.of("Oldest", "Older", "Newest"), messages(read(query(null, null))));
+
+		// A fixed window (fileIndex="min", CMIS's in the test log.xml): the lowest number the newest
+		Path cmis = folder.resolve("cmis.log");
+		append(folder.resolve("cmis.log.2"), line("INFO", "Oldest"));
+		append(folder.resolve("cmis.log.1"), line("INFO", "Older"));
+		append(cmis, line("INFO", "Newest"));
+		modified(folder.resolve("cmis.log.2"), start.plusSeconds(20));
+		modified(folder.resolve("cmis.log.1"), start.plusSeconds(10));
+		assertEquals(List.of("Oldest", "Older", "Newest"),
+				messages(files.read("CMIS", query(null, null), admin).orElseThrow()));
+	}
+
+	@Test
+	public void testAMessageMayHoldACarriageReturnOrALineSeparator() throws Exception {
+		append(dms, line("INFO", "Before"));
+		append(dms, line("ERROR", "Half\rway"));
+		append(dms, line("ERROR", "Para\u2028graph\u2029 and \u0085 end"));
+
+		LogLines errors = read(new LogQuery(null, null, Level.ERROR, null));
+
+		assertEquals(List.of("Half\rway", "Para\u2028graph\u2029 and \u0085 end"), messages(errors));
+		assertEquals(List.of(), errors.lines().get(0).continuation());
 	}
 
 	@Test
@@ -489,7 +605,6 @@ public class LogFilesTest extends AbstractHealdanTestCase {
 	public void testBackFromAFileThatsGone() throws Exception {
 		Path rolled = folder.resolve("dms.log.1");
 		writeEntries(rolled, 5, "INFO");
-		modified(rolled, start);
 		append(dms, line("INFO", "Current"));
 		LogPosition inRolled = read(query(null, null)).lines().get(2).position();
 		Files.delete(rolled);
@@ -567,14 +682,17 @@ public class LogFilesTest extends AbstractHealdanTestCase {
 		append(older, line("INFO", "Older https://alice:s3cret@backup.example/"));
 		append(newer, line("INFO", "Newer"));
 		append(dms, line("INFO", "Current"));
-		modified(older, start.plusSeconds(10));
-		modified(newer, start.plusSeconds(20));
+		List<FileChannel> opened = LogTestHooks.keepOpened();
 
+		LogFiles.LogZip zip = files.zip("DMS", admin).orElseThrow();
+		assertTrue(zip.fileName(), zip.fileName().matches("dms-\\d{8}-\\d{6}\\.zip"));
+		// Opened to see they can be read, and closed again: nothing is held open until the zip is written
+		assertEquals(3, opened.size());
+		assertTrue(opened.stream().noneMatch(FileChannel::isOpen));
 		ByteArrayOutputStream out = new ByteArrayOutputStream();
-		try (LogFiles.LogZip zip = files.zip("DMS", admin).orElseThrow()) {
-			assertTrue(zip.fileName(), zip.fileName().matches("dms-\\d{8}-\\d{6}\\.zip"));
-			zip.writeTo(out);
-		}
+		zip.writeTo(out);
+		assertEquals(6, opened.size());
+		assertTrue(opened.stream().noneMatch(FileChannel::isOpen));
 
 		// Each file as it is, under its own name, the current one first, then the newest
 		Map<String, String> entries = new LinkedHashMap<>();

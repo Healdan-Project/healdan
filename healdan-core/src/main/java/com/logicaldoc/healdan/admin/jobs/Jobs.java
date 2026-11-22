@@ -220,9 +220,17 @@ public class Jobs {
 
 	/** @return CE's label for the task, its name if it has none */
 	private static String label(Task task) {
-		String key = "task.name." + task.getName();
+		return label(task.getName());
+	}
+
+	/**
+	 * @param taskName the name of one of LogicalDOC's tasks
+	 * @return CE's label for the task, in English; its name if it has none. The Server Log labels a task's log by it
+	 */
+	public static String label(String taskName) {
+		String key = "task.name." + taskName;
 		String label = I18N.message(key, Locale.ENGLISH);
-		return label == null || label.equals(key) ? task.getName() : label;
+		return label == null || label.equals(key) ? taskName : label;
 	}
 
 	/**

@@ -10,11 +10,9 @@ import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
-import java.nio.file.attribute.FileTime;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HexFormat;
 import java.util.List;
 
@@ -26,7 +24,7 @@ import java.util.List;
  * line with its time to the millisecond: fixed once that line is written, and the same when the log rolls over and
  * the file is renamed. A first line longer than {@link #IDENTITY_BYTES} is taken by that many of its bytes, which are
  * fixed too. The current file has no identity until its first line is whole; a file it rolled over to always has one.
- * The files it rolled over to are ordered by when each last changed, which is when the log rolled over from it.
+ * The files it rolled over to come in the order the log's configuration gives them ({@link LogFiles}).
  */
 final class LogChain implements Closeable {
 
@@ -61,29 +59,15 @@ final class LogChain implements Closeable {
 	 * always the last part.
 	 *
 	 * @param current the current file
-	 * @param rolled the files it rolled over to, in any order
+	 * @param rolled the files it may have rolled over to, the oldest first
 	 * @param opener what opens them
 	 * @throws IOException if a file that's there can't be read
 	 */
 	static LogChain open(Path current, List<Path> rolled, Opener opener) throws IOException {
-		record Dated(Path path, FileTime modified, int order) {
-		}
-		List<Dated> dated = new ArrayList<>();
-		for (int i = 0; i < rolled.size(); i++) {
-			Path path = rolled.get(i);
-			try {
-				if (Files.isRegularFile(path))
-					dated.add(new Dated(path, Files.getLastModifiedTime(path), i));
-			} catch (NoSuchFileException e) {
-				// Gone as the log rolled over
-			}
-		}
-		dated.sort(Comparator.comparing(Dated::modified).thenComparingInt(Dated::order));
-
 		List<Part> parts = new ArrayList<>();
 		try {
-			for (Dated file : dated) {
-				Part part = part(file.path(), false, opener);
+			for (Path file : rolled) {
+				Part part = Files.isRegularFile(file) ? part(file, false, opener) : null;
 				if (part != null)
 					parts.add(part);
 			}

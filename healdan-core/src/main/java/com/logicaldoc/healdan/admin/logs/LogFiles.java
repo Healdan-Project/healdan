@@ -41,9 +41,9 @@ import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.task.Task;
 import com.logicaldoc.core.task.TaskManager;
 import com.logicaldoc.healdan.HealdanRuleException;
+import com.logicaldoc.healdan.admin.jobs.Jobs;
 import com.logicaldoc.healdan.admin.logs.LogChain.Part;
 import com.logicaldoc.healdan.rules.FilingRules;
-import com.logicaldoc.i18n.I18N;
 import com.logicaldoc.util.config.LogConfigurator;
 import com.logicaldoc.util.spring.Context;
 
@@ -213,16 +213,21 @@ public class LogFiles {
 	}
 
 	/**
-	 * A log's files, opened for a download: its current file and the files it rolled over to, as they are.
+	 * A log's download: its current file and the files it rolled over to, as they are, zipped. Nothing is held open
+	 * between {@link LogFiles#zip} and {@link #writeTo}, so a download whose body is never written, as for a
+	 * {@code HEAD}, leaves nothing open.
 	 */
-	public static final class LogZip implements AutoCloseable {
+	public static final class LogZip {
 
-		private final LogChain chain;
+		private final LogFiles files;
+
+		private final Log log;
 
 		private final String fileName;
 
-		private LogZip(LogChain chain, String fileName) {
-			this.chain = chain;
+		private LogZip(LogFiles files, Log log, String fileName) {
+			this.files = files;
+			this.log = log;
 			this.fileName = fileName;
 		}
 
@@ -236,48 +241,46 @@ public class LogFiles {
 
 		/**
 		 * Writes the zip: an entry for each file, under its own file name, the current file first, then the newest
-		 * of the files it rolled over to; each as long as it was when it was opened.
+		 * of the files it rolled over to; each as long as it was when it was opened. The files are opened here, and
+		 * closed before it returns.
 		 *
 		 * @param out where to write it, which it leaves open
 		 * @throws IOException if a file can't be read or the zip can't be written
 		 */
 		public void writeTo(OutputStream out) throws IOException {
-			ZipOutputStream zip = new ZipOutputStream(out);
-			ByteBuffer buffer = ByteBuffer.allocate(64 * 1024);
-			List<Part> parts = chain.parts();
-			for (int i = parts.size() - 1; i >= 0; i--) {
-				Part part = parts.get(i);
-				if (part.channel() == null)
-					continue;
-				zip.putNextEntry(new ZipEntry(part.path().getFileName().toString()));
-				long at = 0;
-				while (at < part.size()) {
-					buffer.clear();
-					buffer.limit((int) Math.min(buffer.capacity(), part.size() - at));
-					int read = part.channel().read(buffer, at);
-					if (read < 0)
-						break;
-					zip.write(buffer.array(), 0, read);
-					at += read;
+			try (LogChain chain = LogChain.open(log.current(), log.rolled(), files.opener)) {
+				ZipOutputStream zip = new ZipOutputStream(out);
+				ByteBuffer buffer = ByteBuffer.allocate(64 * 1024);
+				List<Part> parts = chain.parts();
+				for (int i = parts.size() - 1; i >= 0; i--) {
+					Part part = parts.get(i);
+					if (part.channel() == null)
+						continue;
+					zip.putNextEntry(new ZipEntry(part.path().getFileName().toString()));
+					long at = 0;
+					while (at < part.size()) {
+						buffer.clear();
+						buffer.limit((int) Math.min(buffer.capacity(), part.size() - at));
+						int read = part.channel().read(buffer, at);
+						if (read < 0)
+							break;
+						zip.write(buffer.array(), 0, read);
+						at += read;
+					}
+					zip.closeEntry();
 				}
-				zip.closeEntry();
+				zip.finish();
 			}
-			zip.finish();
-		}
-
-		@Override
-		public void close() throws IOException {
-			chain.close();
 		}
 	}
 
 	/**
-	 * Opens a log's files for a download, before anything is written, so that a file that can't be read fails the
-	 * request rather than the download.
+	 * A log's download. Its files are opened and closed again before anything is written, so that a file that
+	 * can't be read fails the request rather than the download; {@link LogZip#writeTo} opens them again.
 	 *
 	 * @param name the log's name, as {@link #list} gives it
 	 * @param actor who asks
-	 * @return the files, open, to close once written; empty when the name isn't one of the logs {@link #list} gives
+	 * @return the download; empty when the name isn't one of the logs {@link #list} gives
 	 * @throws PersistenceException {@link #ONLY_ADMINS} for anyone but an administrator, before anything else
 	 * @throws UncheckedIOException when one of the log's files can't be read
 	 */
@@ -287,9 +290,8 @@ public class LogFiles {
 		if (found.isEmpty())
 			return Optional.empty();
 		Log listed = found.get();
-		try {
-			LogChain chain = LogChain.open(listed.current(), listed.rolled(), opener);
-			return Optional.of(new LogZip(chain, zipName(listed.current(), Instant.now())));
+		try (LogChain chain = LogChain.open(listed.current(), listed.rolled(), opener)) {
+			return Optional.of(new LogZip(this, listed, zipName(listed.current(), Instant.now())));
 		} catch (IOException e) {
 			throw new UncheckedIOException("Can't read the log " + listed.name(), e);
 		}
@@ -390,20 +392,28 @@ public class LogFiles {
 		return logs;
 	}
 
-	/** @return the files beside the current file the log may have rolled over to, as many as it keeps */
+	/**
+	 * @return the files beside the current file the log may have rolled over to, as many as it keeps, the oldest
+	 *         first: by its strategy's {@code fileIndex}, the highest number the newest ({@code max}, log4j's default)
+	 *         or the lowest ({@code min})
+	 */
 	private static List<Path> rolled(Element appender, Path current) {
 		int max = DEFAULT_ROLLED;
+		boolean newestFirst = false;
 		Element strategy = appender != null ? appender.getChild("DefaultRolloverStrategy") : null;
-		if (strategy != null && strategy.getAttributeValue("max") != null) {
-			try {
-				max = Math.clamp(Integer.parseInt(strategy.getAttributeValue("max").strip()), 0, MAX_ROLLED);
-			} catch (NumberFormatException e) {
-				// log4j's own default, then
+		if (strategy != null) {
+			if (strategy.getAttributeValue("max") != null) {
+				try {
+					max = Math.clamp(Integer.parseInt(strategy.getAttributeValue("max").strip()), 0, MAX_ROLLED);
+				} catch (NumberFormatException e) {
+					// log4j's own default, then
+				}
 			}
+			newestFirst = "min".equalsIgnoreCase(strategy.getAttributeValue("fileIndex", "").strip());
 		}
 		List<Path> rolled = new ArrayList<>();
 		for (int i = 1; i <= max; i++)
-			rolled.add(current.resolveSibling(current.getFileName() + "." + i));
+			rolled.add(current.resolveSibling(current.getFileName() + "." + (newestFirst ? max + 1 - i : i)));
 		return rolled;
 	}
 
@@ -411,11 +421,7 @@ public class LogFiles {
 	private static String label(String name, Set<String> taskNames) {
 		if (name.equals(MAIN))
 			return MAIN_LABEL;
-		if (!taskNames.contains(name))
-			return name;
-		String key = "task.name." + name;
-		String label = I18N.message(key, Locale.ENGLISH);
-		return label == null || label.equals(key) ? name : label;
+		return taskNames.contains(name) ? Jobs.label(name) : name;
 	}
 
 	private static Instant modified(Path file) {

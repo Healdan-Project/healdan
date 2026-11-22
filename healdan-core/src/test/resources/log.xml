@@ -57,7 +57,7 @@
 			<Policies>
 				<SizeBasedTriggeringPolicy size="5 MB" />
 			</Policies>
-			<DefaultRolloverStrategy max="2" />
+			<DefaultRolloverStrategy max="2" fileIndex="min" />
 		</RollingFile>
 		<RollingFile name="Notifier" fileName="${root}/notifier.log" filePattern="${root}/notifier.log.%i">
 			<PatternLayout>

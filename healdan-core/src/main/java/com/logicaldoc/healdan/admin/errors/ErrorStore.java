@@ -21,6 +21,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicLong;
 
 import javax.sql.DataSource;
 
@@ -30,6 +31,8 @@ import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import com.logicaldoc.core.security.user.User;
@@ -98,6 +101,9 @@ public class ErrorStore {
 	private final NamedParameterJdbcTemplate named;
 
 	private final TransactionTemplate transaction;
+
+	/** How many faults were marked resolved or unresolved, each counted once its change committed */
+	private final AtomicLong reviews = new AtomicLong();
 
 	@Autowired
 	public ErrorStore(DataSource dataSource, PlatformTransactionManager transactions) {
@@ -258,9 +264,9 @@ public class ErrorStore {
 	 */
 	public boolean resolve(long id, User by) {
 		Objects.requireNonNull(by, "by");
-		return jdbc.update("update hd_error set hd_resolved = 1, hd_resolvedby = ?, hd_resolvedat = ?"
+		return reviewed(jdbc.update("update hd_error set hd_resolved = 1, hd_resolvedby = ?, hd_resolvedat = ?"
 				+ " where hd_id = ? and hd_resolved = 0", CapturedError.fit(by.getUsername(), CapturedError.NAME_LIMIT),
-				Timestamp.from(Instant.now().truncatedTo(ChronoUnit.MILLIS)), id) > 0;
+				Timestamp.from(Instant.now().truncatedTo(ChronoUnit.MILLIS)), id) > 0);
 	}
 
 	/**
@@ -271,8 +277,37 @@ public class ErrorStore {
 	 *         or no fault
 	 */
 	public boolean reopen(long id) {
-		return jdbc.update("update hd_error set hd_resolved = 0, hd_resolvedby = null, hd_resolvedat = null"
-				+ " where hd_id = ? and hd_resolved = 1", id) > 0;
+		return reviewed(jdbc.update("update hd_error set hd_resolved = 0, hd_resolvedby = null, hd_resolvedat = null"
+				+ " where hd_id = ? and hd_resolved = 1", id) > 0);
+	}
+
+	/**
+	 * @return how many times a fault has been marked resolved or unresolved since the server started, each counted
+	 *         once its change has committed: what the Dashboard's sources of unresolved errors compare, so that their
+	 *         next read has the change
+	 */
+	public long reviews() {
+		return reviews.get();
+	}
+
+	/**
+	 * Counts a change of whether a fault is resolved once it commits, or at once outside a transaction.
+	 *
+	 * @return whether it changed the fault, as given
+	 */
+	private boolean reviewed(boolean changed) {
+		if (!changed)
+			return false;
+		if (TransactionSynchronizationManager.isSynchronizationActive())
+			TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+				@Override
+				public void afterCommit() {
+					reviews.incrementAndGet();
+				}
+			});
+		else
+			reviews.incrementAndGet();
+		return true;
 	}
 
 	/**

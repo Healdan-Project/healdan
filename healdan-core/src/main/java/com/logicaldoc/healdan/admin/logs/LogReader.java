@@ -53,10 +53,12 @@ final class LogReader {
 
 	/**
 	 * A line that starts an entry, as the shipped pattern, {@code %d{dd.MM.yyyy HH:mm:ss,SSS} %-5p (%C:%4L) -- %m%n},
-	 * writes one
+	 * writes one. The message is whatever follows, whatever characters it holds: a line holds no line feed, and a
+	 * carriage return or a Unicode line separator in it is the message's
 	 */
 	private static final Pattern ENTRY = Pattern.compile(
-			"(\\d{2}\\.\\d{2}\\.\\d{4} \\d{2}:\\d{2}:\\d{2},\\d{3}) (TRACE|DEBUG|INFO|WARN|ERROR|FATAL)\\s*\\(([^)]*)\\) -- (.*)");
+			"(\\d{2}\\.\\d{2}\\.\\d{4} \\d{2}:\\d{2}:\\d{2},\\d{3}) (TRACE|DEBUG|INFO|WARN|ERROR|FATAL)\\s*\\(([^)]*)\\) -- (.*)",
+			Pattern.DOTALL);
 
 	private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("dd.MM.uuuu HH:mm:ss,SSS", Locale.ROOT)
 			.withResolverStyle(ResolverStyle.STRICT);
@@ -185,7 +187,10 @@ final class LogReader {
 	/**
 	 * Reads forward in one file from an offset: the oldest entries that start at it or after it. When it stops at
 	 * {@link LogFiles#MAX_LINES} entries, which it knows only once it has looked at the next entry's first line, the
-	 * answer's {@code after} is that line's start; otherwise just past the last whole line it read.
+	 * answer's {@code after} is that line's start. When it stops at the most it looks through, inside an entry that
+	 * isn't the first it read, it gives none of that entry, and {@code after} is its start, so the next read gives it
+	 * whole; the first it read it gives as far as it got, so that a read always moves on. Otherwise {@code after} is
+	 * just past the last whole line it read.
 	 *
 	 * @param part the file's index in the chain
 	 * @param from the offset, at most the file's size
@@ -198,6 +203,7 @@ final class LogReader {
 		ForwardLines lines = new ForwardLines(file.channel(), from, file.size());
 		List<LogLine> kept = new ArrayList<>();
 		Entry entry = null;
+		boolean first = true;
 		long after = from;
 		boolean capped = false;
 		for (Line line = lines.peek(); line != null; line = lines.peek()) {
@@ -208,6 +214,7 @@ final class LogReader {
 					capped = true;
 					break;
 				}
+				first = entry == null;
 				entry = starting != null ? starting : Entry.alone(line);
 			} else {
 				entry.add(line);
@@ -215,8 +222,13 @@ final class LogReader {
 			lines.consume();
 			after = line.end();
 		}
-		if (!capped && entry != null)
-			keep(entry, kept, part);
+		if (!capped && entry != null) {
+			if (lines.ended() || entry.alone || first)
+				keep(entry, kept, part);
+			else
+				// Stopped inside it: the next read starts with it
+				after = entry.start;
+		}
 		return new LogLines(kept, chain.position(part, from), chain.position(part, after),
 				part == 0 && from == 0, !capped && lines.ended(), rolled);
 	}
@@ -280,6 +292,8 @@ final class LogReader {
 					break;
 				}
 			}
+			if (lines.shrunk())
+				stopped = true;
 			if (!stopped && lines.cut()) {
 				// The budget ran out inside a line. When it's the read's first, that much of it, so that a read always
 				// moves back; otherwise the next read starts with it
@@ -431,6 +445,11 @@ final class LogReader {
 					buffer.limit((int) Math.min(CHUNK, limit - at));
 					fill(channel, buffer, at);
 					bufferStart = at;
+					if (buffer.limit() == 0) {
+						// The file is shorter than when it was opened: it ends here now
+						ended = true;
+						return null;
+					}
 				}
 				int from = (int) (at - bufferStart);
 				int stop = buffer.limit();
@@ -487,6 +506,8 @@ final class LogReader {
 
 		private boolean cut;
 
+		private boolean shrunk;
+
 		private Line fragment;
 
 		BackwardLines(FileChannel channel, long from, boolean dropLast) throws IOException {
@@ -498,7 +519,8 @@ final class LogReader {
 			if (dropLast && lineEnd > 0) {
 				// A line being written: looked through whatever its length, so that the read ends at a whole line
 				long feed = feedBefore(lineEnd, false);
-				lineEnd = feed + 1;
+				if (feed != -3)
+					lineEnd = feed + 1;
 			}
 			this.end = lineEnd;
 		}
@@ -513,6 +535,11 @@ final class LogReader {
 			return cut;
 		}
 
+		/** @return whether the file was shorter than when it was opened, which ends the read where it found it */
+		boolean shrunk() {
+			return shrunk;
+		}
+
 		Line fragment() {
 			return fragment;
 		}
@@ -521,10 +548,12 @@ final class LogReader {
 		 * @return the next line back; null at the start of the file, or when the budget runs out inside a line
 		 */
 		Line next() throws IOException {
-			if (lineEnd <= 0 || cut)
+			if (lineEnd <= 0 || cut || shrunk)
 				return null;
 			// The line's own line feed is at lineEnd - 1: the one before ends the line before
 			long feed = feedBefore(lineEnd - 1, true);
+			if (feed == -3)
+				return null;
 			if (feed == -2) {
 				cut = true;
 				fragment = line(looked, lineEnd);
@@ -542,7 +571,7 @@ final class LogReader {
 		 * @param before the offset, which it doesn't look at
 		 * @param budgeted whether to stop when the budget runs out
 		 * @return the line feed's offset; -1 when there's none before the start of the file; -2 when the budget
-		 *         ran out first
+		 *         ran out first; -3 when the file is shorter than when it was opened
 		 */
 		private long feedBefore(long before, boolean budgeted) throws IOException {
 			long at = before - 1;
@@ -553,6 +582,11 @@ final class LogReader {
 					buffer.limit((int) (at + 1 - start));
 					fill(channel, buffer, start);
 					bufferStart = start;
+					if (buffer.limit() < at + 1 - start) {
+						// The file is shorter than when it was opened: the read ends here
+						shrunk = true;
+						return -3;
+					}
 				}
 				for (int i = (int) (at - bufferStart); i >= 0; i--, at--) {
 					if (at < looked) {

@@ -13,6 +13,7 @@ import static org.junit.Assert.assertTrue;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.net.URLEncoder;
+import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -213,8 +214,18 @@ public class AdminLogsResourceTest extends ApiTestCase {
 		Path rolled = folder.resolve("dms.log.1");
 		append(rolled, line("INFO", "Older https://alice:s3cret@backup.example/"));
 		append(dms, line("INFO", "Current"));
+		List<FileChannel> opened = LogTestHooks.keepOpened();
+
+		// A HEAD has the answer's headers, and leaves no file open, as the body is never written
+		ApiResponse head = head(LOGS + "/DMS/file").webSession(web).send();
+		assertEquals(head.toString(), 200, head.status());
+		assertEquals(0, head.body().length);
+		assertTrue(head.header("Content-Disposition"), head.header("Content-Disposition").startsWith("attachment"));
+		assertFalse(opened.isEmpty());
+		assertTrue(opened.stream().noneMatch(FileChannel::isOpen));
 
 		ApiResponse response = get(LOGS + "/DMS/file").webSession(web).send();
+		assertTrue(opened.stream().noneMatch(FileChannel::isOpen));
 
 		assertEquals(response.toString(), 200, response.status());
 		assertTrue(response.header("Content-Type"), response.header("Content-Type").startsWith("application/zip"));
