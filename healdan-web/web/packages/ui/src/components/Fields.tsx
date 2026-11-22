@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { useId } from 'react'
+import { useId, type Ref } from 'react'
 import { FieldError, Input, Label, Text, TextArea, TextField as AriaTextField } from 'react-aria-components'
 import styles from './Fields.module.css'
 import hiddenStyles from './VisuallyHidden.module.css'
@@ -89,10 +89,12 @@ export interface SelectFieldProps extends FieldProps {
   empty?: string
   /** The label names the list for a screen reader but isn't drawn, as in a table's row, whose column heading says what it is */
   labelHidden?: boolean
+  /** For moving focus to the list, as when what had it goes */
+  ref?: Ref<HTMLSelectElement>
 }
 
 /** A pick from a list: it offers only its options, and `empty` if the field may have none. */
-export function SelectField({ label, value, onChange, options, empty, required, error, labelHidden = false }: SelectFieldProps) {
+export function SelectField({ label, value, onChange, options, empty, required, error, labelHidden = false, ref }: SelectFieldProps) {
   const id = useId()
   const errorId = `${id}-error`
   // A value the list no longer has stays shown, so it isn't silently replaced by the first option
@@ -104,6 +106,7 @@ export function SelectField({ label, value, onChange, options, empty, required, 
         <Mark required={required} />
       </label>
       <select
+        ref={ref}
         id={id}
         className={styles.input}
         value={value}

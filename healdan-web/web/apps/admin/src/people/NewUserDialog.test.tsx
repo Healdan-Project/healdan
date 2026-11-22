@@ -190,6 +190,59 @@ describe('New User', () => {
     expect(isDisabled(create())).toBe(true)
   })
 
+  it('takes an email the server takes, such as one with no dot after its @', async () => {
+    let sent: unknown
+    renderDialog({
+      'POST /v1/admin/users': ({ body }: Sent) => {
+        sent = body
+        return { user: ann, temporaryPassword: PASSWORD, emailed: false } satisfies A['CreatedUser']
+      },
+    })
+    await fill({ email: 'ann@intranet' })
+    expect(within(dialog()).queryByText("That isn't an email address.")).toBeNull()
+    expect(isDisabled(create())).toBe(false)
+    await userEvent.click(create())
+    await screen.findByRole('dialog', { name: 'Added Ann Lee' })
+    expect((sent as A['NewUser']).email).toBe('ann@intranet')
+  })
+
+  it("says so, with Try Again, when what it offers can't be read, and fills in the language once it can", async () => {
+    let failing = true
+    const { api, view } = renderDialog({ 'GET /v1/admin/users/options': () => (failing ? problem(500, 'server-error') : userOptions()) })
+    const note = await within(dialog()).findByText("Couldn't read the languages and time zones to choose from, so the account can't be made yet.")
+    expect(note).toBeTruthy()
+    await userEvent.type(field('Username'), 'ann')
+    await userEvent.type(field('First Name'), 'Ann')
+    await userEvent.type(field('Last Name'), 'Lee')
+    await pause()
+    expect(isDisabled(create())).toBe(true)
+    await expectNoAxeViolations(view.baseElement)
+    failing = false
+    await userEvent.click(within(dialog()).getByRole('button', { name: 'Try Again' }))
+    const language = within(dialog()).getByRole('combobox', { name: 'Language' }) as HTMLSelectElement
+    await waitFor(() => expect(language.value).toBe('en'))
+    expect(within(dialog()).queryByText("Couldn't read the languages and time zones to choose from, so the account can't be made yet.")).toBeNull()
+    expect(api.callsTo('GET /v1/admin/users/options')).toHaveLength(2)
+    // Try Again went with the note, so the focus goes to the menu it filled
+    expect(document.activeElement).toBe(language)
+    expect(isDisabled(create())).toBe(false)
+  })
+
+  it('closes the temporary password only from Done, as it is its only showing: Esc and a click outside leave it (P4-R38)', async () => {
+    const { onClose, onCreated } = renderDialog({ 'POST /v1/admin/users': { user: ann, temporaryPassword: PASSWORD, emailed: false } satisfies A['CreatedUser'] })
+    await fill()
+    await userEvent.click(create())
+    const done = await screen.findByRole('dialog', { name: 'Added Ann Lee' })
+    await userEvent.keyboard('{Escape}')
+    await userEvent.click(document.body)
+    expect(screen.getByRole('dialog', { name: 'Added Ann Lee' })).toBe(done)
+    expect(within(done).getByRole('group', { name: 'Temporary Password' }).textContent).toBe(PASSWORD)
+    expect(onClose).not.toHaveBeenCalled()
+    await userEvent.click(within(done).getByRole('button', { name: 'Done' }))
+    expect(onCreated).toHaveBeenCalledWith(ann)
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
   it("says the server's refusal of a field beside it, and the rest above the buttons", async () => {
     let answer: unknown = new ApiError(422, 'validation', 'x', { status: 422, code: 'validation', fields: [{ field: 'username', code: 'taken', message: 'x' }] })
     renderDialog({ 'POST /v1/admin/users': () => answer })

@@ -9,12 +9,6 @@ import { adminKey, adminKeys, type AdminAnswer } from '../queries'
 
 type A = adminComponents['schemas']
 
-/**
- * A document a person has checked out, its file version as `fileVersion`, as the public DocumentView names it (the
- * contract's review renames the member), whichever name the generated types still give it
- */
-export type Checkout = Omit<A['UserCheckout'], 'version' | 'fileVersion'> & { fileVersion: string }
-
 /** Rows come 100 at a time, as the end of the list comes into view, as the other lists' do */
 export const USERS_PAGE = 100
 
@@ -96,7 +90,7 @@ export function useUserCheckouts(id: number) {
   const api = useApi()
   return useQuery({
     queryKey: peopleKeys.checkouts(id),
-    queryFn: ({ signal }) => api.get<Checkout[]>(apiPath`/v1/admin/users/${id}/checkouts`, undefined, { signal }),
+    queryFn: ({ signal }) => api.get<A['UserCheckout'][]>(apiPath`/v1/admin/users/${id}/checkouts`, undefined, { signal }),
     meta: ASK_ON_RETURN,
   })
 }

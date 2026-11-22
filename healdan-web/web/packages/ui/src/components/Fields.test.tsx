@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { render, screen } from '@testing-library/react'
+import { createRef } from 'react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { expectNoAxeViolations } from '../test/axe'
@@ -95,6 +96,12 @@ describe('Fields', () => {
     const select = screen.getByRole('combobox', { name: 'Class' }) as HTMLSelectElement
     expect(select.value).toBe('Old Class')
     expect(screen.getAllByRole('option').map((option) => option.textContent)).toEqual(['Old Class', 'Letters', 'Invoices'])
+  })
+
+  it('hands its list to a ref, so a form can move the focus to it', () => {
+    const ref = createRef<HTMLSelectElement>()
+    render(<SelectField label="Class" value="" options={[{ value: 'Letters', label: 'Letters' }]} onChange={() => {}} ref={ref} />)
+    expect(ref.current).toBe(screen.getByRole('combobox', { name: 'Class' }))
   })
 
   it('shows nothing chosen, not the first option, for a required list with no value yet', () => {

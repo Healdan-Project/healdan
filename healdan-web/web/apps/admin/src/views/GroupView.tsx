@@ -3,14 +3,14 @@
 
 import { useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from '@tanstack/react-router'
-import { useState, type ReactNode } from 'react'
+import { useId, useState, type ReactNode } from 'react'
 import { ApiError, apiPath, type adminComponents } from '@healdan/api'
 import { ErrorPanel, useApi } from '@healdan/shell'
 import { Button, formatCount, Icon, toast, type IconName } from '@healdan/ui'
 import { groupIdFrom, routes } from '../addresses'
 import { Confirm } from '../dialogs/Confirm'
 import { Fact } from '../facts/Fact'
-import { Problems } from '../forms/Problems'
+import { Problems, type Problem } from '../forms/Problems'
 import { GroupDescriptionDialog, RenameGroupDialog } from '../people/GroupDialogs'
 import { groupChanged, groupKeys, useGroup } from '../people/groupQueries'
 import { deleteRefusal, isEveryone, isGuest, mappersOf, renameRefusal } from '../people/groupText'
@@ -28,13 +28,14 @@ type A = adminComponents['schemas']
 /**
  * A group's page, at /admin/groups/{id} (spec 8.7): its name, its facts (its description, how many people are in it, how
  * many folders give it a permission of their own, and the sign-in providers whose group map names it), Rename, Edit
- * Description and Delete, and its members. What the server would refuse is greyed out, with why under the actions: a
- * fixed group keeps its name and is never deleted, and a group a provider's group map names, or whose name a deleted
- * group couldn't keep, isn't deleted. Delete asks first and names what it takes. A group a provider maps says that a
- * change to the membership of someone who signs in through it is set again at their next sign-in. CE's inherit from
- * group isn't offered. While a new read fails, the page and any dialog open on it stay, with a note that it couldn't
- * refresh (P4-R15). An address that names no group, a person's own or a deleted one among them, says so in the app's
- * words; LogicalDOC's own groups, `publisher` among them, have negative ids (groupIdFrom).
+ * Description and Delete, and its members. What the server would refuse is greyed out, with why under the actions, which
+ * describes it: a fixed group keeps its name and is never deleted (one sentence, for Rename and Delete alike), and a
+ * group a provider's group map names, or whose name a deleted group couldn't keep, isn't deleted. Delete asks first and
+ * names what it takes. A group a provider maps says that a change to the membership of someone who signs in through it
+ * is set again at their next sign-in. CE's inherit from group isn't offered. While a new read fails, the page and any
+ * dialog open on it stay, with a note that it couldn't refresh (P4-R15). An address that names no group, a person's own
+ * or a deleted one among them, says so in the app's words; LogicalDOC's own groups, `publisher` among them, have
+ * negative ids (groupIdFrom).
  */
 export function GroupView({ id }: { id: string }) {
   // LogicalDOC's own groups have negative ids
@@ -72,8 +73,14 @@ function Group({ group, stale, onRetry }: { group: A['GroupDetail']; stale: bool
   const close = () => setOpen(null)
   const renameRefused = renameRefusal(group)
   const deleteRefused = deleteRefusal(group)
-  // A fixed group's sentence says why for Rename and Delete alike
-  const refused = [renameRefused, deleteRefused].filter((sentence): sentence is string => sentence !== undefined)
+  const renameWhy = useId()
+  const deleteWhy = useId()
+  // A fixed group's sentence says why for Rename and Delete alike, so it describes both
+  const refused: Problem[] = [
+    ...(renameRefused === undefined ? [] : [{ key: 'rename', id: renameWhy, sentence: renameRefused }]),
+    ...(deleteRefused === undefined ? [] : [{ key: 'delete', id: deleteWhy, sentence: deleteRefused }]),
+  ]
+  const deleteDescribedBy = group.fixed ? renameWhy : deleteRefused !== undefined ? deleteWhy : undefined
   const mapped = group.mappedBy.length > 0
 
   async function remove() {
@@ -102,13 +109,13 @@ function Group({ group, stale, onRetry }: { group: A['GroupDetail']; stale: bool
         <h1 className={clientStyles.title}>{group.name}</h1>
         {group.fixed && <span className={styles.tag}>{t('admin.groups.fixed')}</span>}
         <div className={clientStyles.actions}>
-          <Button isDisabled={renameRefused !== undefined} onPress={() => setOpen('rename')}>
+          <Button isDisabled={renameRefused !== undefined} aria-describedby={renameRefused === undefined ? undefined : renameWhy} onPress={() => setOpen('rename')}>
             <Action icon="pencil">{t('admin.group.rename')}</Action>
           </Button>
           <Button onPress={() => setOpen('description')}>
             <Action icon="pencil">{t('admin.group.editDescription')}</Action>
           </Button>
-          <Button isDisabled={group.fixed || deleteRefused !== undefined} onPress={() => setOpen('delete')}>
+          <Button isDisabled={group.fixed || deleteRefused !== undefined} aria-describedby={deleteDescribedBy} onPress={() => setOpen('delete')}>
             <Action icon="trash">{t('admin.group.delete')}</Action>
           </Button>
         </div>

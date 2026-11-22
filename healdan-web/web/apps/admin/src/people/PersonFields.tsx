@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { useState } from 'react'
+import { useState, type Ref } from 'react'
 import { ApiError, type adminComponents } from '@healdan/api'
 import { fieldErrors } from '@healdan/shell'
 import { PickField, SelectField, TextField } from '@healdan/ui'
@@ -24,9 +24,30 @@ export interface PersonDraft {
 
 export type PersonField = keyof PersonDraft | 'username'
 
-/** An email address as far as the form can tell: something, one @, then a dot somewhere after it, and no space */
-function looksLikeEmail(text: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text)
+/**
+ * A character an email can't hold, as the server checks one (UserForm): a control character, a space the server counts
+ * as one (a no-break space isn't), a line or paragraph separator, or half of a pair of UTF-16 units on its own, which
+ * Healdan can't keep
+ */
+function notInEmail(code: number): boolean {
+  return (
+    code <= 0x20 ||
+    (code >= 0x7f && code <= 0x9f) ||
+    code === 0x1680 ||
+    (code >= 0x2000 && code <= 0x200a && code !== 0x2007) ||
+    code === 0x2028 ||
+    code === 0x2029 ||
+    code === 0x205f ||
+    code === 0x3000 ||
+    (code >= 0xd800 && code <= 0xdfff)
+  )
+}
+
+/** An email address as the server takes one: an @ that's neither first nor last, and nothing it can't hold (notInEmail) */
+function isEmail(text: string): boolean {
+  if (!text.includes('@') || text.startsWith('@') || text.endsWith('@')) return false
+  // By code point, so a lone half of a pair is one on its own
+  return ![...text].some((character) => notInEmail(character.codePointAt(0) ?? 0))
 }
 
 /** Whether a username holds what the server doesn't keep in one: > or a control character (SignInAccounts' rule) */
@@ -45,22 +66,30 @@ export function usernameProblem(username: string): string | undefined {
   return undefined
 }
 
-/** What the form can see is wrong with the fields it shares, before they're sent; a field missing is said by its mark */
-export function draftProblems(draft: PersonDraft): Partial<Record<keyof PersonDraft, string>> {
+/**
+ * What the form can see is wrong with the fields it shares, before they're sent; a field missing is said by its mark.
+ * Given what Edit opened with (`opened`), a field still as it was isn't judged, as Save leaves it out and it stays as it
+ * is, as a name stored blank does: an email made elsewhere, say.
+ */
+export function draftProblems(draft: PersonDraft, opened?: PersonDraft): Partial<Record<keyof PersonDraft, string>> {
   const problems: Partial<Record<keyof PersonDraft, string>> = {}
-  for (const field of ['firstName', 'lastName', 'email'] as const) if (draft[field].trim().length > FIELD_MAX) problems[field] = t('fields.too-long')
+  const judged = (field: 'firstName' | 'lastName' | 'email') => opened === undefined || draft[field].trim() !== opened[field].trim()
+  for (const field of ['firstName', 'lastName', 'email'] as const) if (judged(field) && draft[field].trim().length > FIELD_MAX) problems[field] = t('fields.too-long')
   const email = draft.email.trim()
-  if (problems.email === undefined && email !== '' && !looksLikeEmail(email)) problems.email = t('admin.newUser.emailInvalid')
+  if (problems.email === undefined && judged('email') && email !== '' && !isEmail(email)) problems.email = t('admin.newUser.emailInvalid')
   return problems
 }
 
 /** The names a form may leave blank: in Edit, one stored blank, which the server keeps as it is (P4-R29, R31) */
 export type BlankNames = Partial<Record<'firstName' | 'lastName', boolean>>
 
-/** Whether the names the form needs are there, but those it may leave blank, and nothing it can see is wrong */
-export function draftReady(draft: PersonDraft, blank: BlankNames = {}): boolean {
+/**
+ * Whether the names the form needs are there, but those it may leave blank, and nothing it can see is wrong, a field
+ * still as Edit opened with it (`opened`) left unjudged
+ */
+export function draftReady(draft: PersonDraft, blank: BlankNames = {}, opened?: PersonDraft): boolean {
   const named = (field: 'firstName' | 'lastName') => blank[field] === true || draft[field].trim() !== ''
-  return named('firstName') && named('lastName') && Object.keys(draftProblems(draft)).length === 0
+  return named('firstName') && named('lastName') && Object.keys(draftProblems(draft, opened)).length === 0
 }
 
 /**
@@ -117,6 +146,8 @@ export interface PersonFieldsProps {
   autoFocus?: boolean
   /** The names it may leave blank, which aren't marked as needed */
   blank?: BlankNames
+  /** The Language menu, for moving the focus to it, as when its choices come after a failed read */
+  languageRef?: Ref<HTMLSelectElement>
 }
 
 /**
@@ -124,7 +155,7 @@ export interface PersonFieldsProps {
  * (`blank`), Email, Language, a menu of the languages offered, and Time Zone. A language the person has that the options don't list stays, shown as its code,
  * so a save never changes it unasked.
  */
-export function PersonFields({ draft, onChange, options, errors, autoFocus, blank = {} }: PersonFieldsProps) {
+export function PersonFields({ draft, onChange, options, errors, autoFocus, blank = {}, languageRef }: PersonFieldsProps) {
   const set = (field: keyof PersonDraft, value: string) => onChange({ ...draft, [field]: value })
   return (
     <>
@@ -135,6 +166,7 @@ export function PersonFields({ draft, onChange, options, errors, autoFocus, blan
       <TextField label={t('admin.newUser.email')} value={draft.email} error={errors.email} onChange={(value) => set('email', value)} />
       <div className={styles.pair}>
         <SelectField
+          ref={languageRef}
           label={t('admin.newUser.language')}
           required
           value={draft.language}

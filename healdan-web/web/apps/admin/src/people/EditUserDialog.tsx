@@ -61,7 +61,8 @@ export function EditUserDialog({ person, onClose }: { person: A['User']; onClose
   const [busy, setBusy] = useState(false)
 
   const server = serverProblems(failure)
-  const own = draftProblems(draft)
+  // A field as it opened isn't judged, as Save leaves it as it is: an email made elsewhere stays until it's changed
+  const own = draftProblems(draft, before)
   const errors: Partial<Record<PersonField, string>> = {
     firstName: own.firstName ?? server.get('firstName'),
     lastName: own.lastName ?? server.get('lastName'),
@@ -71,7 +72,7 @@ export function EditUserDialog({ person, onClose }: { person: A['User']; onClose
   }
   const refusal = failure !== undefined && !SHOWN.some((field) => server.has(field)) ? refusalFor(failure) : undefined
   const change = changesOf(before, draft)
-  const ready = draftReady(draft, blank) && Object.keys(change).length > 0
+  const ready = draftReady(draft, blank, before) && Object.keys(change).length > 0
   const provider = providerOf(person)
 
   async function save() {

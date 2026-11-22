@@ -76,6 +76,12 @@ describe('Problems', () => {
     await expectNoAxeViolations(container)
   })
 
+  it('gives a sentence the id it is given, so a greyed button can be described by it', () => {
+    renderWith(<Problems problems={[{ key: 'disable', id: 'why-disable', sentence: "The admin account can't be disabled." }, 'The key is wrong.']} />)
+    expect(document.getElementById('why-disable')?.textContent).toBe("The admin account can't be disabled.")
+    expect(within(screen.getByRole('list')).getAllByRole('listitem')[1]?.querySelector('[id]')).toBeNull()
+  })
+
   it('draws nothing when there is no problem', () => {
     const { container } = renderWith(<Problems lead="Test found no problem:" problems={[]} />)
     expect(container.textContent).toBe('')

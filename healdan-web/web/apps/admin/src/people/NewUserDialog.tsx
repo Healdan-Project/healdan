@@ -2,10 +2,12 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import type { adminComponents } from '@healdan/api'
 import { useApi } from '@healdan/shell'
 import { Button, CheckField, Dialog, formatList, TextField } from '@healdan/ui'
+import { useFocusWhenGone } from '../focus'
+import { Problems } from '../forms/Problems'
 import { Refusal } from '../forms/Refusal'
 import { GroupsField } from '../pickers/GroupsField'
 import { typed, useDebounced } from '../pickers/typing'
@@ -26,8 +28,9 @@ export interface NewUserDialogProps {
   /** The person made, once the dialog that shows their temporary password closes: where to go next is the caller's */
   onCreated?: (user: A['User']) => void
   /**
-   * The dialog closes: Cancel, Esc, a click outside, or once the person is made and their password seen. The caller stops
-   * drawing it. While Create is on its way it can't be closed, as the server would make the account anyway.
+   * The dialog closes: Cancel, Esc, a click outside, or, once the person is made, Done alone, as their password is shown
+   * only there (P4-R38). The caller stops drawing it. While Create is on its way it can't be closed, as the server would
+   * make the account anyway.
    */
   onClose: () => void
 }
@@ -64,14 +67,21 @@ interface Made {
  * that people who sign in through it needn't be added. Once made, its temporary password is shown once, with Copy, or
  * emailed when that was asked and could go, and the dialog says which; the password goes as the dialog closes (P4-R7).
  * Emailing is offered only while outgoing email is set up and an email is typed. What the form can see is wrong is said
- * before Create, a username someone has among them; the server's refusal of a field beside it, and the rest above the
- * buttons. While Create is on its way, the dialog holds.
+ * before Create, a username someone has among them, and so is a failed read of what it offers (the languages above all,
+ * one of which every account has), with Try Again; the server's refusal of a field beside it, and the rest above the
+ * buttons. While Create is on its way, the dialog holds. The dialog that shows the password closes only from Done.
  */
 export function NewUserDialog({ onCreated, onClose }: NewUserDialogProps) {
   const api = useApi()
   const queryClient = useQueryClient()
   const refusalFor = useRefusalFor()
-  const options = useUserOptions().data
+  const offered = useUserOptions()
+  const options = offered.data
+  // What it offers couldn't be read, and nothing was before: Language has no choices, so nothing can be made yet
+  const unread = options === undefined && offered.isError
+  const languageMenu = useRef<HTMLSelectElement>(null)
+  // Try Again goes once they come, so the focus goes to the menu they filled
+  useFocusWhenGone(!unread, languageMenu)
   const [username, setUsername] = useState('')
   const [draft, setDraft] = useState<PersonDraft>({ firstName: '', lastName: '', email: '', language: '', timeZone: '' })
   const [groups, setGroups] = useState<A['Group'][]>([])
@@ -155,7 +165,8 @@ export function NewUserDialog({ onCreated, onClose }: NewUserDialogProps) {
   if (made !== undefined) {
     const user = made.answer.user
     return (
-      <Dialog title={t('admin.newUser.created', { name: user.name })} isOpen onOpenChange={(open) => !open && finish()}>
+      // Closed only by Done: Esc and a click outside do nothing, as this is the password's only showing (P4-R38)
+      <Dialog title={t('admin.newUser.created', { name: user.name })} isOpen onOpenChange={() => undefined}>
         <div className={formStyles.form}>
           <PasswordShown person={user} answer={made.answer} asked={made.asked} options={options} />
           <div className={formStyles.buttons}>
@@ -202,6 +213,7 @@ export function NewUserDialog({ onCreated, onClose }: NewUserDialogProps) {
                 draft={filled}
                 options={options}
                 errors={errors}
+                languageRef={languageMenu}
                 onChange={(next) => {
                   setDraft(next)
                   change()
@@ -233,6 +245,24 @@ export function NewUserDialog({ onCreated, onClose }: NewUserDialogProps) {
                   <p className={formStyles.note}>{t(options.outgoingEmail ? 'admin.password.noEmail' : 'admin.password.notSetUp')}</p>
                 ))}
             </fieldset>
+            {/* There before it has words, so a screen reader says them as they come */}
+            <div role="status">
+              {unread && (
+                <Problems
+                  problems={[
+                    {
+                      key: 'options',
+                      sentence: t('admin.newUser.optionsUnread'),
+                      action: (
+                        <Button isPending={offered.isFetching} onPress={() => void offered.refetch()}>
+                          {t('common.tryAgain')}
+                        </Button>
+                      ),
+                    },
+                  ]}
+                />
+              )}
+            </div>
             <Refusal>{refusal}</Refusal>
             <div className={formStyles.buttons}>
               <Button onPress={close} isDisabled={busy}>

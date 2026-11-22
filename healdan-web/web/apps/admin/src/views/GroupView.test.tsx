@@ -36,6 +36,8 @@ const main = () => screen.getByRole('main')
 const facts = () => Array.from(main().querySelector('dl')!.querySelectorAll('dt'), (term) => [term.textContent, term.nextElementSibling?.textContent])
 const action = (name: string) => within(main()).queryByRole('button', { name })
 const isDisabled = (button: HTMLElement | null) => button?.getAttribute('disabled') !== null
+/** What a button's description says: the sentence its aria-describedby names */
+const why = (button: HTMLElement | null) => document.getElementById(button?.getAttribute('aria-describedby') ?? '')?.textContent
 const pause = () => act(() => new Promise((resolve) => setTimeout(resolve, TYPING_DELAY_MS + 100)))
 const membersOf = (name: string) => within(main()).getByRole('table', { name: `Members of ${name}` })
 const memberRows = (name: string) => within(membersOf(name)).getAllByRole('row').slice(1).map((row) => Array.from(row.children, (cell) => cell.textContent))
@@ -89,6 +91,10 @@ describe("A group's page", () => {
     expect(isDisabled(action('Delete'))).toBe(true)
     expect(isDisabled(action('Edit Description'))).toBe(false)
     expect(within(main()).getByText('admin is one of the fixed groups: it keeps its name and is never deleted. Its description can change.')).toBeTruthy()
+    // Its one sentence tells a screen reader why for both greyed actions
+    expect(why(action('Rename'))).toBe('admin is one of the fixed groups: it keeps its name and is never deleted. Its description can change.')
+    expect(why(action('Delete'))).toBe('admin is one of the fixed groups: it keeps its name and is never deleted. Its description can change.')
+    expect(action('Edit Description')?.getAttribute('aria-describedby')).toBeNull()
     expect(within(main()).getByText('Members of admin can use Healdan Admin and read every document, in every matter and Store.')).toBeTruthy()
     await within(main()).findByRole('table', { name: 'Members of admin' })
     expect(memberRows('admin')).toEqual([
@@ -139,6 +145,8 @@ describe("A group's page", () => {
     expect(isDisabled(action('Delete'))).toBe(true)
     expect(isDisabled(action('Rename'))).toBe(false)
     expect(within(main()).getByText("Authentik's group map names Fee Earners, so it isn't deleted: take it out of the map first, on the Sign-In tab of Healdan Settings in the Classic Interface.")).toBeTruthy()
+    expect(why(action('Delete'))).toBe("Authentik's group map names Fee Earners, so it isn't deleted: take it out of the map first, on the Sign-In tab of Healdan Settings in the Classic Interface.")
+    expect(action('Rename')?.getAttribute('aria-describedby')).toBeNull()
     await expectNoAxeViolations(view.container)
   })
 
