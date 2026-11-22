@@ -28,6 +28,9 @@ public class FieldRefusal extends HealdanRuleException {
 	/** A field's value isn't one Healdan takes */
 	public static final String INVALID = "invalid";
 
+	/** A field's number is outside the range Healdan takes */
+	public static final String OUT_OF_RANGE = "out-of-range";
+
 	/** A field that the change can't make, such as a username, which never changes */
 	public static final String NOT_EDITABLE = "not-editable";
 
@@ -38,8 +41,8 @@ public class FieldRefusal extends HealdanRuleException {
 	 * One field refused
 	 *
 	 * @param name the field, as the form names it, such as {@code username}
-	 * @param code why: {@link #REQUIRED}, {@link #TOO_LONG}, {@link #INVALID}, {@link #TAKEN} or
-	 *        {@link #NOT_EDITABLE}
+	 * @param code why: {@link #REQUIRED}, {@link #TOO_LONG}, {@link #INVALID}, {@link #OUT_OF_RANGE},
+	 *        {@link #TAKEN} or {@link #NOT_EDITABLE}
 	 * @param message an English sentence that says what's wrong, which the form shows as it is
 	 */
 	public record Field(String name, String code, String message) {

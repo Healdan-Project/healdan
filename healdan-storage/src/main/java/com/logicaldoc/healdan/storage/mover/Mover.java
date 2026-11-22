@@ -225,10 +225,18 @@ public class Mover extends StorageJob {
 		return coordinator != null;
 	}
 
-	/** Asks the coordinator for a pass at once ({@link #wake}) */
+	/**
+	 * Asks the coordinator for a pass at once ({@link #wake}), which reports as its passes do, and never runs beside
+	 * another, as the coordinator makes them one at a time
+	 *
+	 * @return whether the coordinator runs, so it will
+	 */
 	@Override
-	public void runNow() {
+	public boolean runNow() {
+		if (coordinator == null)
+			return false;
 		wake();
+		return true;
 	}
 
 	/**

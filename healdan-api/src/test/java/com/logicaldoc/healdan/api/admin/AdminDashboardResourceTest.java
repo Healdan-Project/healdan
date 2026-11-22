@@ -12,6 +12,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import org.junit.Test;
@@ -50,13 +51,16 @@ public class AdminDashboardResourceTest extends ApiTestCase {
 		for (JsonNode tile : dashboard.path("health"))
 			names.add(tile.path("name").textValue());
 		assertEquals(HealthTile.NAMES, names);
+		// The storage's is fixed on the Admin app's Backends screen, and so are the disks' where storage backends are
+		// on, which they aren't here; the server's on its Server Log, and the previews' and the jobs' on Background
+		// Jobs; the rest on the Classic Interface's still
+		Map<String, String> links = Map.of(HealthTile.STORAGE_BACKENDS, "/admin/backends", HealthTile.SERVER,
+				"/admin/server-log", HealthTile.DATABASE, "/admin/server-log", HealthTile.MEMORY, "/admin/server-log",
+				HealthTile.PREVIEWS, "/admin/jobs", HealthTile.BACKGROUND_JOBS, "/admin/jobs");
 		for (JsonNode tile : dashboard.path("health")) {
 			assertTrue(tile.toString(), tile.path("problem").isNull());
 			assertTrue(tile.toString(), tile.path("detail").isTextual());
-			// The storage's is fixed on the Admin app's Backends screen, and so are the disks' where storage
-			// backends are on, which they aren't here; the rest on the Classic Interface's still
-			boolean backends = HealthTile.STORAGE_BACKENDS.equals(tile.path("name").textValue());
-			assertEquals(tile.toString(), backends ? "/admin/backends" : "/frontend.jsp",
+			assertEquals(tile.toString(), links.getOrDefault(tile.path("name").textValue(), "/frontend.jsp"),
 					tile.path("link").textValue());
 		}
 		JsonNode storage = dashboard.path("health").path(HealthTile.NAMES.indexOf(HealthTile.STORAGE_BACKENDS));
