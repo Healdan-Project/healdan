@@ -10,7 +10,7 @@ import { Button, Icon, toast } from '@healdan/ui'
 import { routes } from '../addresses'
 import { Refusal } from '../forms/Refusal'
 import { t } from '../strings'
-import { errorChanged, isGone, markError } from './errorQueries'
+import { errorChanged, errorKeys, isGone, markError } from './errorQueries'
 import { documentWords, errorDetailsText, errorFacts, logSearchWords } from './errorText'
 import styles from './Monitoring.module.css'
 
@@ -70,14 +70,16 @@ function Fault({ detail }: { detail: A['ErrorDetail'] }) {
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<unknown>()
 
-  // Mark Resolved and Reopen are one button, whose words follow the fault, so the focus stays on it as it changes
+  // Mark Resolved and Reopen are one button, whose words follow the fault, so the focus stays on it as it changes. A fault
+  // the server no longer has (`404`) is asked again, so the details say it has gone rather than go on showing it.
   async function mark() {
     setBusy(true)
     setFailure(undefined)
     try {
       await errorChanged(queryClient, await markError(api, detail.id, !detail.resolved))
     } catch (error) {
-      setFailure(error)
+      if (isGone(error)) void queryClient.invalidateQueries({ queryKey: errorKeys.error(detail.id), exact: true })
+      else setFailure(error)
     } finally {
       setBusy(false)
     }

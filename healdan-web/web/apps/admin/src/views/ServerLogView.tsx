@@ -130,6 +130,7 @@ export function ServerLogView({ search }: { search: ServerLogSearch }) {
       {/* Said as each comes, there before it has words: a failed read of what's new once, however many tries follow */}
       <div role="status" className={styles.notes}>
         {lines.pollFailed && <p className={styles.note}>{t('admin.serverLog.pollFailed')}</p>}
+        {lines.followLost && <p className={styles.note}>{t('admin.serverLog.followLost')}</p>}
         {lines.rolled && <p className={styles.note}>{t('admin.serverLog.rolled')}</p>}
         {lines.pausedToKeep && <p className={styles.note}>{t('admin.serverLog.pausedToKeep')}</p>}
       </div>

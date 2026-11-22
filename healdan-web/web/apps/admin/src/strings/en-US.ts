@@ -1192,6 +1192,7 @@ export const adminEnUS = {
   'admin.serverLog.atStart': 'This is the start of the log: it holds nothing older.',
   'admin.serverLog.earlierFailed': "Couldn't read the earlier lines.",
   'admin.serverLog.pollFailed': "Couldn't read the newest lines, so this shows what was read last. Healdan keeps trying.",
+  'admin.serverLog.followLost': 'The server no longer knows this log, or the place it was read to, so following has stopped. Follow starts again from the newest lines.',
   'admin.serverLog.rolled': 'The log rolled over to a new file, so this starts again at its top. Show Earlier reads the lines before it.',
   'admin.serverLog.pausedToKeep': 'Following paused, so the earlier lines stay. Follow goes back to the newest.',
   'admin.serverLog.empty': 'Nothing is in the log yet.',

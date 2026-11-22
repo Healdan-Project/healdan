@@ -36,17 +36,9 @@ const waitSeconds = async (seconds: number) => {
   await settle()
 }
 
-/**
- * axe over what's drawn, with the page asking for the light theme and then the dark one (`prefers-color-scheme`). jsdom
- * draws no colours, so this checks the markup under each; the colours themselves are tokens, which colours.test.ts checks.
- */
-async function expectNoAxeViolationsInBothThemes(container: Element) {
-  for (const dark of [false, true]) {
-    window.matchMedia = (query: string) =>
-      ({ matches: dark && query.includes('prefers-color-scheme: dark'), media: query, addEventListener: () => {}, removeEventListener: () => {}, addListener: () => {}, removeListener: () => {}, onchange: null, dispatchEvent: () => false }) as unknown as MediaQueryList
-    await expectNoAxeViolations(container)
-  }
-}
+// axe runs once for each state drawn. jsdom draws no colours, so the two themes' colours aren't checked here: every colour
+// is a token, which test/colours.test.ts checks on each surface of both themes, and the phase's browser spec runs axe in
+// the light theme and the dark one.
 
 async function openJobs(rows: A['Job'][] = jobRows, over: Routes = {}, options: JobRoutesOptions = {}) {
   const rendered = await renderApp('/jobs', { ...jobRoutes(rows, options), ...over })
@@ -86,7 +78,7 @@ describe('Background Jobs', () => {
     expect(cells('Storage Nightly Check').slice(0, 3)).toEqual(['Never', 'Not Run Yet', formatDateTime('2026-11-20T03:15:00Z')])
     // Disabled
     expect(cells('Tags Processor').slice(0, 5)).toEqual(['Never', 'Not Run Yet', 'None', 'No', 'Every hour'])
-    await expectNoAxeViolationsInBothThemes(view.container)
+    await expectNoAxeViolations(view.container)
   })
 
   it('says an overdue job is overdue', async () => {
@@ -115,7 +107,7 @@ describe('Background Jobs', () => {
     expect(view.container.querySelector('b')).toBeNull()
     // A job whose last run didn't fail has nothing under it
     expect((row('Indexer').nextElementSibling as HTMLElement | null)?.hasAttribute('data-job') ?? true).toBe(true)
-    await expectNoAxeViolationsInBothThemes(view.container)
+    await expectNoAxeViolations(view.container)
   })
 
   it('says a job switched off on this server is, and offers it nothing', async () => {
@@ -165,7 +157,7 @@ describe('What each job allows', () => {
     expect(within(row('Indexer')).getAllByRole('button').map((button) => button.getAttribute('aria-label'))).toEqual(['Run Now: Indexer', 'Disable Indexer', 'Schedule of Indexer'])
     expect(within(row('Paths Calculator')).getByRole('button', { name: 'Stop Paths Calculator' })).toBeTruthy()
     expect(within(row('Tags Processor')).getByRole('button', { name: 'Enable Tags Processor' })).toBeTruthy()
-    await expectNoAxeViolationsInBothThemes(view.container)
+    await expectNoAxeViolations(view.container)
   })
 
   it('lets the keyboard reach every action, row by row', async () => {
@@ -229,14 +221,15 @@ describe('Run Now', () => {
     let ran = false
     const routes = jobRoutes()
     const list = routes['GET /v1/admin/jobs'] as () => A['Job'][]
-    await openJobs(jobRows, {
+    const { api } = await openJobs(jobRows, {
       'POST /v1/admin/jobs/*/run': problem(409, 'refused', 'Trash Destroyer is already running.'),
       'GET /v1/admin/jobs': () => list().map((job) => (ran && job.name === 'trash-destroyer' ? { ...job, lastStart: '2026-11-19T10:42:00Z', lastEnd: '2026-11-19T10:42:04Z' } : job)),
     })
+    const before = reads(api)
     await userEvent.click(within(row('Trash Destroyer')).getByRole('button', { name: 'Run Now: Trash Destroyer' }))
     expect((await screen.findByRole('alert')).textContent).toBe('Trash Destroyer is already running.')
-    // A read that finds the job as it was keeps the refusal
-    await act(async () => void window.dispatchEvent(new Event('focus')))
+    // The refusal's own read of the list, which finds the job as it was, keeps the refusal
+    expect(reads(api)).toBe(before + 1)
     await settle()
     expect(screen.getByRole('alert').textContent).toBe('Trash Destroyer is already running.')
     // The run it was refused against has ended since, and Run Now is offered again
@@ -245,6 +238,49 @@ describe('Run Now', () => {
     await waitFor(() => expect(cells('Trash Destroyer')[0]).toBe(formatDateTime('2026-11-19T10:42:00Z')))
     expect(screen.queryByRole('alert')).toBeNull()
     expect(row('Trash Destroyer').nextElementSibling?.hasAttribute('data-job') ?? true).toBe(true)
+  })
+
+  it('asks the list again when an action is refused, before saying so, so the row shows the job as the refusal finds it', async () => {
+    let started = false
+    const routes = jobRoutes()
+    const list = routes['GET /v1/admin/jobs'] as () => A['Job'][]
+    const { api } = await openJobs(jobRows, {
+      // The task started on its schedule since the list was read, which nothing has asked about
+      'POST /v1/admin/jobs/*/run': () => {
+        started = true
+        return problem(409, 'refused', 'This job is running already.')
+      },
+      'GET /v1/admin/jobs': () => list().map((job) => (started && job.name === 'IndexerTask' ? { ...job, running: true, canRun: false, canStop: true, result: null, lastStart: '2026-11-19T10:42:00Z', lastEnd: null } : job)),
+    })
+    const before = reads(api)
+    await userEvent.click(within(row('Indexer')).getByRole('button', { name: 'Run Now: Indexer' }))
+    const said = await screen.findByRole('alert')
+    expect(said.textContent).toBe('This job is running already.')
+    expect(reads(api)).toBe(before + 1)
+    // Asked before the refusal showed, so the row says what the refusal says
+    expect(cells('Indexer')[1]).toBe('Running')
+    expect(actions('Indexer')).toEqual(['Stop', 'Disable', 'Schedule…'])
+    expect(row('Indexer').nextElementSibling?.contains(said)).toBe(true)
+  })
+
+  it('asks the list again when the job is gone from the server, and the focus goes to the heading as its row goes', async () => {
+    let gone = false
+    const routes = jobRoutes()
+    const list = routes['GET /v1/admin/jobs'] as () => A['Job'][]
+    const { api } = await openJobs(jobRows, {
+      'POST /v1/admin/jobs/*/enable': () => {
+        gone = true
+        return problem(404, 'not-found')
+      },
+      'GET /v1/admin/jobs': () => list().filter((job) => !(gone && job.name === 'TagsProcessor')),
+    })
+    const before = reads(api)
+    const enable = within(row('Tags Processor')).getByRole('button', { name: 'Enable Tags Processor' })
+    enable.focus()
+    await userEvent.keyboard('{Enter}')
+    await waitFor(() => expect(names()).not.toContain('Tags Processor'))
+    expect(reads(api)).toBe(before + 1)
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('heading', { level: 1, name: 'Background Jobs' })))
   })
 
   it("asks again shortly after, as the answer may not show the run yet, then every 30 seconds while it runs, and stops once it's done", async () => {
@@ -350,7 +386,7 @@ describe('Stop and Disable', () => {
     await userEvent.click(stop)
     const question = await screen.findByRole('alertdialog', { name: 'Stop Indexer?' })
     expect(within(question).getByText(/It stops at its next check/)).toBeTruthy()
-    await expectNoAxeViolationsInBothThemes(view.container.ownerDocument.body)
+    await expectNoAxeViolations(view.container.ownerDocument.body)
     await userEvent.click(within(question).getByRole('button', { name: 'Cancel' }))
     await waitFor(() => expect(screen.queryByRole('alertdialog', { name: 'Stop Indexer?' })).toBeNull())
     expect(api.callsTo('POST /v1/admin/jobs/*/stop')).toHaveLength(0)
@@ -518,7 +554,7 @@ describe('Schedule…', () => {
     expect(within(dialog()).queryByRole('textbox', { name: 'Cron Expression' })).toBeNull()
     expect((save() as HTMLButtonElement).disabled).toBe(true)
     expect(document.activeElement).toBe(every())
-    await expectNoAxeViolationsInBothThemes(view.container.ownerDocument.body)
+    await expectNoAxeViolations(view.container.ownerDocument.body)
   })
 
   it('says at once why Save waits when the schedule it opens on is one the server would refuse now', async () => {
@@ -537,7 +573,7 @@ describe('Schedule…', () => {
     expect((within(opened).getByRole('radio', { name: 'When a Cron Expression Says' }) as HTMLInputElement).checked).toBe(true)
     expect((within(opened).getByRole('textbox', { name: 'Cron Expression' }) as HTMLInputElement).value).toBe('0 30 2 * * ?')
     expect(within(opened).queryByRole('textbox', { name: 'Every' })).toBeNull()
-    await expectNoAxeViolationsInBothThemes(view.container.ownerDocument.body)
+    await expectNoAxeViolations(view.container.ownerDocument.body)
   })
 
   it('saves a new interval in seconds, the cron member left out; the row follows, the Dashboard is asked again, and the dialog closes', async () => {
@@ -720,6 +756,22 @@ describe('Asking again', () => {
     await act(async () => void window.dispatchEvent(new Event('focus')))
     await settle()
     expect(reads(api)).toBe(2)
+  })
+
+  it('stops for good when a poll is refused as admins only: the app says so, and nothing more is asked', async () => {
+    let removed = false
+    const routes = jobRoutes(runningRows())
+    const list = routes['GET /v1/admin/jobs'] as () => A['Job'][]
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+    const { api } = await openJobs([], { ...routes, 'GET /v1/admin/jobs': () => (removed ? problem(403, 'admins-only') : list()) })
+    await settle()
+    removed = true
+    await waitSeconds(30)
+    expect(await screen.findByRole('heading', { level: 1, name: "You don't have access to Healdan Admin." })).toBeTruthy()
+    expect(screen.queryByRole('table', { name: 'Background Jobs' })).toBeNull()
+    const asked = api.calls.length
+    await waitSeconds(120)
+    expect(api.calls).toHaveLength(asked)
   })
 
   it('stops when the page is left', async () => {

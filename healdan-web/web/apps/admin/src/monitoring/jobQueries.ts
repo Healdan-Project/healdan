@@ -3,7 +3,7 @@
 
 import { useQuery, type QueryClient } from '@tanstack/react-query'
 import { useRef } from 'react'
-import { apiPath, type Api, type adminComponents } from '@healdan/api'
+import { ApiError, apiPath, type Api, type adminComponents } from '@healdan/api'
 import { ASK_ON_RETURN, useApi } from '@healdan/shell'
 import { adminKey, adminKeys, POLL_MS } from '../queries'
 
@@ -76,6 +76,21 @@ export function jobAction(api: Api, name: string, action: JobAction): Promise<A[
 /** A LogicalDOC task's new schedule: the job, with it, as the server then has it */
 export function saveSchedule(api: Api, name: string, change: A['JobScheduleChange']): Promise<A['Job']> {
   return api.send<A['Job']>('PUT', apiPath`/v1/admin/jobs/${name}/schedule`, change)
+}
+
+/**
+ * After an action the server refused as no longer allowed (`409`) or for a job it no longer has (`404`): the list read again
+ * at once, and waited for, as the refusal says the list is out of date and nothing else may ask (nothing runs, so nothing
+ * polls). The refusal is then said against the job as that read found it. A read that fails keeps the list as it was.
+ */
+export async function jobsStale(queryClient: QueryClient, refusal: unknown): Promise<void> {
+  if (!(refusal instanceof ApiError) || (refusal.status !== 409 && refusal.status !== 404)) return
+  await queryClient.refetchQueries({ queryKey: jobKeys.jobs, exact: true })
+}
+
+/** The job as the list last read it, or undefined once the list has none of that name */
+export function jobIn(queryClient: QueryClient, name: string): A['Job'] | undefined {
+  return queryClient.getQueryData<A['Job'][]>(jobKeys.jobs)?.find((job) => job.name === name)
 }
 
 /**

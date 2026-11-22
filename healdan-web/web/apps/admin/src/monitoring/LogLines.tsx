@@ -1,9 +1,10 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { memo, useLayoutEffect, useRef } from 'react'
+import { memo, useEffect, useLayoutEffect, useRef, type FocusEvent } from 'react'
 import type { adminComponents } from '@healdan/api'
 import { Button } from '@healdan/ui'
+import { focusLost } from '../focus'
 import { t } from '../strings'
 import type { AdminStringKey } from '../strings/en-US'
 import { formatLogTime, shortSource, type LogLines as Lines } from './useLogLines'
@@ -23,6 +24,12 @@ const LEVELS: Record<NonNullable<A['LogLine']['level']>, AdminStringKey> = {
   WARN: 'admin.serverLog.entry.WARN',
   ERROR: 'admin.serverLog.entry.ERROR',
   FATAL: 'admin.serverLog.entry.FATAL',
+}
+
+/** An entry's level in words; one the app has no words for, as after a server's upgrade, as the log writes it */
+function levelWords(level: NonNullable<A['LogLine']['level']>): string {
+  const key: AdminStringKey | undefined = LEVELS[level]
+  return key === undefined ? level : t(key)
 }
 
 /** A line that starts no entry, as the rest of a stack an earlier read ended in: no time, level or source */
@@ -52,7 +59,7 @@ const Entry = memo(function Entry({ entry }: { entry: A['LogLine'] }) {
       )}
       {entry.level === null ? <span /> : (
         <span className={styles.badge} data-level={entry.level}>
-          {t(LEVELS[entry.level])}
+          {levelWords(entry.level)}
         </span>
       )}
       {entry.source === null ? <span /> : (
@@ -123,12 +130,13 @@ export function LogLines({ label, lines, filtered }: LogLinesProps) {
   }
 
   // As entries are added or dropped: at the end, to the end; else the entry at the top where it was. Should it have gone,
-  // the top of what's left, and the lines before it read, so the reader is never thrown to the newest.
+  // the top of what's left, and the lines before it read, so the reader is never thrown to the newest. A new log, level or
+  // words, still loading, has nothing of what was read further up: it opens at its end, and nothing is read for the old.
   useLayoutEffect(() => {
     const element = box.current
     if (!element) return
     const kept = anchor.current
-    if (atEnd.current || kept === undefined) element.scrollTop = element.scrollHeight
+    if (latest.current.state !== 'loaded' || atEnd.current || kept === undefined) element.scrollTop = element.scrollHeight
     else {
       const item = [...element.querySelectorAll<HTMLElement>('li[data-position]')].find((one) => one.getAttribute('data-position') === kept.position)
       if (item) element.scrollTop = item.offsetTop - kept.offset
@@ -150,6 +158,22 @@ export function LogLines({ label, lines, filtered }: LogLinesProps) {
     wasFollowing.current = lines.following
   }, [lines.following])
 
+  // Show Earlier had the focus last: should it go, as at the start of the log, the box takes the focus it had
+  const top = useRef<HTMLDivElement>(null)
+  const earlierFocused = useRef(false)
+  function onFocus(event: FocusEvent) {
+    earlierFocused.current = top.current?.contains(event.target) === true && event.target.tagName === 'BUTTON'
+  }
+  function onBlur(event: FocusEvent) {
+    // Gone with its button, it stays known; moved away by the person, to anywhere, it doesn't
+    if (event.target.isConnected && !box.current?.contains(event.relatedTarget)) earlierFocused.current = false
+  }
+  useEffect(() => {
+    if (!lines.atStart || !earlierFocused.current) return
+    earlierFocused.current = false
+    if (focusLost()) box.current?.focus()
+  }, [lines.atStart])
+
   function onScroll() {
     measure()
     const element = box.current
@@ -159,9 +183,9 @@ export function LogLines({ label, lines, filtered }: LogLinesProps) {
 
   const loaded = lines.state === 'loaded'
   return (
-    <div ref={box} role="region" aria-label={t('admin.serverLog.lines', { log: label })} tabIndex={0} className={styles.lines} onScroll={onScroll}>
+    <div ref={box} role="region" aria-label={t('admin.serverLog.lines', { log: label })} tabIndex={0} className={styles.lines} onScroll={onScroll} onFocus={onFocus} onBlur={onBlur}>
       {loaded && (
-        <div className={styles.top}>
+        <div ref={top} className={styles.top}>
           {lines.atStart ? (
             <p>{t('admin.serverLog.atStart')}</p>
           ) : (
