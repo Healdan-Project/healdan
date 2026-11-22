@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { useEffect, useState } from 'react'
+import { useLayoutEffect, useState } from 'react'
 
 /** --row-height in tokens.css, which the list's height is counted in: the virtualiser needs one of its own */
 const ROW = 34
@@ -22,16 +22,22 @@ export function useRowsHeight(rows: number, shown: number) {
   const [box, setBox] = useState<HTMLDivElement | null>(null)
   const [bar, setBar] = useState(0)
 
-  useEffect(() => {
-    if (box === null || typeof ResizeObserver === 'undefined') return
+  // Before the browser paints, so the list isn't drawn once with the bar over its last row
+  useLayoutEffect(() => {
+    if (box === null) return
     // The list scrolls in its grid (Table's own box): what a scroll bar takes is the grid's height less what it shows
     const measure = () => {
       const grid = box.querySelector<HTMLElement>('[role="grid"]')
       setBar(grid === null ? 0 : Math.max(grid.offsetHeight - grid.clientHeight, 0))
     }
     measure()
+    if (typeof ResizeObserver === 'undefined') return
+    // The box, and the grid and what it holds: a scroll bar comes or goes with the columns too, the box keeping its size
     const watching = new ResizeObserver(measure)
     watching.observe(box)
+    const grid = box.querySelector<HTMLElement>('[role="grid"]')
+    if (grid) watching.observe(grid)
+    if (grid?.firstElementChild) watching.observe(grid.firstElementChild)
     return () => watching.disconnect()
   }, [box, rows])
 
