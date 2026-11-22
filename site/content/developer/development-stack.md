@@ -26,7 +26,12 @@ docker compose up -d --build
 
 - After a code change, rebuild with `docker compose up -d --build app`.
 - Maven's dependencies are cached between builds, but every source change runs the whole build again, the GWT
-  compile included. Changes only under `docker/`, to the `Dockerfile` or to top-level docs skip the Maven step.
+  compile included. Changes only under `docker/` (but `docker/with-build-ca.sh`, which the Maven step mounts), to the
+  `Dockerfile` or to top-level docs skip the Maven step.
+- Where a proxy re-signs HTTPS with a CA of its own, as in a Claude Code cloud session, the build needs the proxy's
+  CA certificates: add `docker/tests/compose.build-ca.yaml` to `COMPOSE_FILE` and name the file in
+  `HEALDAN_BUILD_CA`, both in `.env` (`HEALDAN_BUILD_CA=/root/.ccr/ca-bundle.crt` in a cloud session). See
+  [Building Behind a Proxy That Re-Signs HTTPS](../tests/#building-behind-a-proxy-that-re-signs-https).
 - To start over with an empty database and repository, run `docker compose down -v`.
 
 ## A Matter to Upload Into

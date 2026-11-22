@@ -78,6 +78,9 @@ if [ "${SMOKE_BUILD:-1}" = 0 ] && [ -z "${LOGICALDOC_IMAGE:-}" ] && ! docker ima
 fi
 # What a failed run keeps goes into a folder with nothing of another run's in it (docker/tests/lib.sh's results_folder)
 if [ -n "$RESULTS" ]; then results_folder SMOKE_RESULTS "$RESULTS" || refused=1; fi
+# HEALDAN_BUILD_CA names a file of CA certificates the build and step 9's npm ci trust, for a machine whose HTTPS a
+# proxy re-signs (docker/tests/lib.sh)
+build_ca_usable || refused=1
 [ "$refused" = 0 ] || exit 1
 
 WORK=$(mktemp -d)
@@ -383,7 +386,8 @@ if [ "${SMOKE_BUILD:-1}" = 0 ]; then
   built=$(docker image inspect -f '{{.Created}}' "$IMAGE" 2>/dev/null || true)
   echo "Testing $IMAGE${built:+, built $built}"
 else
-  compose build
+  # shellcheck disable=SC2046 # the overlay's -f and file, or nothing
+  compose $(build_ca_overlay) build
 fi
 check "the image's server.xml with an access log and a stuck-request warning added, for this stack" smoke_server_xml
 [ "$FAILED" = 0 ] || exit 1

@@ -15,15 +15,22 @@ FROM ${MAVEN_IMAGE} AS build
 WORKDIR /src
 COPY docker/maven-settings.xml /root/.m2/settings.xml
 # Container files, the Dockerfile itself and top-level docs are excluded so editing them does not re-run Maven on a
-# builder that has this stage cached. CI's layer cache keeps only the final image's layers, so CI runs it again.
+# builder that has this stage cached (docker/with-build-ca.sh, which the Maven step mounts, does). CI's layer cache keeps
+# only the final image's layers, so CI runs it again.
 COPY --exclude=docker --exclude=Dockerfile --exclude=.dockerignore --exclude=.gitignore --exclude=*.md . .
 # The cache mount keeps only third-party dependencies: the reactor's own artifacts (com/logicaldoc, about half its
 # size) are rebuilt every time. Docker CI saves the mount between runs (.github/workflows/docker-image.yml). It's
 # locked, so two builds on one machine, such as two smoke tests', take turns: each deletes com/logicaldoc as it ends,
 # which would take it from under the other's install.
+# A machine whose HTTPS a proxy re-signs, such as a Claude Code cloud session, passes the proxy's CA certificates as the
+# optional secret build_ca (docker build --secret id=build_ca,src=<file>, or HEALDAN_BUILD_CA=<file> for the Docker test
+# scripts), which docker/with-build-ca.sh has Maven and npm trust. Without it, the script runs Maven as it is. A secret
+# is neither in the layer nor in the cache key, so CI's build and the image are the same either way.
 RUN --mount=type=cache,target=/root/.m2/repository,sharing=locked \
     --mount=type=cache,target=/root/.npm \
-    mvn -B -ntp -DskipTests install \
+    --mount=type=secret,id=build_ca \
+    --mount=type=bind,source=docker/with-build-ca.sh,target=/tmp/with-build-ca.sh \
+    sh /tmp/with-build-ca.sh mvn -B -ntp -DskipTests install \
  && rm -rf /root/.m2/repository/com/logicaldoc
 RUN mkdir -p /build/ROOT \
  && cd /build/ROOT \

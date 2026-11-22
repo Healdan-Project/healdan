@@ -1,0 +1,16 @@
+# HEALDAN_BUILD_CA's file as the app's build's secret build_ca, which the Dockerfile's Maven build trusts, for a machine
+# whose HTTPS a proxy re-signs with a CA of its own, such as a Claude Code cloud session (/root/.ccr/ca-bundle.crt). The
+# Docker test scripts that build with Compose add it when HEALDAN_BUILD_CA is set (docker/tests/lib.sh's
+# build_ca_overlay). A stack of your own that builds there takes it the same way, after its other files:
+#   HEALDAN_BUILD_CA=/root/.ccr/ca-bundle.crt docker compose -f compose.yaml -f compose.dev.yaml \
+#     -f docker/tests/compose.build-ca.yaml up -d --build
+# The secret is neither in the image nor in its cache key, so the image is the one a build without it makes.
+services:
+  app:
+    build:
+      secrets:
+        - build_ca
+
+secrets:
+  build_ca:
+    file: ${HEALDAN_BUILD_CA:?names the file of CA certificates the build trusts}
