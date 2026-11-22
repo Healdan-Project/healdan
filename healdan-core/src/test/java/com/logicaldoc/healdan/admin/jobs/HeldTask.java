@@ -13,6 +13,7 @@ import com.logicaldoc.core.task.TaskTrigger;
  * A scheduled task of the tests' own, run by CE's {@code Task.run} as any task is, whose run waits until the test
  * releases it, so a test can see it running and stop it; {@link JobsTestHooks#list} lists it among the background
  * jobs. It's enabled, every hour, in memory only: no trigger or setting of its own exists, so its schedule isn't saved.
+ * A test can also hold a thread that runs it before CE's run begins ({@link #holdTheStart}), so the task stays idle.
  */
 public class HeldTask extends Task {
 
@@ -27,11 +28,44 @@ public class HeldTask extends Task {
 
 	private volatile Thread thread;
 
+	/** Holds a thread that runs it before CE's run begins, null for none */
+	private volatile CountDownLatch gate;
+
 	public HeldTask() {
 		super(NAME);
 		getScheduling().setEnabled(true);
 		getScheduling().setMode(TaskTrigger.MODE_SIMPLE);
 		getScheduling().setIntervalSeconds(3600);
+	}
+
+	/**
+	 * Holds each thread that runs it, before CE's run begins, until {@link #letStart} or {@link #release}: the task
+	 * stays idle meanwhile.
+	 */
+	public void holdTheStart() {
+		gate = new CountDownLatch(1);
+	}
+
+	/**
+	 * Lets a thread held by {@link #holdTheStart} begin CE's run.
+	 */
+	public void letStart() {
+		CountDownLatch held = gate;
+		if (held != null)
+			held.countDown();
+	}
+
+	@Override
+	public void run() {
+		CountDownLatch held = gate;
+		if (held != null)
+			try {
+				held.await(WAIT_MS, TimeUnit.MILLISECONDS);
+			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+				return;
+			}
+		super.run();
 	}
 
 	@Override
@@ -58,6 +92,7 @@ public class HeldTask extends Task {
 	 * @throws InterruptedException if the wait is interrupted
 	 */
 	public void release() throws InterruptedException {
+		letStart();
 		release.countDown();
 		Thread running = thread;
 		if (running != null)

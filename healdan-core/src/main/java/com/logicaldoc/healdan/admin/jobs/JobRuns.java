@@ -94,7 +94,7 @@ public final class JobRuns {
 	}
 
 	/**
-	 * @return whether a run of the job goes on, scheduled or asked for now
+	 * @return whether a run of the job goes on, scheduled or asked for now; for tests
 	 */
 	public boolean busy() {
 		return permit.availablePermits() == 0;

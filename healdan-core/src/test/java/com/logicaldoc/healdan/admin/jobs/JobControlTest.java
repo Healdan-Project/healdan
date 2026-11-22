@@ -11,6 +11,7 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
+import java.io.IOException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Date;
@@ -22,6 +23,8 @@ import org.junit.Before;
 import org.junit.Test;
 import org.quartz.CronExpression;
 
+import com.logicaldoc.core.runtime.Aspect;
+import com.logicaldoc.core.runtime.RunLevel;
 import com.logicaldoc.core.searchengine.IndexOptimizer;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.task.Task;
@@ -107,17 +110,96 @@ public class JobControlTest extends AbstractHealdanTestCase {
 		assertTrue(ended.canRun());
 	}
 
-	/** A second Run Now asked for before the first run's thread has begun the run is refused all the same */
+	/**
+	 * A second Run Now asked for before the first run's thread has begun CE's run, while the task is still idle, is
+	 * refused all the same
+	 */
 	@Test
 	public void testRunNowIsRefusedWhileTheRunAskedForIsStarting() throws Exception {
 		held = new HeldTask();
+		held.holdTheStart();
 		JobsTestHooks.list(held);
 
 		control.run(HeldTask.NAME, admin);
-		assertThrows(HealdanRuleException.class, () -> control.run(HeldTask.NAME, admin));
+		assertEquals("CE's run hasn't begun", Task.STATUS_IDLE, held.getStatus());
+		assertEquals(JobControl.ALREADY_RUNNING,
+				assertThrows(HealdanRuleException.class, () -> control.run(HeldTask.NAME, admin)).getMessage());
+		assertEquals(Task.STATUS_IDLE, held.getStatus());
 
+		held.letStart();
 		held.awaitStarted();
-		assertEquals(1, AdminRecord.events().size());
+		assertEquals(List.of(record("job.run-requested", HeldTask.NAME, null)), AdminRecord.events());
+	}
+
+	/** Where scheduled tasks are switched off on the server, CE's run does nothing, so no task runs now */
+	@Test
+	public void testRunNowIsRefusedWhileScheduledTasksAreOff() throws Exception {
+		held = new HeldTask();
+		JobsTestHooks.list(held);
+		RunLevel level = RunLevel.current();
+		boolean on = level.aspectEnabled(Aspect.SCHEDULEDTASKS);
+		assertTrue(on);
+		level.setAspect(Aspect.SCHEDULEDTASKS, false);
+		try {
+			for (String name : List.of(HeldTask.NAME, OPTIMIZER)) {
+				JobView view = jobs.one(name);
+				assertTrue(name, view.enabled());
+				assertFalse(name, view.canRun());
+				assertEquals(name, JobControl.SCHEDULED_TASKS_OFF,
+						assertThrows(HealdanRuleException.class, () -> control.run(name, admin)).getMessage());
+			}
+			// Healdan's own jobs aren't LogicalDOC's scheduled tasks
+			assertTrue(jobs.one(TrashStartup.JOB).canRun());
+		} finally {
+			level.setAspect(Aspect.SCHEDULEDTASKS, on);
+		}
+
+		assertEquals(Task.STATUS_IDLE, held.getStatus());
+		assertNull(held.getScheduling().getPreviousFireTime());
+		assertEquals(List.of(), AdminRecord.events());
+		assertTrue(jobs.one(HeldTask.NAME).canRun());
+	}
+
+	/**
+	 * A save that fails leaves the task's scheduling and its settings as they were, so the same change asked again is
+	 * made, not answered as one that changes nothing
+	 */
+	@Test
+	public void testAFailedSaveChangesNothing() throws Exception {
+		ContextProperties config = Context.get().getConfig();
+		TaskScheduling scheduling = task(OPTIMIZER).getScheduling();
+		JobSchedule before = JobSchedule.of(scheduling);
+		List<String> keys = List.of("mode", "interval", "cron", "enabled", "delay", "length").stream()
+				.map(key -> "schedule." + key + "." + OPTIMIZER).toList();
+		List<String> settings = keys.stream().map(config::getProperty).toList();
+		control.saver = failing -> {
+			// As CE's save sets the settings before it writes the file
+			config.setProperty("schedule.mode." + OPTIMIZER, failing.getMode());
+			config.setProperty("schedule.interval." + OPTIMIZER, Long.toString(failing.getInterval()));
+			config.setProperty("schedule.enabled." + OPTIMIZER, Boolean.toString(failing.isEnabled()));
+			throw new IOException("No space left on device");
+		};
+		try {
+			assertThrows(IllegalStateException.class,
+					() -> control.schedule(OPTIMIZER, new ScheduleDraft("simple", 3600L, null), admin));
+			assertThrows(IllegalStateException.class, () -> control.disable(OPTIMIZER, admin));
+		} finally {
+			control.saver = TaskScheduling::save;
+		}
+
+		assertEquals(before, JobSchedule.of(scheduling));
+		assertTrue(scheduling.isEnabled());
+		assertEquals(settings, keys.stream().map(config::getProperty).toList());
+		assertEquals(List.of(), AdminRecord.events());
+
+		assertEquals(JobSchedule.simple(3600),
+				control.schedule(OPTIMIZER, new ScheduleDraft("simple", 3600L, null), admin).schedule());
+		assertFalse(control.disable(OPTIMIZER, admin).enabled());
+		assertEquals(List.of(
+				record("job.schedule-changed", OPTIMIZER,
+						"{\"schedule\":{\"before\":\"%s\",\"after\":\"every 3600 seconds\"}}"
+								.formatted(before.describe())),
+				record("job.disabled", OPTIMIZER, null)), AdminRecord.events());
 	}
 
 	@Test

@@ -12,7 +12,8 @@ import com.logicaldoc.core.task.TaskTrigger;
  * task's {@link TaskScheduling} holds it.
  *
  * @param mode {@link #SIMPLE} or {@link #CRON}
- * @param intervalSeconds for {@link #SIMPLE}, the seconds from one run's start to the next; null for {@link #CRON}
+ * @param intervalSeconds for {@link #SIMPLE}, the seconds from one run's start to the next, one at least; null for
+ *        {@link #CRON}
  * @param cron for {@link #CRON}, the expression, read in the server's time zone; null for {@link #SIMPLE}
  */
 public record JobSchedule(String mode, Long intervalSeconds, String cron) {
@@ -41,10 +42,12 @@ public record JobSchedule(String mode, Long intervalSeconds, String cron) {
 
 	/**
 	 * @param scheduling a task's
-	 * @return its schedule: simple when its mode says so, otherwise cron, as CE's trigger reads it
+	 * @return its schedule: simple when its mode says so, otherwise cron, as CE's trigger reads it. A simple
+	 *         schedule's interval is in whole seconds, one at least, as a setting of less than a second, which only
+	 *         the configuration file can hold, is answered as every second
 	 */
 	public static JobSchedule of(TaskScheduling scheduling) {
-		return SIMPLE.equals(scheduling.getMode()) ? simple(scheduling.getIntervalSeconds())
+		return SIMPLE.equals(scheduling.getMode()) ? simple(Math.max(1, scheduling.getIntervalSeconds()))
 				: cron(scheduling.getCronExpression());
 	}
 

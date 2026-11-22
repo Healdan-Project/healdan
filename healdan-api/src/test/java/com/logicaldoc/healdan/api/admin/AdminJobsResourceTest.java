@@ -23,6 +23,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockHttpSession;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.logicaldoc.core.runtime.Aspect;
+import com.logicaldoc.core.runtime.RunLevel;
 import com.logicaldoc.core.searchengine.IndexOptimizer;
 import com.logicaldoc.core.task.Task;
 import com.logicaldoc.core.task.TaskManager;
@@ -169,6 +171,25 @@ public class AdminJobsResourceTest extends ApiTestCase {
 		assertFalse(job(HeldTask.NAME).path("running").booleanValue());
 		assertEquals(List.of("MONITORING job.run-requested job null HeldTask null",
 				"MONITORING job.stop-requested job null HeldTask null"), records());
+	}
+
+	/** Where the server has scheduled tasks switched off, no LogicalDOC task runs now, and the list says so */
+	@Test
+	public void testNoTaskRunsNowWhileScheduledTasksAreOff() throws Exception {
+		RunLevel level = RunLevel.current();
+		boolean on = level.aspectEnabled(Aspect.SCHEDULEDTASKS);
+		level.setAspect(Aspect.SCHEDULEDTASKS, false);
+		try {
+			for (JsonNode job : get(JOBS).webSession(web).send().json())
+				if (job.path("logicalDocTask").booleanValue())
+					assertFalse(job.toString(), job.path("canRun").booleanValue());
+			assertRefused(post(JOBS + "/" + OPTIMIZER + "/run").webSession(web).send(),
+					JobControl.SCHEDULED_TASKS_OFF);
+		} finally {
+			level.setAspect(Aspect.SCHEDULEDTASKS, on);
+		}
+		assertTrue(job(OPTIMIZER).path("canRun").booleanValue());
+		assertEquals(List.of(), records());
 	}
 
 	@Test

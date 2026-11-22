@@ -4698,8 +4698,9 @@ paths:
           `email-index` or `storage-alert`, and none of Healdan's jobs is
           stopped, switched off or rescheduled here.
         - LogicalDOC's tasks run on their `schedule`, while enabled. Run Now
-          is offered while one is enabled and idle, **Stop** while it runs,
-          and **Enable**, **Disable** and its schedule always. Its last run
+          is offered while one is enabled and idle, unless the server has
+          scheduled tasks switched off, **Stop** while it runs, and
+          **Enable**, **Disable** and its schedule always. Its last run
           failed when it logged an error while it ran, which `error` gives.
       tags: [Monitoring]
       responses:
@@ -4731,8 +4732,9 @@ paths:
           list.
         - `409 refused`, with a sentence that says why, for a job that
           can't run now (`canRun` false): one of Healdan's that's never run
-          now, such as `preview`, one switched off or disabled, and one
-          already running.
+          now, such as `preview`, one switched off or disabled, a
+          LogicalDOC task on a server with scheduled tasks switched off,
+          and one already running.
 
         Recorded as `job.run-requested`.
       tags: [Monitoring]
@@ -8559,7 +8561,8 @@ components:
           type: boolean
           description: |
             Whether **Run Now** runs it now: a LogicalDOC task while it's
-            enabled and idle, and the five of Healdan's jobs that
+            enabled and idle and the server has scheduled tasks on, and the
+            five of Healdan's jobs that
             `GET /v1/admin/jobs` names, each while it's switched on and not
             running
         canStop:

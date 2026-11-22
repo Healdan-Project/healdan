@@ -25,6 +25,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.util.ClassUtils;
 
+import com.logicaldoc.core.runtime.Aspect;
+import com.logicaldoc.core.runtime.RunLevel;
 import com.logicaldoc.core.task.Task;
 import com.logicaldoc.core.task.TaskManager;
 import com.logicaldoc.core.task.TaskScheduling;
@@ -69,7 +71,8 @@ import com.logicaldoc.util.spring.Context;
  * from ({@link com.logicaldoc.healdan.admin.errors.ErrorFingerprint}). CE's
  * run does nothing for a task that is disabled or running, and
  * stops only one that is running, so it can run now only when it is enabled
- * and idle, and stop only while it runs. Each can be enabled and disabled.
+ * and idle, and while the server's run level has scheduled tasks on, and stop
+ * only while it runs. Each can be enabled and disabled.
  */
 @Component
 public class Jobs {
@@ -191,8 +194,15 @@ public class Jobs {
 			result = running ? null : JobView.SUCCEEDED;
 		boolean enabled = scheduling.isEnabled();
 		return new JobView(task.getName(), label(task), lastStart, lastEnd, result, error, nextRun(scheduling),
-				enabled, running, enabled && !running, state == Task.STATUS_RUNNING, true, true,
+				enabled, running, enabled && !running && scheduledTasksOn(), state == Task.STATUS_RUNNING, true, true,
 				JobSchedule.of(scheduling));
+	}
+
+	/**
+	 * @return whether the server's run level has scheduled tasks on, without which CE's run of a task does nothing
+	 */
+	static boolean scheduledTasksOn() {
+		return RunLevel.current().aspectEnabled(Aspect.SCHEDULEDTASKS);
 	}
 
 	/**

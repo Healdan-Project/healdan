@@ -11,6 +11,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Consumer;
 
 import org.quartz.CronExpression;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,6 +28,7 @@ import com.logicaldoc.healdan.admin.AdminEvent.Change;
 import com.logicaldoc.healdan.admin.AdminEvents;
 import com.logicaldoc.healdan.admin.FieldRefusal;
 import com.logicaldoc.healdan.rules.FilingRules;
+import com.logicaldoc.util.config.ContextProperties;
 import com.logicaldoc.util.spring.Context;
 
 /**
@@ -35,9 +37,9 @@ import com.logicaldoc.util.spring.Context;
  * null for a job {@link Jobs} doesn't list, then refuses what the job doesn't allow now with a sentence of its own, and
  * answers the job as {@link Jobs#one} reads it after the action.
  * <ul>
- * <li><b>Run Now</b>: one of CE's tasks while it's enabled and idle, on a daemon thread of its own that runs the task
- * as its schedule does ({@code Task.run}), which keeps CE's record of the run; a second while that thread is alive is
- * refused, so two asked for at once make one run. One of Healdan's that can
+ * <li><b>Run Now</b>: one of CE's tasks while it's enabled and idle and scheduled tasks are on, on a daemon thread of
+ * its own that runs the task as its schedule does ({@code Task.run}), which keeps CE's record of the run; a second
+ * while that thread is alive is refused, so two asked for at once make one run. One of Healdan's that can
  * ({@link HealdanJob#canRunNow()}) while it's switched on and isn't running, through {@link HealdanJob#runNow()}.</li>
  * <li><b>Stop</b>: a CE task that runs and hasn't been asked to stop, with {@code Task.interrupt()}, which its run
  * checks as it goes. Never one of Healdan's.</li>
@@ -51,8 +53,9 @@ import com.logicaldoc.util.spring.Context;
  * so each action is recorded straight after it succeeded ({@link AdminEvents#recordAfter}): area
  * {@link AdminArea#MONITORING}, target kind {@code job}, no id, the job's name, and for the schedule the schedule
  * before and after ({@link JobSchedule#describe()}). Run Now and Stop are requests, recorded once taken; Enable,
- * Disable and the schedule only when they change something. A refusal changes and records nothing. Enable, Disable
- * and the schedule take turns, so two at once can't both find a task's scheduling as it was.
+ * Disable and the schedule only when they change something. A refusal changes and records nothing, and a save that
+ * fails puts the task's scheduling and its settings in memory back as they were, so the same change asked again is
+ * made. Enable, Disable and the schedule take turns, so two at once can't both find a task's scheduling as it was.
  */
 @Component
 public class JobControl {
@@ -67,6 +70,10 @@ public class JobControl {
 
 	/** Run Now of one of Healdan's jobs that doesn't run on this server */
 	public static final String SWITCHED_OFF = "This job is switched off on this server, so it doesn't run.";
+
+	/** Run Now of a task where scheduled tasks are switched off on the server */
+	public static final String SCHEDULED_TASKS_OFF = "Scheduled tasks are switched off on this server, so this task "
+			+ "doesn't run.";
 
 	/** Run Now of a disabled task */
 	public static final String DISABLED = "This task is disabled. Enable it to run it now.";
@@ -105,6 +112,15 @@ public class JobControl {
 	/** Held by Enable, Disable and the schedule while each reads a task's scheduling and saves it */
 	private final Object saves = new Object();
 
+	/** Saves a task's scheduling as CE does; tests set one that fails, and put it back */
+	volatile Saver saver = TaskScheduling::save;
+
+	/** Saves a task's scheduling, writing the server's configuration and rescheduling the task */
+	@FunctionalInterface
+	interface Saver {
+		void save(TaskScheduling scheduling) throws IOException, ParseException;
+	}
+
 	/**
 	 * A task's new schedule, as the form gives it, each member null when it wasn't given.
 	 *
@@ -136,7 +152,8 @@ public class JobControl {
 	 * @param actor who asks
 	 * @return the job, which may not show the run yet; null if there's no job of that name
 	 * @throws PersistenceException a {@link HealdanRuleException} when it can't run now, with the sentence that says
-	 *         why: {@link #SWITCHED_OFF}, {@link #RUNS_BY_ITSELF}, {@link #DISABLED} or {@link #ALREADY_RUNNING}
+	 *         why: {@link #SWITCHED_OFF}, {@link #RUNS_BY_ITSELF}, {@link #SCHEDULED_TASKS_OFF}, {@link #DISABLED} or
+	 *         {@link #ALREADY_RUNNING}
 	 */
 	public JobView run(String name, User actor) throws PersistenceException {
 		requireAdmin(actor);
@@ -233,15 +250,16 @@ public class JobControl {
 		JobSchedule before;
 		synchronized (saves) {
 			TaskScheduling scheduling = task.getScheduling();
-			before = JobSchedule.of(scheduling);
-			if (before.equals(wanted))
+			if (holds(scheduling, wanted))
 				return jobs.one(name);
-			scheduling.setMode(wanted.mode());
-			if (JobSchedule.SIMPLE.equals(wanted.mode()))
-				scheduling.setIntervalSeconds(wanted.intervalSeconds());
-			else
-				scheduling.setCronExpression(wanted.cron());
-			save(scheduling);
+			before = JobSchedule.of(scheduling);
+			save(scheduling, changing -> {
+				changing.setMode(wanted.mode());
+				if (JobSchedule.SIMPLE.equals(wanted.mode()))
+					changing.setIntervalSeconds(wanted.intervalSeconds());
+				else
+					changing.setCronExpression(wanted.cron());
+			});
 		}
 		recorded("job.schedule-changed", name, Map.of("schedule", new Change(before.describe(), wanted.describe())),
 				actor);
@@ -294,6 +312,17 @@ public class JobControl {
 		return JobSchedule.SIMPLE.equals(mode) ? JobSchedule.simple(draft.intervalSeconds()) : JobSchedule.cron(cron);
 	}
 
+	/**
+	 * @return whether the scheduling holds the schedule already: the same mode, and the same interval to the
+	 *         millisecond or the same expression
+	 */
+	private static boolean holds(TaskScheduling scheduling, JobSchedule wanted) {
+		boolean simple = JobSchedule.SIMPLE.equals(scheduling.getMode());
+		if (JobSchedule.SIMPLE.equals(wanted.mode()))
+			return simple && scheduling.getInterval() == wanted.intervalSeconds() * 1000;
+		return !simple && Objects.equals(scheduling.getCronExpression(), wanted.cron());
+	}
+
 	/** @return whether Quartz takes the expression and it has a time after now, in the server's time zone */
 	private static boolean comesRound(String cron) {
 		if (!CronExpression.isValidExpression(cron))
@@ -305,12 +334,17 @@ public class JobControl {
 		}
 	}
 
-	/** Starts a run of the task on a thread of its own, unless one it started is alive or the task isn't idle */
+	/**
+	 * Starts a run of the task on a thread of its own, unless one it started is alive or the task isn't idle, while
+	 * scheduled tasks are on and the task is enabled, as CE's run does nothing otherwise
+	 */
 	private void start(Task task) throws HealdanRuleException {
 		synchronized (started) {
 			Thread earlier = started.get(task.getName());
 			if ((earlier != null && earlier.isAlive()) || task.getStatus() != Task.STATUS_IDLE)
 				throw new HealdanRuleException(ALREADY_RUNNING);
+			if (!Jobs.scheduledTasksOn())
+				throw new HealdanRuleException(SCHEDULED_TASKS_OFF);
 			if (!task.getScheduling().isEnabled())
 				throw new HealdanRuleException(DISABLED);
 			Thread thread = new Thread(task, "healdan-run-now-" + task.getName());
@@ -343,24 +377,67 @@ public class JobControl {
 			TaskScheduling scheduling = task.getScheduling();
 			if (scheduling.isEnabled() == enabled)
 				return jobs.one(name);
-			scheduling.setEnabled(enabled);
-			save(scheduling);
+			save(scheduling, changing -> changing.setEnabled(enabled));
 		}
 		recorded(enabled ? "job.enabled" : "job.disabled", name, null, actor);
 		return jobs.one(name);
 	}
 
 	/**
-	 * Saves the scheduling in the server's configuration and reschedules the task, as the Classic Interface does
+	 * Changes the scheduling, then saves it in the server's configuration and reschedules the task, as the Classic
+	 * Interface does. A save that fails puts the scheduling, and the task's settings in the configuration in memory,
+	 * back as they were, as the save sets the settings before it writes them.
 	 *
 	 * @throws IllegalStateException if the configuration can't be written or the schedule read back: a fault
 	 */
-	private static void save(TaskScheduling scheduling) {
+	private void save(TaskScheduling scheduling, Consumer<TaskScheduling> change) {
+		Kept kept = Kept.of(scheduling);
+		change.accept(scheduling);
 		try {
-			scheduling.save();
-		} catch (IOException | ParseException e) {
+			saver.save(scheduling);
+		} catch (IOException | ParseException | RuntimeException e) {
+			kept.restore(scheduling);
 			throw new IllegalStateException("The schedule of task %s can't be saved".formatted(
 					scheduling.getTaskName()), e);
+		}
+	}
+
+	/**
+	 * A task's scheduling as it was before a change: what the change can set, and the task's settings as the
+	 * configuration in memory holds them, each as it is stored, null for none
+	 */
+	private record Kept(String mode, long interval, String cron, boolean enabled, Map<String, Object> settings) {
+
+		/** The settings CE's save writes, {@code schedule.<setting>.<task>} */
+		private static final List<String> SETTINGS = List.of("cron", "enabled", "length", "mode", "delay", "interval");
+
+		static Kept of(TaskScheduling scheduling) {
+			ContextProperties config = Context.get().getConfig();
+			Map<String, Object> settings = new HashMap<>();
+			for (String setting : SETTINGS) {
+				String key = key(setting, scheduling);
+				settings.put(key, config.get(key));
+			}
+			return new Kept(scheduling.getMode(), scheduling.getInterval(), scheduling.getCronExpression(),
+					scheduling.isEnabled(), settings);
+		}
+
+		void restore(TaskScheduling scheduling) {
+			scheduling.setMode(mode);
+			scheduling.setInterval(interval);
+			scheduling.setCronExpression(cron);
+			scheduling.setEnabled(enabled);
+			ContextProperties config = Context.get().getConfig();
+			settings.forEach((key, value) -> {
+				if (value != null)
+					config.put(key, value);
+				else
+					config.remove(key);
+			});
+		}
+
+		private static String key(String setting, TaskScheduling scheduling) {
+			return "schedule.%s.%s".formatted(setting, scheduling.getTaskName());
 		}
 	}
 

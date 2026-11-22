@@ -232,6 +232,23 @@ public class JobsTest extends AbstractHealdanTestCase {
 		assertTrue(switchedOn.overdue(now));
 	}
 
+	/** A simple schedule of less than a second, which only a setting can give, is answered as every second */
+	@Test
+	public void testAnIntervalUnderASecondIsASecond() {
+		HeldTask held = new HeldTask();
+		held.getScheduling().setInterval(500);
+		JobsTestHooks.list(held);
+		try {
+			assertEquals(JobSchedule.simple(1), jobs.one(HeldTask.NAME).schedule());
+			held.getScheduling().setInterval(0);
+			assertEquals(JobSchedule.simple(1), jobs.one(HeldTask.NAME).schedule());
+			held.getScheduling().setInterval(2500);
+			assertEquals("whole seconds", JobSchedule.simple(2), jobs.one(HeldTask.NAME).schedule());
+		} finally {
+			JobsTestHooks.reset();
+		}
+	}
+
 	/** Run Now is offered for one of Healdan's jobs that offers it, while it's switched on and isn't running */
 	@Test
 	public void testAHealdanJobCanRunNowWhileOnAndIdle() {

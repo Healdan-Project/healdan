@@ -15,6 +15,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZonedDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -241,7 +242,10 @@ public class StorageJobsTest extends AbstractStorageTestCase {
 		assertEquals(1, purge.runs.get());
 	}
 
-	/** A scheduled purge that comes due while one asked for now goes on waits for it, then runs */
+	/**
+	 * A scheduled purge that comes due while one asked for now goes on waits for it, then runs; its next run is a day
+	 * after it was due, as the executor has it, not after it began
+	 */
 	@Test
 	public void testAScheduledPurgeWaitsForARunNow() throws Exception {
 		HeldPurge purge = new HeldPurge(null);
@@ -250,24 +254,74 @@ public class StorageJobsTest extends AbstractStorageTestCase {
 		Thread now = purge.awaitStarted();
 
 		// The purge is due at once
+		Instant beforeStart = Instant.now();
 		startup.started();
-		long deadline = System.currentTimeMillis() + 20_000;
-		while (!startup.runs(StorageStartup.PURGE_JOB).hasWaiting() && System.currentTimeMillis() < deadline)
-			Thread.sleep(5);
-		assertTrue(startup.runs(StorageStartup.PURGE_JOB).hasWaiting());
+		awaitWaiting(StorageStartup.PURGE_JOB);
+		Instant waiting = Instant.now();
 		assertEquals("it waits", 1, purge.runs.get());
 
 		purge.release();
 		now.join(20_000);
-		deadline = System.currentTimeMillis() + 20_000;
+		long deadline = System.currentTimeMillis() + 20_000;
 		while (purge.runs.get() < 2 && System.currentTimeMillis() < deadline)
 			Thread.sleep(5);
 		assertEquals("then runs", 2, purge.runs.get());
 		JobView scheduled = await(StorageStartup.PURGE_JOB);
 		assertEquals(JobView.SUCCEEDED, scheduled.result());
-		// Daily, from its start
-		assertEquals(scheduled.lastStart().plus(Duration.ofDays(1)).toEpochMilli(), scheduled.nextRun().toEpochMilli(),
-				1000);
+		assertTrue("it began once the wait was over", scheduled.lastStart().isAfter(waiting));
+		// Due between the start and the wait
+		assertFalse(scheduled.nextRun().toString(), scheduled.nextRun().isBefore(beforeStart.plus(Duration.ofDays(1))));
+		assertFalse(scheduled.nextRun().toString(), scheduled.nextRun().isAfter(waiting.plus(Duration.ofDays(1))));
+	}
+
+	/**
+	 * Each of the scheduled runs of the retests, the purge and the nightly check that comes due while one asked for
+	 * now goes on waits for it, then runs and reports
+	 */
+	@Test
+	public void testEachScheduledRunWaitsForARunNow() throws Exception {
+		startup = startup(Purge.get());
+		ZonedDateTime night = StorageStartup.nightlyAfter(ZonedDateTime.now().plusDays(1));
+		long day = Duration.ofDays(1).toMillis();
+		Map<String, Runnable> scheduled = Map.of(StorageStartup.RETEST_JOB, startup::scheduledRetest,
+				StorageStartup.PURGE_JOB, () -> startup.atFixedRate(StorageStartup.PURGE_JOB, day),
+				StorageStartup.NIGHTLY_JOB, () -> startup.scheduledNightly(night));
+		for (Map.Entry<String, Runnable> job : scheduled.entrySet()) {
+			String name = job.getKey();
+			CountDownLatch release = new CountDownLatch(1);
+			CountDownLatch began = new CountDownLatch(1);
+			assertTrue(name, startup.runs(name).now(() -> {
+				began.countDown();
+				try {
+					release.await(20, TimeUnit.SECONDS);
+				} catch (InterruptedException e) {
+					Thread.currentThread().interrupt();
+				}
+			}));
+			assertTrue(name, began.await(20, TimeUnit.SECONDS));
+
+			Thread run = new Thread(job.getValue());
+			run.start();
+			awaitWaiting(name);
+			assertNull(name + " waits", jobs.one(name).lastStart());
+
+			release.countDown();
+			run.join(20_000);
+			JobView ran = jobs.one(name);
+			assertNotNull(name + " then runs", ran.lastStart());
+			assertEquals(name, JobView.SUCCEEDED, ran.result());
+		}
+		// The night's check schedules the next night's
+		assertEquals(StorageStartup.nightlyAfter(night.plusSeconds(1)).toInstant(),
+				jobs.one(StorageStartup.NIGHTLY_JOB).nextRun());
+	}
+
+	/** Waits, a bounded time, until a scheduled run of the job waits for a run asked for now */
+	private void awaitWaiting(String job) throws InterruptedException {
+		long deadline = System.currentTimeMillis() + 20_000;
+		while (!startup.runs(job).hasWaiting() && System.currentTimeMillis() < deadline)
+			Thread.sleep(5);
+		assertTrue(job + " waits", startup.runs(job).hasWaiting());
 	}
 
 	/** While a scheduled purge goes on, none runs now */

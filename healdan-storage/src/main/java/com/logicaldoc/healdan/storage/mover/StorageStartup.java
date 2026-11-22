@@ -96,6 +96,9 @@ public class StorageStartup implements HealdanStartListener {
 
 	private final StorageSettings settings;
 
+	/** Each job's work, by its name, and what its failure's log line calls it, for its scheduled runs and Run Now */
+	private final Map<String, Work> works;
+
 	/** The runs, scheduled and asked for now, one at a time, of each job that runs now when asked */
 	private final Map<String, JobRuns> runs = Map.of(RETEST_JOB, new JobRuns(RETEST_JOB), PURGE_JOB,
 			new JobRuns(PURGE_JOB), NIGHTLY_JOB, new JobRuns(NIGHTLY_JOB));
@@ -131,6 +134,18 @@ public class StorageStartup implements HealdanStartListener {
 		this.nightly = nightly;
 		this.alert = alert;
 		this.settings = settings;
+		this.works = Map.of(RETEST_JOB, new Work("backend retest", health::retest), PURGE_JOB,
+				new Work("purge", purge::run), ALERT_JOB, new Work("storage alert", alert::run), NIGHTLY_JOB,
+				new Work("nightly Store check", nightly::run));
+	}
+
+	/**
+	 * A job's work
+	 *
+	 * @param what what its failure's log line calls it
+	 * @param run the work
+	 */
+	private record Work(String what, Runnable run) {
 	}
 
 	@Override
@@ -187,12 +202,11 @@ public class StorageStartup implements HealdanStartListener {
 		status.scheduled(PURGE_JOB, first);
 		status.scheduled(ALERT_JOB, first);
 		try {
-			running.scheduleAtFixedRate(() -> atFixedRate(PURGE_JOB, "purge", purge::run, DAY_MS), purgeDelay, DAY_MS,
-					TimeUnit.MILLISECONDS);
+			running.scheduleAtFixedRate(() -> atFixedRate(PURGE_JOB, DAY_MS), purgeDelay, DAY_MS, TimeUnit.MILLISECONDS);
 			// Hourly, so a send that failed is tried again within the hour; storage.alert.sent keeps it to one email a
 			// day, and the first alert comes within 25 hours. Its failures are logged and never end its schedule
-			running.scheduleAtFixedRate(() -> atFixedRate(ALERT_JOB, "storage alert", alert::run, alertMillis),
-					purgeDelay, alertMillis, TimeUnit.MILLISECONDS);
+			running.scheduleAtFixedRate(() -> atFixedRate(ALERT_JOB, alertMillis), purgeDelay, alertMillis,
+					TimeUnit.MILLISECONDS);
 		} catch (RejectedExecutionException e) {
 			return; // stopped meanwhile
 		}
@@ -221,9 +235,13 @@ public class StorageStartup implements HealdanStartListener {
 		health.retestsEvery(delay);
 		Instant at = Instant.now().plus(delay);
 		JobStatus.get().scheduled(RETEST_JOB, at);
-		schedule(retests, () -> runs(RETEST_JOB)
-				.scheduled(() -> reported(RETEST_JOB, "backend retest", health::retest, this::scheduleRetest)), delay);
+		schedule(retests, this::scheduledRetest, delay);
 		return at;
+	}
+
+	/** A scheduled retest, once a run asked for now that goes on has ended, which schedules the next */
+	void scheduledRetest() {
+		runs(RETEST_JOB).scheduled(() -> reported(RETEST_JOB, this::scheduleRetest));
 	}
 
 	/** @return {@code storage.retestSeconds}; the default if it can't be read, as in a database outage */
@@ -245,10 +263,18 @@ public class StorageStartup implements HealdanStartListener {
 	private Instant scheduleNightly(ZonedDateTime at) {
 		nightlyScheduled.accept(at);
 		JobStatus.get().scheduled(NIGHTLY_JOB, at.toInstant());
-		schedule(scheduler, () -> runs(NIGHTLY_JOB).scheduled(() -> reported(NIGHTLY_JOB, "nightly Store check",
-				nightly::run, () -> scheduleNightly(nightlyAfter(at.plusSeconds(1))))),
-				Duration.between(ZonedDateTime.now(), at));
+		schedule(scheduler, () -> scheduledNightly(at), Duration.between(ZonedDateTime.now(), at));
 		return at.toInstant();
+	}
+
+	/**
+	 * A night's check, once a run asked for now that goes on has ended, which schedules the next night's
+	 *
+	 * @param at the night it was scheduled for
+	 */
+	void scheduledNightly(ZonedDateTime at) {
+		ZonedDateTime next = nightlyAfter(at.plusSeconds(1));
+		runs(NIGHTLY_JOB).scheduled(() -> reported(NIGHTLY_JOB, () -> scheduleNightly(next)));
 	}
 
 	private static void schedule(ScheduledExecutorService running, Runnable work, Duration delay) {
@@ -285,15 +311,18 @@ public class StorageStartup implements HealdanStartListener {
 
 	/**
 	 * Runs a job of a fixed rate's as {@link #reported} does, once a run asked for now that goes on has ended, if it
-	 * runs now: its next run is its period after this one was due, the executor's
+	 * runs now: its next run is its period after this one was due, as the executor has it, not after a wait
+	 *
+	 * @param job the purge or the alert
+	 * @param periodMillis its period
 	 */
-	private void atFixedRate(String job, String what, Runnable work, long periodMillis) {
+	void atFixedRate(String job, long periodMillis) {
 		Instant due = Instant.now();
 		JobRuns one = runs.get(job);
 		if (one != null)
-			one.scheduled(() -> reported(job, what, work, () -> due.plusMillis(periodMillis)));
+			one.scheduled(() -> reported(job, () -> due.plusMillis(periodMillis)));
 		else
-			reported(job, what, work, () -> due.plusMillis(periodMillis));
+			reported(job, () -> due.plusMillis(periodMillis));
 	}
 
 	/**
@@ -306,26 +335,12 @@ public class StorageStartup implements HealdanStartListener {
 	 * @throws IllegalArgumentException for another job, which never runs now
 	 */
 	boolean runNow(String job) {
-		Runnable work;
-		String what;
-		switch (job) {
-		case RETEST_JOB -> {
-			work = health::retest;
-			what = "backend retest";
-		}
-		case PURGE_JOB -> {
-			work = purge::run;
-			what = "purge";
-		}
-		case NIGHTLY_JOB -> {
-			work = nightly::run;
-			what = "nightly Store check";
-		}
-		default -> throw new IllegalArgumentException("Job " + job + " never runs now");
-		}
+		JobRuns one = runs.get(job);
+		if (one == null)
+			throw new IllegalArgumentException("Job " + job + " never runs now");
 		if (!StoreTracking.active())
 			return false;
-		return runs(job).now(() -> reported(job, what, work, () -> JobStatus.get().nextRun(job)));
+		return one.now(() -> reported(job, () -> JobStatus.get().nextRun(job)));
 	}
 
 	/** @return the runs of a job that runs now when asked; null for the alert */
@@ -334,15 +349,18 @@ public class StorageStartup implements HealdanStartListener {
 	}
 
 	/**
-	 * Runs one of the jobs as {@link #safely} does, then {@code then}, which may schedule its next run, whatever the
-	 * job did, and reports the run to {@link JobStatus} with the time {@code then} gives as its next run
+	 * Runs one of the jobs' work ({@link #works}) as {@link #safely} does, then {@code then}, which may schedule its
+	 * next run, whatever the job did, and reports the run to {@link JobStatus} with the time {@code then} gives as its
+	 * next run
 	 */
-	private static void reported(String job, String what, Runnable work, Supplier<Instant> then) {
+	private void reported(String job, Supplier<Instant> then) {
+		Work work = works.get(job);
+		String what = work.what();
 		JobStatus status = JobStatus.get();
 		status.started(job);
 		Throwable failure = null;
 		try {
-			work.run();
+			work.run().run();
 		} catch (VirtualMachineError e) {
 			failure = e;
 			throw e;
