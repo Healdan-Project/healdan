@@ -5,7 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import { ApiError, apiPath, type components } from '@healdan/api'
 import { Button, formatDateTime, formatSize, Icon, t, toast } from '@healdan/ui'
-import { launch } from '../actions/launch'
+import { launchDownload } from '../actions/launch'
 import { ErrorPanel } from '../frame/ErrorPanel'
 import { messageFor } from '../frame/errors'
 import { fileIcon } from '../kindIcons'
@@ -105,7 +105,7 @@ function Chip({ attachment, docNumber, version, folderId, canOpen, noFiling, onP
           className={styles.chipMain}
           disabled={!canOpen}
           aria-label={t('email.downloadAttachment', { name: attachment.name })}
-          onClick={() => launch(api.url(apiPath`/v1/documents/${docNumber}/message/parts/${attachment.index}`, versionQuery(version)), attachment.name)}
+          onClick={() => launchDownload(api.url(apiPath`/v1/documents/${docNumber}/message/parts/${attachment.index}`, versionQuery(version)))}
         >
           {label}
         </button>
@@ -195,7 +195,7 @@ export function EmailView({ document, version, showActions }: PreviewProps) {
               {t('email.backToMessage')}
             </Button>
             {/* The file itself, which the server records, whether or not its preview could be drawn; a button, as on the chips */}
-            <Button variant="quiet" isDisabled={!document.canOpen} aria-label={t('email.downloadAttachment', { name: viewing.name })} onPress={() => launch(api.url(part, versionQuery(version)), viewing.name)}>
+            <Button variant="quiet" isDisabled={!document.canOpen} aria-label={t('email.downloadAttachment', { name: viewing.name })} onPress={() => launchDownload(api.url(part, versionQuery(version)))}>
               <Icon name="download" size={18} />
               {t('details.download')}
             </Button>

@@ -5,7 +5,7 @@ import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { formatDateTime, setLabels } from '@healdan/ui'
-import { launch } from '../actions/launch'
+import { launch, launchDownload } from '../actions/launch'
 import { expectNoAxeViolations } from '../test/axe'
 import { document, folder, messageView, problem } from '../test/fakeApi'
 import { resetPdf } from '../test/fakePdf'
@@ -23,6 +23,7 @@ const save = 'POST /v1/documents/10388/message/attachments/*/file'
 beforeEach(() => {
   resetPdf()
   vi.mocked(launch).mockClear()
+  vi.mocked(launchDownload).mockClear()
   Object.defineProperty(URL, 'createObjectURL', { value: () => 'blob:attachment', configurable: true, writable: true })
   Object.defineProperty(URL, 'revokeObjectURL', { value: () => {}, configurable: true, writable: true })
 })
@@ -156,7 +157,7 @@ describe('EmailView', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: 'Download Schedule.xlsx' }))
 
-    expect(launch).toHaveBeenLastCalledWith('/api/v1/documents/10388/message/parts/3', 'Schedule.xlsx')
+    expect(launchDownload).toHaveBeenLastCalledWith('/api/v1/documents/10388/message/parts/3')
     expect(screen.queryByRole('button', { name: 'Preview Schedule.xlsx' })).toBeNull()
     expect(api.callsTo(part)).toHaveLength(0)
   })
@@ -228,7 +229,7 @@ describe('EmailView', () => {
     expect(await screen.findByRole('button', { name: 'Preview Report.pdf' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Preview Logo.JPG' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Download Fax.tif' }))
-    expect(launch).toHaveBeenLastCalledWith('/api/v1/documents/10388/message/parts/6', 'Fax.tif')
+    expect(launchDownload).toHaveBeenLastCalledWith('/api/v1/documents/10388/message/parts/6')
     expect(screen.queryByRole('button', { name: 'Preview Fax.tif' })).toBeNull()
   })
 
@@ -238,7 +239,7 @@ describe('EmailView', () => {
 
     expect(await screen.findByText("There's no preview for this kind of file.")).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Download Contract.pdf' }))
-    expect(launch).toHaveBeenLastCalledWith('/api/v1/documents/10388/message/parts/1', 'Contract.pdf')
+    expect(launchDownload).toHaveBeenLastCalledWith('/api/v1/documents/10388/message/parts/1')
   })
 
   it('offers no Download of the attachment shown to someone who may not download the email', async () => {
@@ -261,7 +262,7 @@ describe('EmailView', () => {
     expect((await screen.findByTitle('Message Body')).getAttribute('src')).toBe('/api/v1/documents/10388/message/body?version=1.0')
     expect(api.callsTo(message)[0]?.query).toEqual({ version: '1.0' })
     fireEvent.click(screen.getByRole('button', { name: 'Download Schedule.xlsx' }))
-    expect(launch).toHaveBeenLastCalledWith('/api/v1/documents/10388/message/parts/3?version=1.0', 'Schedule.xlsx')
+    expect(launchDownload).toHaveBeenLastCalledWith('/api/v1/documents/10388/message/parts/3?version=1.0')
     fireEvent.click(screen.getByRole('button', { name: 'Save to Matter: Contract.pdf' }))
     await waitFor(() => expect(api.callsTo(versioned)).toHaveLength(1))
 

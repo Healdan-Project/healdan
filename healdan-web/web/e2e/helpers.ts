@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { expect, type APIRequest, type APIRequestContext, type Locator, type Page } from '@playwright/test'
+import { expect, type APIRequest, type APIRequestContext, type Download, type Locator, type Page, type Response } from '@playwright/test'
 
 // webuser is made by healdan-core's SmokeWebUserSeed on the smoke stack; docker/tests/test-web.sh passes its password.
 export const USERNAME = 'webuser'
@@ -213,4 +213,22 @@ export async function expectListUnder(field: Locator) {
   expect(drawn.list, 'the list is drawn').not.toBeNull()
   const off = { left: drawn.list!.x - at!.x, top: drawn.list!.y - (at!.y + at!.height + 4), width: drawn.list!.width - box!.width }
   for (const [what, by] of Object.entries(off)) expect(Math.abs(by), `the list's ${what} against the field's (off by ${by} pixels)`).toBeLessThanOrEqual(1)
+}
+
+/**
+ * Starts a download with `start`, waits for it, and checks the server answered it with the file (`200`). The download
+ * alone proves little: a browser can save a refusal's body as readily as a file's, and under the name the page gave it,
+ * as WebKit did while the app's link had the `download` attribute.
+ */
+export async function downloadBy(page: Page, start: () => Promise<unknown>): Promise<Download> {
+  const answers = new Map<string, number>()
+  const note = (response: Response) => void answers.set(response.url(), response.status())
+  page.on('response', note)
+  try {
+    const [download] = await Promise.all([page.waitForEvent('download'), start()])
+    await expect.poll(() => answers.get(download.url()), { message: `the server's answer to the download of ${download.url()}` }).toBe(200)
+    return download
+  } finally {
+    page.off('response', note)
+  }
 }

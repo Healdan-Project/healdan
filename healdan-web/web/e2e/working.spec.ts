@@ -3,7 +3,7 @@
 
 import { readFile } from 'node:fs/promises'
 import { expect, test, type APIRequestContext, type Page, type Request } from '@playwright/test'
-import { PASSWORD, apiContext, authorized, call, deviceToken, escape, escaped, fileDocument, matterFolders, minimalPdf, signIn } from './helpers'
+import { PASSWORD, apiContext, authorized, call, deviceToken, downloadBy, escape, escaped, fileDocument, matterFolders, minimalPdf, signIn } from './helpers'
 
 // Working in the User app (M6 spec sections 6.4 to 6.6): Quick Look, reading an email, opening, downloading and checking out;
 // filing, organising and the keys have specs of their own. The documents are made here, through the API with a device token, in matter 1.1's
@@ -199,8 +199,9 @@ test('Quick Look shows an email as a message, with the sender\'s picture blocked
   expect(links).toContain(LINK)
   await popup.close()
 
-  // A chip that isn't a PDF or a picture downloads, through the web session as a navigation, under its own name
-  const [download] = await Promise.all([page.waitForEvent('download'), dialog.getByRole('button', { name: `Download ${TEXT_NAME}` }).click()])
+  // A chip that isn't a PDF or a picture downloads, through the web session as a navigation, under its own name, which the
+  // server gives it with the file (a refusal would be no download)
+  const download = await downloadBy(page, () => dialog.getByRole('button', { name: `Download ${TEXT_NAME}` }).click())
   expect(download.suggestedFilename()).toBe(TEXT_NAME)
 
   // The attachment is a chip: Save to Matter files it as a document of its own, whose # the chip then shows
@@ -224,18 +225,32 @@ async function selectWorkingDocument(page: Page, name = WORK_NAME) {
   return details
 }
 
-test('Download saves the file as a plain link, under the document\'s name', async ({ page, browserName }, testInfo) => {
+test('Download saves the file as a plain navigation, under the document\'s name', async ({ page }, testInfo) => {
   const details = await selectWorkingDocument(page)
-  // The web session carries the link: no script reads the bytes, and the browser's own download shows
-  const [download] = await Promise.all([page.waitForEvent('download'), details.getByRole('button', { name: 'Download', exact: true }).click()])
+  // The web session carries the navigation, a hidden frame's: no script reads the bytes, and the browser's own download shows.
+  // The server names the file, and its answer is the file's (downloadBy), which a refusal saved under the name wouldn't be
+  const download = await downloadBy(page, () => details.getByRole('button', { name: 'Download', exact: true }).click())
   expect(download.suggestedFilename()).toBe(WORK_NAME)
-  // WebKit's own copy of a download is gone before Playwright can read it in the container (ENOENT on its artifacts folder, whether
-  // by path() or saveAs()), so only Chromium's bytes are compared with what was filed; both browsers prove the name
-  if (browserName === 'chromium') {
-    const saved = testInfo.outputPath(WORK_NAME)
-    await download.saveAs(saved)
-    expect(await readFile(saved, 'utf8')).toBe(WORK_TEXT)
-  }
+  const saved = testInfo.outputPath(WORK_NAME)
+  await download.saveAs(saved)
+  expect(await readFile(saved, 'utf8')).toBe(WORK_TEXT)
+})
+
+test('A download the server refuses says why, and saves no file', async ({ page }) => {
+  const details = await selectWorkingDocument(page)
+  // The server's refusal while a file's storage can't be reached, which only comes after the click: a problem, which is a page
+  // and no file. The test answers for the server, as a stack whose storage is down serves no other test
+  const problem = { type: 'https://healdan.com/problems/storage-unreachable', title: 'Storage unreachable', status: 503, code: 'storage-unreachable', detail: 'The file is unavailable for now.' }
+  await page.route(/\/api\/v1\/documents\/\d+\/content$/, (route) => route.fulfill({ status: 503, contentType: 'application/problem+json', body: JSON.stringify(problem) }))
+  let downloads = 0
+  page.on('download', () => downloads++)
+  await details.getByRole('button', { name: 'Download', exact: true }).click()
+  // The message is the catalogue's for the problem's code, never the server's own words
+  await expect(page.getByText('Files are unavailable for now. Try again in a few minutes.')).toBeVisible()
+  await expect(page.getByText(problem.detail)).toHaveCount(0)
+  expect(downloads).toBe(0)
+  // The app is still there, on the document
+  await expect(details.getByRole('heading', { name: WORK_NAME })).toBeVisible()
 })
 
 test('Check Out holds the document for you, and Release lets it go', async ({ page }) => {

@@ -9,8 +9,8 @@ import { resetListSize } from './listSize'
 import { resetViewport } from './viewport'
 
 // The page follows an address (a healdan: link, a download) in one place, which jsdom can't do; a test that cares imports
-// `launch` from actions/launch and reads what it was asked to follow.
-vi.mock('../actions/launch', () => ({ launch: vi.fn() }))
+// `launch` or `launchDownload` from actions/launch and reads what it was asked to follow.
+vi.mock('../actions/launch', () => ({ launch: vi.fn(), launchDownload: vi.fn() }))
 
 installIntersectionObserver()
 // The router scrolls to the top on each address, which jsdom doesn't do and says so on every test.
