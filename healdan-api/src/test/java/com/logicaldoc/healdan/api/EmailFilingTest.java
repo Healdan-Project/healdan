@@ -42,6 +42,7 @@ import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.communication.MailUtil;
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentDAO;
+import com.logicaldoc.core.document.DocumentEvent;
 import com.logicaldoc.core.document.DocumentHistory;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
@@ -655,6 +656,28 @@ public class EmailFilingTest extends ApiTestCase {
 			FileUtils.deleteQuietly(eml);
 		}
 		before.assertUnchanged();
+	}
+
+	@Test
+	public void testFilesTickedAttachmentsPastABackgroundWriteAtTheFlush() throws Exception {
+		// Another write of the email commits just before the UPDATE of its count of links, whose failure CE's DAO
+		// swallows: the transaction that stored the link rolls back at its commit, unseen, and the link is stored again
+		String token = signIn(clerk);
+		long next = DocNumberCounter.get().peekNext();
+		ApiResponse response;
+		try (BackgroundWrite indexer = BackgroundWrite.atFlush(0, DocumentEvent.INDEXED, d -> d.setColor("red"))
+				.overtakingLinkCount().start()) {
+			response = fileEmail(token, request(documents, null, List.of(1)), eml(FIXTURE));
+			indexer.assertWritten();
+		}
+
+		assertEquals(response.toString(), 201, response.status());
+		assertEquals(1, response.json().path("attachments").size());
+		assertEquals(List.of("attachment " + id(next) + " " + id(next + 1)), liveLinks());
+		for (long docNumber : List.of(next, next + 1))
+			assertEquals(1, jdbc().queryForObject("select ld_links from ld_document where ld_id = ?", Integer.class,
+					id(docNumber)).intValue());
+		assertEquals(1, jdbc().queryForObject("select count(*) from ld_link", Integer.class).intValue());
 	}
 
 	@Test

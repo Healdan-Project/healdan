@@ -476,14 +476,64 @@ public class EmailFiling {
 		}
 	}
 
+	/**
+	 * Links an attachment's document to its email through CE's link DAO,
+	 * which stores the link and then, in the same transaction, reads each of
+	 * the two documents, counts its links and writes it. A write of either
+	 * document by another thread in that moment, such as the Indexer saving
+	 * the attachment it has just indexed, leaves CE's copy a record version
+	 * behind: CE's DAO swallows the failure of its flush, and the transaction
+	 * rolls back at the commit, the link with it, unseen and unlogged (CI,
+	 * 2026-11-21, as {@link CheckoutResource#checkOut}). So the link is read
+	 * back from the database, and while it isn't there CE is asked again,
+	 * with a link of its own each time.
+	 *
+	 * @param email the email
+	 * @param attachment the document filed from one of its attachments
+	 * @return the link, stored
+	 * @throws PersistenceException CE's failure; also when the link still
+	 *         isn't stored after the last try
+	 */
 	static DocumentLink link(Document email, Document attachment) throws PersistenceException {
-		DocumentLink link = new DocumentLink();
-		link.setType(LINK_TYPE);
-		link.setDocument1(email);
-		link.setDocument2(DocumentDAO.get().findById(attachment.getId()));
-		link.setTenantId(email.getTenantId());
-		DocumentLinkDAO.get().store(link);
-		return link;
+		for (int tries = 1;; tries++) {
+			DocumentLink link = new DocumentLink();
+			link.setType(LINK_TYPE);
+			link.setDocument1(email);
+			link.setDocument2(DocumentDAO.get().findById(attachment.getId()));
+			link.setTenantId(email.getTenantId());
+			try {
+				DocumentLinkDAO.get().store(link);
+			} catch (PersistenceException | RuntimeException e) {
+				if (!CheckoutResource.overtaken(e))
+					throw e;
+				// CE's own transaction decided whether the link was kept
+				if (stored(link))
+					return link;
+				if (tries >= CheckoutResource.TRIES)
+					throw e;
+				log.info("Linking document {} to its email {} again, as another write came first: {}",
+						attachment.getId(), email.getId(), e.getClass().getName());
+				continue;
+			}
+			if (stored(link))
+				return link;
+			if (tries >= CheckoutResource.TRIES)
+				throw new PersistenceException(
+						"The link of document %d to its email %d wasn't stored: other writes kept overtaking it"
+								.formatted(attachment.getId(), email.getId()));
+			log.info("Linking document {} to its email {} again, as another write overtook the link in its flush",
+					attachment.getId(), email.getId());
+		}
+	}
+
+	/**
+	 * @return whether the link's row is in the database: asked of the table, in
+	 *         a transaction of its own, since the entity CE's DAO was handed
+	 *         has an id whether or not its transaction was kept
+	 */
+	private static boolean stored(DocumentLink link) throws PersistenceException {
+		return link.getId() != 0L && DocumentLinkDAO.get()
+				.queryForLong("select count(*) from ld_link where ld_deleted = 0 and ld_id = " + link.getId()) > 0L;
 	}
 
 	/** The document as stored, for the answer; a test can make it fail after the links are stored */

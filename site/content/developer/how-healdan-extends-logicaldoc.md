@@ -786,6 +786,17 @@ see [Building from Source](../building-from-source/#running-the-war-outside-dock
   `UPSTREAM_TESTS`, and `DocumentChangesTest`'s renames and moves past a background write). A write lost in its
   flush, which rolls back unseen, still keeps its record: the API waits for it and drops it before it asks again,
   but the Classic Interface, WebDAV and the REST web service keep it, which is still open.
+- **An attachment's link is read back.** LogicalDOC's link DAO stores a link and then, in the same transaction,
+  reads each of its two documents, counts its links and writes the count to it. Another thread's write of either
+  document between that read and that write, as the Indexer's of an attachment it has just indexed, makes the
+  count's write fail in its flush, which LogicalDOC's DAO swallows: the transaction rolls back at its commit, the
+  link with it, unseen and unlogged. Save to Matter then answered `201` for a copy with no link, and the message
+  read next named no document for the attachment (the smoke test's step 9, whose Indexer runs every 5 seconds,
+  2026-11-21). So `EmailFiling.link`, which `POST /emails` and Save to Matter both link with, asks the table
+  whether the link's row is there and stores a new link while it isn't, three times at most; a link still not
+  stored fails the filing, which takes back what it filed (`MessageResourceTest`'s saves past the Indexer's write
+  and `EmailFilingTest#testFilesTickedAttachmentsPastABackgroundWriteAtTheFlush`, with `BackgroundWrite`'s
+  `overtakingLinkCount`). A link made in the Classic Interface can still be lost this way.
 - **Licence headers.** Every source file Healdan writes opens with two SPDX lines in its own comment syntax, with
   the year the file was created:
 

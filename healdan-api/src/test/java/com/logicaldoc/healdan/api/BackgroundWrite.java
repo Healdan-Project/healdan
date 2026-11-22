@@ -41,6 +41,11 @@ import com.logicaldoc.util.spring.Context;
  * {@code UPDATE} (CI, 2026-10-30). Hibernate then finds the row a record
  * version on, and CE's DAO swallows that failure: its transaction rolls back
  * at the commit, unseen.
+ * <p>
+ * {@link #overtakingLinkCount} overtakes the write CE's link DAO makes of a
+ * document once it has counted its links, inside the transaction that stores
+ * the link: as the Indexer does when it saves a document it has just indexed
+ * while Save to Matter links it to its email (CI, 2026-11-21).
  */
 final class BackgroundWrite implements DocumentListener, PreUpdateEventListener, AutoCloseable {
 
@@ -60,6 +65,15 @@ final class BackgroundWrite implements DocumentListener, PreUpdateEventListener,
 
 	/** The event of the one write of CE's it overtakes; null for the first of {@link #OVERTAKEN} */
 	private String overtaken;
+
+	/** True to overtake the write of a document's count of links, which has no history entry, and no other */
+	private boolean linkCount;
+
+	/** A document it leaves alone; 0 for none */
+	private long except;
+
+	/** True to overtake every such write of CE's, not the first alone */
+	private boolean always;
 
 	private final ExecutorService other = Executors.newSingleThreadExecutor();
 
@@ -129,6 +143,34 @@ final class BackgroundWrite implements DocumentListener, PreUpdateEventListener,
 	}
 
 	/**
+	 * @return this write, overtaking only the write CE's link DAO makes of the
+	 *         document once it has counted its links: a store with no history
+	 *         entry of a document that has links
+	 */
+	BackgroundWrite overtakingLinkCount() {
+		linkCount = true;
+		return this;
+	}
+
+	/**
+	 * @return this write, leaving the document given alone: with no document
+	 *         of its own (0), it overtakes the first write of any other
+	 */
+	BackgroundWrite except(long id) {
+		except = id;
+		return this;
+	}
+
+	/**
+	 * @return this write, overtaking every such write of CE's, not the first
+	 *         alone: other writes that keep coming
+	 */
+	BackgroundWrite always() {
+		always = true;
+		return this;
+	}
+
+	/**
 	 * Listens until closed. Hibernate can't drop a listener, so the one
 	 * {@link #atFlush} adds stays with the test's context, idle once closed.
 	 */
@@ -139,6 +181,11 @@ final class BackgroundWrite implements DocumentListener, PreUpdateEventListener,
 			Context.get(SessionFactory.class).unwrap(SessionFactoryImplementor.class).getEventListenerRegistry()
 					.appendListeners(EventType.PRE_UPDATE, this);
 		return this;
+	}
+
+	/** @return how many of CE's writes it has overtaken */
+	int writes() {
+		return writes;
 	}
 
 	/**
@@ -160,9 +207,8 @@ final class BackgroundWrite implements DocumentListener, PreUpdateEventListener,
 
 	@Override
 	public void beforeStore(Document document, DocumentHistory transaction, Map<String, Object> dictionary) {
-		if (!listening || writes > 0 || (docId != 0 && document.getId() != docId) || transaction == null
-				|| !(overtaken != null ? overtaken.equals(transaction.getEvent())
-						: OVERTAKEN.contains(transaction.getEvent())))
+		if (!listening || (writes > 0 && !always) || (docId != 0 && document.getId() != docId)
+				|| (except != 0 && document.getId() == except) || !overtakes(document, transaction))
 			return;
 		if (atFlush) {
 			// CE's DAO is about to read the document again, merge this copy and flush
@@ -172,6 +218,14 @@ final class BackgroundWrite implements DocumentListener, PreUpdateEventListener,
 		}
 		writes++;
 		write(document.getId());
+	}
+
+	/** @return whether CE's write of the document is one this overtakes */
+	private boolean overtakes(Document document, DocumentHistory transaction) {
+		if (linkCount)
+			return transaction == null && document.getId() != 0 && document.getLinks() > 0;
+		return transaction != null && (overtaken != null ? overtaken.equals(transaction.getEvent())
+				: OVERTAKEN.contains(transaction.getEvent()));
 	}
 
 	@Override
