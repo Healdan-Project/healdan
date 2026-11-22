@@ -7,6 +7,9 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.healdan.admin.FieldRefusal;
@@ -25,6 +28,8 @@ import com.logicaldoc.healdan.api.model.FieldError;
  */
 final class PeopleRequests {
 
+	private static final Logger log = LoggerFactory.getLogger(PeopleRequests.class);
+
 	private PeopleRequests() {
 	}
 
@@ -39,7 +44,7 @@ final class PeopleRequests {
 	 * @param call the service's call
 	 * @return what it returned
 	 * @throws ApiProblem {@code 422 validation} for the fields it refused; {@code 400 bad-request} for what it found
-	 *         malformed, which the routes check first
+	 *         malformed, which the routes check first, so one is logged at error as a fault
 	 */
 	static <T> T run(String failure, Call<T> call) {
 		try {
@@ -47,6 +52,9 @@ final class PeopleRequests {
 		} catch (FieldRefusal e) {
 			throw validation(e);
 		} catch (IllegalArgumentException e) {
+			// The routes check what the services would find malformed before they call them, so this is a fault: the
+			// error log, and the Errors screen, name it, by its class and message alone, never the request's body
+			log.error("{}: the people service refused a request as malformed: {}", failure, e.toString());
 			throw ApiProblem.badRequest("The request is malformed.");
 		} catch (PersistenceException e) {
 			// A rule's refusal is a veto, which the ProblemMapper answers 409 refused, wrapped or not

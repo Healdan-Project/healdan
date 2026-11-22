@@ -35,10 +35,10 @@ import com.logicaldoc.util.spring.Context;
  * @param language the language, never null
  * @param timeZone the time zone, null for none
  */
-record UserForm(String username, String firstName, String lastName, String email, String language,
+public record UserForm(String username, String firstName, String lastName, String email, String language,
 		String timeZone) {
 
-	static final String NO_USERNAME = "Give the person a username.";
+	public static final String NO_USERNAME = "Give the person a username.";
 
 	static final String LONG_USERNAME = "A username can't be longer than 255 characters.";
 
@@ -47,9 +47,9 @@ record UserForm(String username, String firstName, String lastName, String email
 
 	static final String USERNAME_FIXED = "A username never changes.";
 
-	static final String NO_FIRST_NAME = "Give the person a first name.";
+	public static final String NO_FIRST_NAME = "Give the person a first name.";
 
-	static final String NO_LAST_NAME = "Give the person a last name.";
+	public static final String NO_LAST_NAME = "Give the person a last name.";
 
 	static final String LONG_NAME = "A name can't be longer than 255 characters.";
 

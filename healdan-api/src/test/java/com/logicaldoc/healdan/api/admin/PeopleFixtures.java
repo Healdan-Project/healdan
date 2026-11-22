@@ -99,11 +99,6 @@ final class PeopleFixtures {
 		}
 	}
 
-	/** @return how many temporary passwords have been made */
-	int passwordsMade() {
-		return made.get();
-	}
-
 	static void emailSetUp() {
 		config().setProperty("default.smtp.host", "smtp.healdan.example");
 		config().setProperty("default.smtp.sender", "office@healdan.example");

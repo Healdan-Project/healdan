@@ -27,6 +27,7 @@ import com.logicaldoc.healdan.admin.people.ResetResult;
 import com.logicaldoc.healdan.admin.people.SignedOut;
 import com.logicaldoc.healdan.admin.people.UserAdministration;
 import com.logicaldoc.healdan.admin.people.UserDraft;
+import com.logicaldoc.healdan.admin.people.UserForm;
 import com.logicaldoc.healdan.api.ApiProblem;
 import com.logicaldoc.healdan.api.Caller;
 import com.logicaldoc.healdan.api.Paging;
@@ -155,9 +156,9 @@ public class AdminUsersResource {
 		if (body.emailPassword() == null) {
 			// The service checks the rest once it can make the account; until then, what's missing
 			List<FieldError> fields = new ArrayList<>();
-			missing(fields, "username", body.username(), "Give the person a username.");
-			missing(fields, "firstName", body.firstName(), "Give the person a first name.");
-			missing(fields, "lastName", body.lastName(), "Give the person a last name.");
+			missing(fields, "username", body.username(), UserForm.NO_USERNAME);
+			missing(fields, "firstName", body.firstName(), UserForm.NO_FIRST_NAME);
+			missing(fields, "lastName", body.lastName(), UserForm.NO_LAST_NAME);
 			fields.add(new FieldError("emailPassword", "required",
 					"Say whether to email the temporary password, or show it."));
 			throw ApiProblem.validation(fields);
