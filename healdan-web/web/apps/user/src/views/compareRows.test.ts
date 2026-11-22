@@ -21,6 +21,10 @@ function doc(n: number, over: Partial<S['DocumentView']> = {}): ListRow {
     folder: { id: 1, name: 'Documents', kind: 'folder' },
     matter: { id: 1, display: '998.1 – Alpha', client: { id: 1, number: 998, name: 'Acme' } },
     author: { username: 'u', displayName: 'Ann' },
+    docClass: null,
+    docSubclass: null,
+    typist: null,
+    email: null,
     dateFiled: '2026-01-01T00:00:00Z',
     lastModified: '2026-01-01T00:00:00Z',
     hold: null,
@@ -32,6 +36,7 @@ function doc(n: number, over: Partial<S['DocumentView']> = {}): ListRow {
 }
 const matterRef = (display: string, number = 998, name = 'Acme'): S['MatterRef'] => ({ id: 1, display, client: { id: 1, number, name } })
 const ids = (rows: ListRow[]) => rows.map((r) => (r.item.type === 'document' ? r.item.docNumber : -1))
+const email = (over: Partial<S['EmailView']>): Partial<S['DocumentView']> => ({ kind: 'email', email: { from: null, to: null, sent: null, ...over } })
 const hold = (computer: string, since: string): S['HoldView'] =>
   ({ kind: 'checkout', since, heldOn: { name: computer, app: 'Word' } }) as unknown as S['HoldView']
 
@@ -53,6 +58,12 @@ const ascending: [string, Partial<S['DocumentView']>, Partial<S['DocumentView']>
   ['lastUsed', { lastUsed: '2026-02-01T00:00:00Z' }, { lastUsed: '2026-10-01T00:00:00Z' }],
   ['type', { kind: 'excel', name: 'z.xlsx' }, { kind: 'word', name: 'a.docx' }],
   ['type', { kind: 'word', name: 'a.doc' }, { kind: 'word', name: 'a.DOCX' }],
+  ['class', { docClass: 'correspondence' }, { docClass: 'Pleadings' }],
+  ['subclass', { docSubclass: 'incoming' }, { docSubclass: 'Outgoing' }],
+  ['typist', { typist: { username: 'z', displayName: 'ann' } }, { typist: { username: 'a', displayName: 'Bob' } }],
+  ['from', email({ from: 'ann@example.com' }), email({ from: 'Bob <bob@example.com>' })],
+  ['to', email({ to: 'ann@example.com, bob@example.com' }), email({ to: 'Bob <bob@example.com>' })],
+  ['sent', email({ sent: '2026-02-01T00:00:00Z' }), email({ sent: '2026-10-01T00:00:00Z' })],
   ['computer', { hold: hold('Ann’s Mac', '2026-01-01T00:00:00Z') }, { hold: hold('bob PC', '2026-01-01T00:00:00Z') }],
   ['checkedOut', { hold: hold('A', '2026-02-01T00:00:00Z') }, { hold: hold('A', '2026-10-01T00:00:00Z') }],
 ]
@@ -89,6 +100,23 @@ describe('compareRows, by the server\'s rules', () => {
     const used = [doc(1), doc(2, { lastUsed: '2026-01-01T00:00:00Z' })]
     expect(ids(sortRows(used, { column: 'lastUsed', direction: 'ascending' }))).toEqual([2, 1])
     expect(ids(sortRows(used, { column: 'lastUsed', direction: 'descending' }))).toEqual([2, 1])
+  })
+
+  it("has no Class, Subclass, Typist, From, To or Sent for a row without one, nor an email's for a document that isn't one", () => {
+    const values: [string, Partial<S['DocumentView']>][] = [
+      ['class', { docClass: 'Pleadings' }],
+      ['subclass', { docSubclass: 'Outgoing' }],
+      ['typist', { typist: { username: 'u', displayName: 'Ann' } }],
+      ['from', email({ from: 'ann@example.com' })],
+      ['to', email({ to: 'ann@example.com' })],
+      ['sent', email({ sent: '2026-02-01T00:00:00Z' })],
+    ]
+    for (const [column, value] of values) {
+      // Neither the document with none nor the email with none of this one has a value
+      const rows = [doc(1), doc(2, email({})), doc(3, value)]
+      expect(ids(sortRows(rows, { column, direction: 'ascending' })), column).toEqual([3, 1, 2])
+      expect(ids(sortRows(rows, { column, direction: 'descending' })), column).toEqual([3, 1, 2])
+    }
   })
 
   it('compares every row equal for a column it does not know', () => {

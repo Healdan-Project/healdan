@@ -17,7 +17,7 @@ import { RECENT_SORTS, RecentView } from './views/RecentView'
 import { SearchView } from './views/SearchView'
 import { TrashView } from './views/TrashView'
 import { isTrashSort, isTrashView, type TrashSort, type TrashViewName } from './actions/trash'
-import { isSearchScope } from './search/scopes'
+import { isScopeSort, scopeOf } from './search/scopes'
 import { isSortColumn, type ListingOrder, type SortColumn } from './views/useListing'
 import { offeredFor } from './views/listColumns'
 import { sortSearch, type AddressSort } from './views/useListColumns'
@@ -91,14 +91,14 @@ const searchRoute = createRoute({
   validateSearch: (search: Record<string, unknown>): { scope?: string; q?: string; sort?: SortColumn; order?: ListingOrder } & Partial<Filters> => ({
     scope: text(search.scope),
     q: text(search.q),
-    sort: isSortColumn(search.sort) ? search.sort : undefined,
+    // Only a sort the scope's search takes (list columns spec 5.2): a document's in the Matters scope is none, as an unknown one is
+    sort: isScopeSort(scopeOf(text(search.scope)), search.sort) ? search.sort : undefined,
     order: search.order === 'asc' || search.order === 'desc' ? search.order : undefined,
     ...filterSearch(search),
   }),
   component: function SearchRoute() {
     const { scope, q, sort, order } = searchRoute.useSearch()
-    // A scope the API doesn't know is the default, Documents, as an address without one is
-    const where = isSearchScope(scope) ? scope : 'documents'
+    const where = scopeOf(scope)
     // A view of its own for each search, so a selection made in one isn't carried to the next; filters and sorting
     // change the same search and keep it.
     return <SearchView key={`${where}\u0000${q ?? ''}`} scope={where} q={q} sort={sort} order={order} />

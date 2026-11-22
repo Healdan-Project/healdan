@@ -4,6 +4,7 @@
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { formatDate } from '@healdan/ui'
 import { expectNoAxeViolations } from '../test/axe'
 import { sliderOf } from '../test/columns'
 import { comeBack } from '../test/comeBack'
@@ -142,7 +143,7 @@ describe('Recent Documents', () => {
     await waitFor(() => expect(headerNames()).toEqual(['Title', 'Doc #', 'Version', 'Matter', 'Edit Date', 'Last Used']))
     // Not left on the page's body, with the heading it was on gone
     await waitFor(() => expect(within(main()).getByRole('grid').contains(globalThis.document.activeElement)).toBe(true))
-    // Kept for Recent Documents, so Recent Emails still has its Author
+    // Kept for Recent Documents, so Recent Emails' layout is as it was
     expect(JSON.parse(window.localStorage.getItem('healdan.columns.recentDocuments')!).shown).not.toContain('author')
     expect(window.localStorage.getItem('healdan.columns.recentEmails')).toBeNull()
   })
@@ -272,16 +273,33 @@ describe('Recent Emails', () => {
     expect(screen.getByRole('button', { name: /Search In.*Emails/ })).toBeTruthy()
   })
 
-  it('shows Last Used and starts sorted by it, newest first, with a layout of its own', async () => {
+  it('starts with From and Sent, shows Last Used and starts sorted by it, newest first, with a layout of its own', async () => {
     const { router } = await renderApp('/recent/emails', usedRoutes)
     expect(await titles()).toEqual(['Charlie.xlsx', 'Alpha.pdf', 'bravo.docx'])
-    expect(headerNames()).toEqual(['Title', 'Doc #', 'Matter', 'Author', 'Edit Date', 'Last Used'])
+    expect(headerNames()).toEqual(['Title', 'Doc #', 'Matter', 'From', 'Sent', 'Last Used'])
     expect(header('Last Used').getAttribute('aria-sort')).toBe('descending')
     fireEvent.click(header('Doc #'))
     await waitFor(() => expect(router.history.location.search).toBe('?sort=docNumber&order=asc'))
     expect(await titles()).toEqual(['Alpha.pdf', 'bravo.docx', 'Charlie.xlsx'])
     await userEvent.click(within(main()).getByRole('button', { name: 'Columns' }))
     expect(await screen.findByRole('dialog', { name: 'Columns', description: 'For Recent Emails' })).toBeTruthy()
+  })
+
+  it('a widened column kept in PR 2 still gets From and Sent', async () => {
+    // A resize alone keeps no columns (list columns spec 4.8), so the kind's defaults apply, this release's included
+    window.localStorage.setItem('healdan.columns.recentEmails', '{"v":1,"widths":{"matter":240}}')
+    const claim = document({
+      docNumber: 10500,
+      name: 'Re Claim.eml',
+      lastUsed: '2026-11-11T10:00:00Z',
+      email: { from: 'Ann Smith <ann@example.com>', to: 'Bob Jones <bob@example.com>', sent: '2026-11-02T09:00:00Z' },
+    })
+    await renderApp('/recent/emails', { 'GET /v1/documents/recent': page([claim]) })
+    const [row] = await rows()
+    expect(headerNames()).toEqual(['Title', 'Doc #', 'Matter', 'From', 'Sent', 'Last Used'])
+    await waitFor(() => expect(header('Matter').style.width).toBe('240px'))
+    expect(within(row!).getByText('Ann Smith <ann@example.com>')).toBeTruthy()
+    expect(row!.textContent).toContain(formatDate('2026-11-02T09:00:00Z'))
   })
 
   it('says so when there are none', async () => {

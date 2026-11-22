@@ -182,9 +182,13 @@ public class TrashResourceTest extends ApiTestCase {
 
 	@Test
 	public void testPagingAndTheSorts() throws Exception {
-		long b = deleteDocument(file(letters, "b.docx"), clerkToken);
-		long a = deleteDocument(file(letters, "A.docx"), clerkToken);
-		long c = deleteDocument(file(letters, "c.docx"), clerkToken);
+		// Filed in three folders in one order and deleted in another, so that no sort below is the items' own order
+		Document fileA = file(letters, "A.docx");
+		Document fileC = file(documents, "c.docx");
+		Document fileB = file(drafts, "b.docx");
+		long b = deleteDocument(fileB, clerkToken);
+		long a = deleteDocument(fileA, clerkToken);
+		long c = deleteDocument(fileC, clerkToken);
 		Instant now = Instant.now();
 		deletedAt(a, now.minus(1, ChronoUnit.HOURS));
 		deletedAt(b, now.minus(3, ChronoUnit.HOURS));
@@ -204,6 +208,18 @@ public class TrashResourceTest extends ApiTestCase {
 		// By when deleted, newest first unless asked
 		assertEquals(List.of(a, c, b), ids(list("sort=deleted", clerkToken)));
 		assertEquals(List.of(b, c, a), ids(list("sort=deleted&order=asc", clerkToken)));
+		// By doc #, ascending unless asked
+		assertEquals(List.of(a, c, b), ids(list("sort=docNumber", clerkToken)));
+		assertEquals(List.of(b, c, a), ids(list("sort=docNumber&order=desc", clerkToken)));
+		// By where it was deleted from, a folder before its subfolders; ascending unless asked
+		assertEquals(List.of(c, b, a), ids(list("sort=deletedFrom", clerkToken)));
+		assertEquals(List.of(a, b, c), ids(list("sort=deletedFrom&order=desc", clerkToken)));
+		// By the name of who deleted it, ignoring case; ascending unless asked
+		deletedBy(b, "amy");
+		deletedBy(c, "Bea");
+		deletedBy(a, "cy");
+		assertEquals(List.of(b, c, a), ids(list("sort=deletedBy", clerkToken)));
+		assertEquals(List.of(a, c, b), ids(list("sort=deletedBy&order=desc", clerkToken)));
 
 		// Removed, newest removal first by default
 		for (long id : List.of(a, b, c))
@@ -215,13 +231,24 @@ public class TrashResourceTest extends ApiTestCase {
 		assertEquals(List.of(b, c, a), ids(list("view=removed&sort=removed", bossToken)));
 		assertEquals(List.of(a, c, b), ids(list("view=removed&sort=removed&order=asc", bossToken)));
 		assertEquals(List.of(a, c, b), ids(list("view=removed&sort=deleted", bossToken)));
+		// By the name of who removed it, ignoring case, ascending unless asked; by the night it's destroyed, which
+		// follows its removal, newest first unless asked
+		removedBy(a, "amy");
+		removedBy(b, "Max");
+		removedBy(c, "zed");
+		assertEquals(List.of(a, b, c), ids(list("view=removed&sort=removedBy", bossToken)));
+		assertEquals(List.of(c, b, a), ids(list("view=removed&sort=removedBy&order=desc", bossToken)));
+		assertEquals(List.of(b, c, a), ids(list("view=removed&sort=destroyed", bossToken)));
+		assertEquals(List.of(a, c, b), ids(list("view=removed&sort=destroyed&order=asc", bossToken)));
 	}
 
 	@Test
 	public void testAnUnknownViewSortOrOrderIsABadRequest() throws Exception {
 		assertProblem(list("view=all", bossToken), 400, "bad-request");
-		assertProblem(list("sort=docNumber", clerkToken), 400, "bad-request");
-		assertProblem(list("sort=deletedFrom", clerkToken), 400, "bad-request");
+		ApiResponse colour = list("sort=colour", clerkToken);
+		assertProblem(colour, 400, "bad-request");
+		assertEquals("The sort can be name, docNumber, deletedFrom, deletedBy, deleted, removedBy, removed or destroyed,"
+				+ " not colour.", colour.json().path("detail").textValue());
 		assertProblem(list("order=newest", clerkToken), 400, "bad-request");
 		assertProblem(list("limit=0", clerkToken), 400, "bad-request");
 		assertProblem(list("offset=-1", clerkToken), 400, "bad-request");
@@ -671,6 +698,16 @@ public class TrashResourceTest extends ApiTestCase {
 
 	private void removedAt(long item, Instant at) {
 		jdbc().update("update hd_trash_member set hd_removedat = ? where hd_trashid = ?", Timestamp.from(at), item);
+	}
+
+	/** Records another name for who deleted the item */
+	private void deletedBy(long item, String name) {
+		jdbc().update("update hd_trash set hd_deletedbyname = ? where hd_id = ?", name, item);
+	}
+
+	/** Records another name for who removed the item's members */
+	private void removedBy(long item, String name) {
+		jdbc().update("update hd_trash_member set hd_removedbyname = ? where hd_trashid = ?", name, item);
 	}
 
 	/** The row's deletion code of a document item's document */

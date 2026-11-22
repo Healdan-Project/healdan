@@ -74,13 +74,25 @@ export function authorized(token: string) {
   return { headers: { Authorization: `Bearer ${token}` } }
 }
 
-/** Files a document and gives its doc # */
-export async function fileDocument(api: APIRequestContext, token: string, folderId: number, name: string, mimeType: string, buffer: Buffer): Promise<number> {
+/**
+ * Files a document and gives its doc #. `properties`, by name, are values for its properties (the filing's `properties`): a
+ * value it would inherit inherits, any other becomes its own.
+ */
+export async function fileDocument(
+  api: APIRequestContext,
+  token: string,
+  folderId: number,
+  name: string,
+  mimeType: string,
+  buffer: Buffer,
+  properties?: Record<string, string>,
+): Promise<number> {
+  const document = { folderId, checkOut: false, ...(properties ? { properties } : {}) }
   const made = await call<{ docNumber: number }>(
     api.post('/api/v1/documents', {
       ...authorized(token),
       multipart: {
-        document: { name: 'document.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({ folderId, checkOut: false })) },
+        document: { name: 'document.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(document)) },
         file: { name, mimeType, buffer },
       },
     }),

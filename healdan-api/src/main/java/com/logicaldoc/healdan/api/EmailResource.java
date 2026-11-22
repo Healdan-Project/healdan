@@ -38,7 +38,6 @@ import com.logicaldoc.healdan.email.EmailIndex;
 import com.logicaldoc.healdan.email.MessageIds;
 import com.logicaldoc.healdan.email.MessageParts;
 import com.logicaldoc.healdan.email.StoredMessage;
-import com.logicaldoc.healdan.listing.DocumentAuthors.Author;
 import com.logicaldoc.healdan.security.AccessChecks;
 import com.logicaldoc.healdan.web.PublicAddress;
 
@@ -120,10 +119,10 @@ public class EmailResource {
 			List<DocumentView> copies = new ArrayList<>();
 			if (fields.messageId() != null) {
 				List<Document> readable = readable(EmailIndex.get().copies(fields.messageId()), user);
-				// The Authors in one query, not one a copy
-				Map<Long, Author> authors = ApiViews.authors(readable);
+				// What the rows show in one go, not a query a copy
+				ApiViews.RowReads rows = ApiViews.rows(readable);
 				for (Document copy : readable)
-					copies.add(ApiViews.document(copy, user, authors));
+					copies.add(ApiViews.document(copy, user, rows));
 			}
 			return new EmailInspection(fields.messageId(), fields.subject(), fields.from(), fields.to(), fields.cc(),
 					fields.sent(), fields.received(), List.copyOf(attachments), List.copyOf(copies));
@@ -245,10 +244,10 @@ public class EmailResource {
 					continue;
 				List<EmailCopy.Copy> copies = new ArrayList<>();
 				List<Document> readable = readable(found.getOrDefault(id, Collections.emptyList()), user);
-				// The Authors in one query, not one a copy
-				Map<Long, Author> authors = ApiViews.authors(readable);
+				// What the rows show in one go, not a query a copy
+				ApiViews.RowReads rows = ApiViews.rows(readable);
 				for (Document copy : readable)
-					copies.add(new EmailCopy.Copy(ApiViews.document(copy, user, authors),
+					copies.add(new EmailCopy.Copy(ApiViews.document(copy, user, rows),
 							base + DOCUMENT_PAGE + copy.getId()));
 				items.add(new EmailCopy(id, List.copyOf(copies)));
 			}

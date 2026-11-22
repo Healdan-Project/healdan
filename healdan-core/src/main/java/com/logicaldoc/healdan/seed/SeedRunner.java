@@ -30,7 +30,7 @@ public class SeedRunner {
 			"storage-settings", "storage-record-original", "storage-hide-stores", "profile-message-id",
 			"document-rows-granting-nothing", "trash-record-existing", "trash-system-destroy", "smoke-fixture",
 			"smoke-organising", "smoke-signin", "smoke-storage", "demo-fixture", "smoke-api-user", "smoke-web-user",
-			"smoke-second-matter");
+			"smoke-second-matter", "smoke-classes");
 
 	private static final String MARKER_PREFIX = "seed.";
 

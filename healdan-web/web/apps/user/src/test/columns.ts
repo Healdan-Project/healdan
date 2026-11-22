@@ -5,6 +5,28 @@ import { fireEvent, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { expect } from 'vitest'
 
+/** Every document column a folder's list and a search of documents offer, as kept in a layout's `shown` */
+export const EVERY_COLUMN = ['title', 'docNumber', 'version', 'author', 'edited', 'matter', 'client', 'location', 'filed', 'size', 'type', 'class', 'subclass', 'typist', 'from', 'to', 'sent']
+
+/**
+ * The document columns beyond Title, Doc #, Version, Author and Edit Date, each with its sort's name and its first click's
+ * order: a date newest first, the others A to Z (spec 4.2 of the list columns' design)
+ */
+export const FIRST_SORTS: [name: string, sort: string, order: 'asc' | 'desc'][] = [
+  ['Matter', 'matter', 'asc'],
+  ['Client', 'client', 'asc'],
+  ['Location', 'location', 'asc'],
+  ['Date Filed', 'filed', 'desc'],
+  ['Size', 'size', 'asc'],
+  ['File Type', 'type', 'asc'],
+  ['Class', 'class', 'asc'],
+  ['Subclass', 'subclass', 'asc'],
+  ['Typist', 'typist', 'asc'],
+  ['From', 'from', 'asc'],
+  ['To', 'to', 'asc'],
+  ['Sent', 'sent', 'desc'],
+]
+
 /** A heading's edge's slider, which React Aria resizes by: out of the keys and of a screen reader's reading until a resize */
 export const sliderOf = (heading: HTMLElement) => heading.querySelector<HTMLInputElement>('input[type="range"]')!
 

@@ -254,7 +254,8 @@ client.
 | `checkedOut` | Checked Out to Me | Title, Doc #, Version, Matter, Computer, Checked Out, Edit Date |
 | `beside` | any document list while the reading pane is docked | Title, Doc #, Edit Date |
 
-  Until PR 3 (§6), From and Sent don't exist, and the email kinds start as `documents` does, without Version.
+  Until PR 3 (§6), From and Sent don't exist, and the email kinds start as `documents` does, without Version. (PR 3
+  added From and Sent on 2026-11-21, and the email kinds have started as the table says since.)
 - **Beside the reading pane** (owner: option B), every document list uses the one `beside` layout, chosen with the same
   menu and panel. A column it names that the list under it doesn't offer (Last Used outside Recent, Computer outside
   Checked Out) is skipped there. M6 §6.4's fixed three columns become its default.
@@ -310,7 +311,9 @@ lists (call), and no other answer sends it. No SQL changes.
   does. Deleted From sorts by the path recorded at the delete (`hd_trash.hd_frompath`), ignoring case (call): the list
   shows a live, readable place's path as it is now (`TrashViews`' `livePlace`), so an item whose folder was renamed or
   moved since sorts by its old path. Sorting by the shown path would mean building every item's path in Java before
-  paging the whole Trash.
+  paging the whole Trash. (PR 3's review, 2026-11-21: the recorded path begins with the Store and the matter's own
+  folder, which the column never shows, so the sort goes by the recorded matter's client and matter numbers, as
+  numbers, then by the recorded path's steps inside the matter, and outside a matter by the whole path, last.)
 - **The SQL** is PR 3's, after the PostgreSQL switch, so it's written for PostgreSQL alone, by the PostgreSQL spec's §7.3
   and §7.4 rules: `ListingSql.nullsLast` for where NULLs go, `lower()` for any order that ignores case (PostgreSQL in the
   `C` locale sorts by code point), no `::` in SQL given to CE's helpers, typed text trimmed in Java.

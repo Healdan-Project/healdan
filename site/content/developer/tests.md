@@ -799,7 +799,10 @@ Tests](#the-web-modules-tests) are Maven's). [The Web App](../the-web-app/) says
   and builds that fail, the Admin app's code in a User app's file or PDF.js in an Admin app's build among them, and
   `scripts/workspace.test.mjs` checks the workspace's settings: that `.npmrc` sets `ignore-scripts` and
   `save-exact`, that `.nvmrc` names the Node that `healdan-web/pom.xml` downloads, that every app has its own type
-  check, and that ESLint refuses an app's import of another's code. CI runs them in the `Web` check.
+  check, and that ESLint refuses an app's import of another's code. `scripts/file-kinds.test.mjs` reads
+  `healdan-core`'s `FileKinds.java` and the string catalogue, and fails unless `FileKinds.BY_NAME`, the order the
+  server sorts File Type by, is the File Type filter's names A to Z, which is the order the browser sorts a one-page
+  list by. CI runs them in the `Web` check.
 - **Browser tests,** Playwright's specs in `healdan-web/web/e2e/`, in Chromium and WebKit. `docker/tests/test-web.sh`
   runs them in Playwright's Docker image, `mcr.microsoft.com/playwright:v<version>-noble`, where `<version>` is the
   `@playwright/test` version in `package-lock.json`, so the image's browsers are the ones that version expects.
@@ -979,14 +982,21 @@ Tests](#the-web-modules-tests) are Maven's). [The Web App](../the-web-app/) says
     Column** and the arrows, and finds the widths kept after a reload; adds **Client** from the **Columns** panel, which
     stays open with its focus when coming back to the window asks for the list again, moves it by a pointer's drag of
     its heading and by **Move Left**, and finds the order kept; hides **Doc #** beside the docked reading pane and finds
-    the folder's own list unchanged; sorts **Recent Documents** by **Title** and back by **Last Used**, the rows drawn in
-    the order the server's rules give the whole list the API returns; puts the defaults back with the panel's **Reset to
-    Default** and the heading menu's **Reset Columns**; and keeps widths set in a window 1,920 pixels wide in one 1,280
-    wide, where the list scrolls sideways, every column keeps its width and rows stay 34 pixels high. On the way it
-    checks what only a browser shows: an edge is 24 pixels wide and centred on the heading's edge, its line and a
-    heading drag's drop line are the accent's, a heading doesn't brighten while the pointer is on its edge (a `:has()`
-    rule), and a heading's first press drags it, with no sort after. WebKit sends a drag's `dragover` on a timer, so the
-    spec moves the pointer a pixel each way while it waits for the drop line.
+    the folder's own list unchanged; sorts **Recent Documents** by **Title** and back by **Last Used**, the rows drawn
+    in the order the server's rules give the whole list the API returns; puts the defaults back with the panel's **Reset
+    to Default** and the heading menu's **Reset Columns**; keeps widths set in a window 1,920 pixels wide in one 1,280
+    wide, where the list scrolls sideways, every column keeps its width and rows stay 34 pixels high; and, in a folder
+    of its own holding a document of each of three Classes, shows **Class** from the **Columns** panel, finds each
+    document's Class in its cell, and sorts the folder by it with clicks on its heading, A to Z and then Z to A,
+    checking the order of the server's answer and of the rows drawn, and that the address holds `sort=class`, then finds
+    both kept after a reload. Class is picked from a list, and the filing refuses a Class the list lacks: a fresh
+    install's list holds only the default Class, **Docs**, and on the smoke stack the `smoke-classes` setup step adds
+    **Correspondence** and **Pleadings**, the test's other two. Every document has a Class (one with none of its own
+    inherits its folder's, or the default), so no row is without one. On the way it checks what only a browser shows: an
+    edge is 24 pixels wide and centred on the heading's edge, its line and a heading drag's drop line are the accent's,
+    a heading doesn't brighten while the pointer is on its edge (a `:has()` rule), and a heading's first press drags it,
+    with no sort after. WebKit sends a drag's `dragover` on a timer, so the spec moves the pointer a pixel each way
+    while it waits for the drop line.
   - Each spec's own calls to the API (filing, checking, cleaning up) go through `apiContext` in `helpers.ts`, which
     sends every request on a connection of its own (`Connection: close`). Playwright's request context otherwise keeps
     connections for later requests, for as long as they stay open, and Tomcat closes one that has waited 20 seconds: a

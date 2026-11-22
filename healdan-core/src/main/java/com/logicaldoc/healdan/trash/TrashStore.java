@@ -32,6 +32,7 @@ import org.springframework.stereotype.Component;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.logicaldoc.healdan.listing.ListingSql;
 import com.logicaldoc.util.CollectionUtil;
 import com.logicaldoc.util.spring.Context;
 
@@ -44,9 +45,47 @@ public class TrashStore {
 
 	private static final ObjectMapper JSON = new ObjectMapper();
 
-	/** What the page's sort names stand for; the text sent is never put in the SQL */
-	private static final Map<String, String> SORTS = Map.of("name", "lower(t.hd_name)", "deleted", "t.hd_deletedat",
-			"removed", "m.hd_removedat");
+	/**
+	 * The doc # as a number; null for a folder, which records none. A recorded doc # has at most
+	 * {@link ListingSql#DOC_NUMBER_DIGITS}, as {@code TrashRecorder.docNumber} records one.
+	 */
+	private static final String DOC_NUMBER = "case when %s then cast(t.hd_docnumber as decimal(%d,0)) end".formatted(
+			ListingSql.digits("t.hd_docnumber", ListingSql.DOC_NUMBER_DIGITS), ListingSql.DOC_NUMBER_DIGITS);
+
+	/** The path recorded at the delete, step by step ({@link #pathOrder}) */
+	private static final String FROM_PATH = pathOrder("t.hd_frompath");
+
+	/**
+	 * The item was deleted from inside a matter: its recorded matter is there, and its path has the two steps a list
+	 * shows the matter's number for, the Store and the matter's own folder. A matter's own folder, deleted from its
+	 * Store, has the Store alone.
+	 */
+	private static final String IN_MATTER = "(position(chr(1) in %s) > 0 and exists (select 1 from hd_matter x where x.ld_id = t.hd_matterid))"
+			.formatted(FROM_PATH);
+
+	/**
+	 * Where it was deleted from, as a list shows it: the recorded matter's client's number and its own, each as a
+	 * number, then the path's steps inside the matter; outside a matter, the whole path, after every matter's. So
+	 * 998.9 comes before 998.10, whichever Store each is in, and whatever the matters' names.
+	 */
+	private static final List<String> DELETED_FROM = List.of(
+			"case when %s then (select c.hd_number from hd_matter x join hd_client c on c.ld_id = x.hd_clientid where x.ld_id = t.hd_matterid) end"
+					.formatted(IN_MATTER),
+			"case when %s then (select x.hd_number from hd_matter x where x.ld_id = t.hd_matterid) end"
+					.formatted(IN_MATTER),
+			// The first two steps and the chr(1) after each are left off; a path of those two alone leaves ''
+			"case when %1$s then substring(%2$s from length(split_part(%2$s, chr(1), 1)) + length(split_part(%2$s, chr(1), 2)) + 3) else %2$s end"
+					.formatted(IN_MATTER, FROM_PATH));
+
+	/**
+	 * What the page's sort names stand for, each the parts of its key in order; the text sent is never put in the SQL.
+	 * Deleted By and Removed By are the names recorded at the time, and Destroyed sorts as Removed, as the night it's
+	 * destroyed follows its removal.
+	 */
+	private static final Map<String, List<String>> SORTS = Map.of("name", List.of("lower(t.hd_name)"), "docNumber",
+			List.of(DOC_NUMBER), "deletedFrom", DELETED_FROM, "deletedBy", List.of("lower(t.hd_deletedbyname)"),
+			"deleted", List.of("t.hd_deletedat"), "removedBy", List.of("lower(m.hd_removedbyname)"), "removed",
+			List.of("m.hd_removedat"), "destroyed", List.of("m.hd_removedat"));
 
 	/** An item's top member is the folder or document the person deleted */
 	private static final String TOP = " from hd_trash t join hd_trash_member m on m.hd_trashid = t.hd_id"
@@ -317,17 +356,62 @@ public class TrashStore {
 
 	/**
 	 * @param query which items, in which order, and which page
-	 * @return the page of items
+	 * @return the page of items: an item with no value for a part of the
+	 *         sort's key last either way, and ties by the item's age, in the
+	 *         sort's direction
+	 * @throws IllegalArgumentException for a sort it doesn't know, which the
+	 *         caller refuses first
 	 */
 	public List<TrashItemRow> page(TrashQuery query) {
 		List<Object> args = new ArrayList<>();
 		String where = where(query, args);
-		String column = SORTS.getOrDefault(query.sort(), SORTS.get("deleted"));
+		List<String> keys = SORTS.get(query.sort());
+		if (keys == null)
+			throw new IllegalArgumentException("No sort by " + query.sort());
 		String direction = query.descending() ? " desc" : " asc";
+		StringBuilder order = new StringBuilder();
+		for (String key : keys)
+			order.append(ListingSql.nullsLast(key)).append(", ").append(key).append(direction).append(", ");
 		args.add(query.limit());
 		args.add(query.offset());
-		return jdbc.query("select " + ITEM_COLUMNS + TOP + where + " order by " + column + direction + ", t.hd_id"
-				+ direction + " limit ? offset ?", this::itemRow, args.toArray());
+		return jdbc.query("select " + ITEM_COLUMNS + TOP + where + " order by " + order + "t.hd_id" + direction
+				+ " limit ? offset ?", this::itemRow, args.toArray());
+	}
+
+	/**
+	 * A recorded path to sort by, its names in lower case and joined by
+	 * {@code chr(1)}, so that items order by its steps, ignoring case, a folder
+	 * before what it holds: {@code ["A"]}, {@code ["A","B"]},
+	 * {@code ["a","c"]}, {@code ["A B"]}. The path is the JSON array of names
+	 * {@link #path} writes, which as text wouldn't sort so ({@code ","} sorts
+	 * below {@code "]}). So the array's brackets and outer quotes are taken off
+	 * and the names joined by {@code chr(1)}, which sorts below every
+	 * character the text holds, as Jackson writes a control character as an
+	 * escape. An escaped backslash and an escaped quote are set aside as
+	 * {@code chr(2)} and {@code chr(3)} first, so that what parts two names, a
+	 * quote, a comma and a quote, is found only between names, and are put back
+	 * as themselves after; any other escape, a control character's, sorts as
+	 * its text. An empty path, outside the Stores, shows no place, so it is
+	 * null, as one not recorded is.
+	 * <p>
+	 * It's text functions alone, which no value fails. The database's
+	 * collation sorts by code point, as Healdan makes it.
+	 *
+	 * @param path the column holding the path
+	 * @return the order's expression
+	 */
+	private static String pathOrder(String path) {
+		// The shortest array of a name, [""], has four characters, and a shorter one would give substring a negative
+		// length
+		String names = "substring(%1$s from 3 for length(%1$s) - 4)".formatted(path);
+		String setAside = replace(replace(names, "concat(chr(92), chr(92))", "chr(2)"), "concat(chr(92), '\"')", "chr(3)");
+		String joined = replace(setAside, "'\",\"'", "chr(1)");
+		String putBack = replace(replace(joined, "chr(3)", "'\"'"), "chr(2)", "chr(92)");
+		return "case when length(%s) >= 4 then lower(%s) end".formatted(path, putBack);
+	}
+
+	private static String replace(String text, String from, String to) {
+		return "replace(%s, %s, %s)".formatted(text, from, to);
 	}
 
 	/**

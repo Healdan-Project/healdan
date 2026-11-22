@@ -9,6 +9,7 @@ import { formatDate, formatDateTime, setLabels } from '@healdan/ui'
 import { expectNoAxeViolations } from '../test/axe'
 import { clientList, clientOf, clientRows, clients, problem, type FakeApi } from '../test/fakeApi'
 import { bringObservedIntoView } from '../test/intersection'
+import { setListSize } from '../test/listSize'
 import { renderApp } from '../test/renderApp'
 import { TYPING_DELAY_MS } from '../pickers/typing'
 
@@ -118,6 +119,8 @@ describe('The Clients list', () => {
   })
 
   it('loads 100 rows at a time as the end of the list comes into view, to the end of what the server counted', async () => {
+    // Sized, the list draws the rows in view, as in a browser: with none it would draw all 150, and each again at every page
+    setListSize(1280, 680)
     const many = Array.from({ length: 150 }, (_, i) => clientOf({ id: 100 + i, number: 2000 + i, name: `Client ${String(i + 1).padStart(3, '0')}` }))
     const { api } = await renderApp('/clients', {
       'GET /v1/admin/clients': ({ query }: { query?: Record<string, unknown> }) => {
@@ -126,15 +129,22 @@ describe('The Clients list', () => {
       },
     })
     const table = await grid()
+    // How many rows the list holds, drawn or not: its heading row and the clients loaded
+    const held = () => Number(table.getAttribute('aria-rowcount'))
     expect(await within(table).findByRole('row', { name: '2000 Client 001' })).toBeTruthy()
+    expect(held()).toBe(1 + 100)
     act(() => bringObservedIntoView())
-    expect(await within(table).findByRole('row', { name: '2149 Client 150' })).toBeTruthy()
+    await waitFor(() => expect(held()).toBe(1 + 150))
     act(() => bringObservedIntoView())
     await new Promise((resolve) => setTimeout(resolve, 100))
     expect(listCalls(api).map((call) => [call.query?.offset, call.query?.limit])).toEqual([
       [0, 100],
       [100, 100],
     ])
+    // Scrolled past its end, where the list stops, it draws the last client the server counted
+    table.scrollTop = Number.MAX_SAFE_INTEGER
+    fireEvent.scroll(table)
+    expect(await within(table).findByRole('row', { name: '2149 Client 150' })).toBeTruthy()
   })
 
   it("opens a client's page when its row is clicked, or Enter is pressed on it", async () => {

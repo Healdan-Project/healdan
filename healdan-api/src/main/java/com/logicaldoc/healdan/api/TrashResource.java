@@ -93,11 +93,22 @@ public class TrashResource {
 
 	private static final String DELETED = "deleted";
 
-	private static final String NAME = "name";
+	private static final String DESTROYED = "destroyed";
 
 	private static final Set<String> VIEWS = Set.of(MINE, "everyone", REMOVED);
 
-	private static final Set<String> SORTS = Set.of(NAME, DELETED, REMOVED);
+	/** One for each of the Trash's columns, in the order a refusal names them */
+	private static final List<String> SORT_NAMES = List.of("name", "docNumber", "deletedFrom", "deletedBy", DELETED,
+			"removedBy", REMOVED, DESTROYED);
+
+	private static final Set<String> SORTS = Set.copyOf(SORT_NAMES);
+
+	/** What a refusal names: {@code name, docNumber, ..., removed or destroyed} */
+	private static final String SORTS_NAMED = String.join(", ", SORT_NAMES.subList(0, SORT_NAMES.size() - 1)) + " or "
+			+ SORT_NAMES.getLast();
+
+	/** The sorts by a time, newest first unless asked; the others go A to Z, smallest first */
+	private static final Set<String> TIMES = Set.of(DELETED, REMOVED, DESTROYED);
 
 	/** The refusal of a Store's item, with the ways it is restored */
 	static final String STORE_RESTORED_ELSEWHERE = "A Store is restored from Deleted Stores on the Admin app's Stores "
@@ -112,11 +123,13 @@ public class TrashResource {
 	/**
 	 * @param view {@code mine} (the default), {@code everyone} or
 	 *        {@code removed}; the last two for administrators only
-	 * @param sort {@code name}, {@code deleted} or {@code removed}; by
-	 *        default {@code removed} in the {@code removed} view and
-	 *        {@code deleted} in the others
-	 * @param order {@code asc} or {@code desc}; by default {@code asc} by
-	 *        name and {@code desc} by a time, newest first
+	 * @param sort {@code name}, {@code docNumber}, {@code deletedFrom},
+	 *        {@code deletedBy}, {@code deleted}, {@code removedBy},
+	 *        {@code removed} or {@code destroyed}, which {@link TrashStore}
+	 *        sorts by; by default {@code removed} in the {@code removed} view
+	 *        and {@code deleted} in the others
+	 * @param order {@code asc} or {@code desc}; by default {@code desc} by a
+	 *        time, newest first, and {@code asc} by anything else
 	 * @param offset how many items to skip
 	 * @param limit the most items to return
 	 * @return a page of the items
@@ -130,10 +143,10 @@ public class TrashResource {
 			throw ApiProblem.badRequest("The view can be mine, everyone or removed, not %s.".formatted(view));
 		String by = StringUtils.isEmpty(sort) ? (REMOVED.equals(shown) ? REMOVED : DELETED) : sort;
 		if (!SORTS.contains(by))
-			throw ApiProblem.badRequest("The sort can be name, deleted or removed, not %s.".formatted(sort));
+			throw ApiProblem.badRequest("The sort can be %s, not %s.".formatted(SORTS_NAMED, sort));
 		if (order != null && !"asc".equals(order) && !"desc".equals(order))
 			throw ApiProblem.badRequest("The order can be asc or desc, not %s.".formatted(order));
-		boolean descending = order != null ? "desc".equals(order) : !NAME.equals(by);
+		boolean descending = order != null ? "desc".equals(order) : TIMES.contains(by);
 		Paging paging = Paging.of(offset, limit);
 
 		User user = Caller.current().user();

@@ -6,9 +6,11 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import type { components } from '@healdan/api'
 import { expectNoAxeViolations } from '../test/axe'
+import { EVERY_COLUMN, FIRST_SORTS } from '../test/columns'
 import { comeBack } from '../test/comeBack'
 import { children, document, favorite, folder, page, problem, zone, type Routes } from '../test/fakeApi'
 import { bringObservedIntoView } from '../test/intersection'
+import { setListSize } from '../test/listSize'
 import { renderApp } from '../test/renderApp'
 import actionsCss from '../actions/actions.module.css?raw'
 
@@ -240,26 +242,55 @@ describe('FolderView', () => {
     expect(JSON.parse(window.localStorage.getItem('healdan.columns.folder')!).shown).toEqual(['title', 'docNumber', 'version', 'author', 'edited', 'client'])
   })
 
-  it("doesn't sort by a column the server doesn't sort a folder by yet: no arrow and no Sort items", async () => {
-    window.localStorage.setItem('healdan.columns.folder', JSON.stringify({ v: 1, shown: ['title', 'docNumber', 'matter', 'size'], widths: {} }))
-    const { api, router } = await renderApp('/folders/7', routes())
+  describe('every document column sorts on a folder, asking the server', () => {
+    /** Renders the folder with every document column shown */
+    async function everyColumn() {
+      window.localStorage.setItem('healdan.columns.folder', JSON.stringify({ v: 1, shown: EVERY_COLUMN, widths: {} }))
+      const rendered = await renderApp('/folders/7', routes())
+      await findRow(/Drafts/)
+      return rendered
+    }
+
+    it('with an arrow on the one the list is in, and room for one on the others', async () => {
+      await everyColumn()
+      expect(headerNames()).toEqual(['Title', 'Doc #', 'Version', 'Author', 'Edit Date', 'Matter', 'Client', 'Location', 'Date Filed', 'Size', 'File Type', 'Class', 'Subclass', 'Typist', 'From', 'To', 'Sent'])
+      expect(within(list()).getAllByRole('columnheader').map((one) => one.getAttribute('aria-sort'))).toEqual(['ascending', ...Array(16).fill('none')])
+    })
+
+    // One click each, so that no test waits out many: Date Filed and Sent newest first, the others A to Z
+    it.each(FIRST_SORTS)('%s, first by %s %s', async (name, sort, order) => {
+      const { api, router } = await everyColumn()
+      fireEvent.click(header(name))
+      await waitFor(() => expect(router.history.location.search).toBe(`?sort=${sort}&order=${order}`))
+      await waitFor(() => expect(api.callsTo('GET /v1/folders/7/children').at(-1)?.query).toEqual({ sort, order, zone, offset: 0, limit: 100 }))
+      await waitFor(() => expect(header(name).getAttribute('aria-sort')).toBe(order === 'asc' ? 'ascending' : 'descending'))
+    })
+
+    it("and a heading's menu sorts it", async () => {
+      const { api, router } = await everyColumn()
+      const menu = await headingMenu('Matter')
+      await userEvent.click(within(menu).getByRole('menuitemradio', { name: 'Sort Descending' }))
+      await waitFor(() => expect(router.history.location.search).toBe('?sort=matter&order=desc'))
+      await waitFor(() => expect(api.callsTo('GET /v1/folders/7/children').at(-1)?.query).toEqual({ sort: 'matter', order: 'desc', zone, offset: 0, limit: 100 }))
+    })
+  })
+
+  it('keeps a sort by Matter from the address', async () => {
+    const { api } = await renderApp('/folders/7?sort=matter&order=desc', routes())
     await findRow(/Drafts/)
-    expect(headerNames()).toEqual(['Title', 'Doc #', 'Matter', 'Size'])
-    expect(header('Matter').getAttribute('aria-sort')).toBeNull()
-    expect(header('Size').getAttribute('aria-sort')).toBeNull()
-    expect(header('Doc #').getAttribute('aria-sort')).toBe('none')
-    const menu = await headingMenu('Matter')
-    expect(within(menu).queryByRole('menuitemradio', { name: 'Sort Ascending' })).toBeNull()
-    expect(within(menu).queryByRole('menuitemradio', { name: 'Sort Descending' })).toBeNull()
-    expect(within(menu).getByRole('menuitem', { name: 'Hide Matter' })).toBeTruthy()
-    await userEvent.keyboard('{Escape}')
-    await waitFor(() => expect(screen.queryByRole('menu', { name: 'Matter Column' })).toBeNull())
-    fireEvent.click(header('Matter'))
-    // A sort would be in the address as the click ends (Doc #'s, below, is): there is none, and the list isn't asked again
-    expect(router.history.location.search).toBe('')
-    expect(api.callsTo('GET /v1/folders/7/children')).toHaveLength(1)
-    fireEvent.click(header('Doc #'))
-    expect(router.history.location.search).toBe('?sort=docNumber&order=asc')
+    expect(api.callsTo('GET /v1/folders/7/children')[0]?.query).toEqual({ sort: 'matter', order: 'desc', zone, offset: 0, limit: 100 })
+  })
+
+  it("takes a column's first sort for an address with no order: a date newest first, as a click does", async () => {
+    const dated = await renderApp('/folders/7?sort=edited', routes())
+    await findRow(/Drafts/)
+    expect(dated.api.callsTo('GET /v1/folders/7/children')[0]?.query).toEqual({ sort: 'edited', order: 'desc', zone, offset: 0, limit: 100 })
+    expect(header('Edit Date').getAttribute('aria-sort')).toBe('descending')
+    dated.view.unmount()
+    const numbered = await renderApp('/folders/7?sort=docNumber', routes())
+    await findRow(/Drafts/)
+    expect(numbered.api.callsTo('GET /v1/folders/7/children')[0]?.query).toEqual({ sort: 'docNumber', order: 'asc', zone, offset: 0, limit: 100 })
+    expect(header('Doc #').getAttribute('aria-sort')).toBe('ascending')
   })
 
   it('a refetch while the Columns panel is open keeps it open and its focus', async () => {
@@ -299,6 +330,8 @@ describe('FolderView', () => {
   })
 
   it('asks for the next 100 rows once as the end comes into view, and the count stays the total', async () => {
+    // Sized, the list draws the rows in view, as in a browser: with none it would draw all 200, and each again at every page
+    setListSize(1280, 680)
     const all = letters(250)
     const { api } = await renderApp(
       '/folders/7',
@@ -310,17 +343,22 @@ describe('FolderView', () => {
       }),
     )
     await findRow(/Letter 001/)
-    expect(dataRows()).toHaveLength(100)
+    // How many rows the list holds, drawn or not: its heading row and the documents loaded
+    const held = () => Number(list().getAttribute('aria-rowcount'))
+    expect(held()).toBe(1 + 100)
     expect(within(main()).getByText('250 documents')).toBeTruthy()
 
     act(() => {
       bringObservedIntoView()
       bringObservedIntoView()
     })
-    await findRow(/Letter 200/)
+    await waitFor(() => expect(held()).toBe(1 + 200))
     expect(api.callsTo('GET /v1/folders/7/children').map((call) => call.query?.offset)).toEqual([0, 100])
-    expect(dataRows()).toHaveLength(200)
     expect(within(main()).getByText('250 documents')).toBeTruthy()
+    // Scrolled past its end, where the list stops, it draws the last document loaded
+    list().scrollTop = Number.MAX_SAFE_INTEGER
+    fireEvent.scroll(list())
+    await findRow(/Letter 200/)
   })
 
   it('puts the selected document in the address', async () => {

@@ -41,7 +41,8 @@ function rowOf(item: Item): TrashRow {
 }
 
 // The columns (folders and Trash spec 7.2, 7.3): Name, Doc #, Deleted From and Deleted; Everyone's adds Deleted By, and
-// Removed has Deleted By, Removed By, Removed and Destroyed in place of Deleted. Name, Deleted and Removed sort.
+// Removed has Deleted By, Removed By, Removed and Destroyed in place of Deleted. Every one sorts on the server, by its id
+// (list columns spec 5.2): the dates newest first at the first click, the others A to Z.
 const name: TableColumn<TrashRow> = {
   id: 'name',
   name: t('trash.name'),
@@ -57,13 +58,16 @@ const name: TableColumn<TrashRow> = {
     </>
   ),
 }
-const docNumber: TableColumn<TrashRow> = { id: 'docNumber', name: t('trash.docNumber'), align: 'end', width: 96, cell: ({ item }) => (item.docNumber === null ? '' : String(item.docNumber)) }
-const deletedFrom: TableColumn<TrashRow> = { id: 'deletedFrom', name: t('trash.deletedFrom'), width: '2fr', cell: ({ item }) => deletedFromText(item) }
+const docNumber: TableColumn<TrashRow> = { id: 'docNumber', name: t('trash.docNumber'), allowsSorting: true, align: 'end', width: 96, cell: ({ item }) => (item.docNumber === null ? '' : String(item.docNumber)) }
+const deletedFrom: TableColumn<TrashRow> = { id: 'deletedFrom', name: t('trash.deletedFrom'), allowsSorting: true, width: '2fr', cell: ({ item }) => deletedFromText(item) }
 const deleted: TableColumn<TrashRow> = { id: 'deleted', name: t('trash.deleted'), allowsSorting: true, newestFirst: true, width: 132, cell: ({ item }) => formatDate(item.deletedAt) }
-const deletedBy: TableColumn<TrashRow> = { id: 'deletedBy', name: t('trash.deletedBy'), width: '1fr', cell: ({ item }) => item.deletedBy?.name ?? '' }
-const removedBy: TableColumn<TrashRow> = { id: 'removedBy', name: t('trash.removedBy'), width: '1fr', cell: ({ item }) => item.removedBy?.name ?? t('trash.notRecorded') }
+const deletedBy: TableColumn<TrashRow> = { id: 'deletedBy', name: t('trash.deletedBy'), allowsSorting: true, width: '1fr', cell: ({ item }) => item.deletedBy?.name ?? '' }
+const removedBy: TableColumn<TrashRow> = { id: 'removedBy', name: t('trash.removedBy'), allowsSorting: true, width: '1fr', cell: ({ item }) => item.removedBy?.name ?? t('trash.notRecorded') }
 const removed: TableColumn<TrashRow> = { id: 'removed', name: t('trash.removed'), allowsSorting: true, newestFirst: true, width: 132, cell: ({ item }) => (item.removedAt ? formatDate(item.removedAt) : '') }
-const destroyed: TableColumn<TrashRow> = { id: 'destroyed', name: t('trash.destroyed'), width: 120, cell: ({ item }) => <DestroyIn destroyAfter={item.destroyAfter} /> }
+const destroyed: TableColumn<TrashRow> = { id: 'destroyed', name: t('trash.destroyed'), allowsSorting: true, newestFirst: true, width: 120, cell: ({ item }) => <DestroyIn destroyAfter={item.destroyAfter} /> }
+
+/** Each sort's column, whose `newestFirst` says which way an address's sort without an order goes, as the server's does */
+const sortColumnOf: Record<TrashSort, TableColumn<TrashRow>> = { name, docNumber, deletedFrom, deleted, deletedBy, removedBy, removed, destroyed }
 
 /** The kept widths of each view are its own (spec 4.8): the Trash's columns aren't chosen */
 const kindOf: Record<TrashViewName, ListKind> = { mine: 'trashMine', everyone: 'trashEveryone', removed: 'trashRemoved' }
@@ -245,9 +249,11 @@ export function TrashView({ view: asked, sort, order }: TrashViewProps) {
     },
   }
 
-  // The server's own order is newest first: by when it was removed in Removed, else by when it was deleted
+  // The server's own order is newest first: by when it was removed in Removed, else by when it was deleted. A sort without an
+  // order is the server's first for it, a time's newest first and anything else's A to Z, as a click's is
+  const first: TableSort['direction'] = sort && sortColumnOf[sort].newestFirst ? 'descending' : 'ascending'
   const shown: TableSort = sort
-    ? { column: sort, direction: order === 'asc' ? 'ascending' : order === 'desc' ? 'descending' : sort === 'name' ? 'ascending' : 'descending' }
+    ? { column: sort, direction: order === 'asc' ? 'ascending' : order === 'desc' ? 'descending' : first }
     : { column: view === 'removed' ? 'removed' : 'deleted', direction: 'descending' }
 
   function sortBy(next: TableSort) {

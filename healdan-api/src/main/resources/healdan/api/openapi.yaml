@@ -856,10 +856,22 @@ paths:
         page. No count includes a document the caller can't read.
 
         The `folders`, `matters` and `clients` scopes look at the first 10,000
-        hits; their `total` is always `null`, and a page with fewer than
-        `limit` items is the last one. They take no filters, `sort` or
-        `facets`: any is `400`. Pages are filled from the hits that follow the
-        ones skipped.
+        hits. They take no filters or `facets`: any is `400`. Without `sort`,
+        they keep the search's own order, their `total` is always `null`, a
+        page with fewer than `limit` items is the last one, and pages are
+        filled from the hits that follow the ones skipped. Their `sort` is one
+        of the columns their lists show: `folders` takes `title` (the
+        folder's name, ignoring case, then its matter) or `matter` (the
+        client's number, then the matter's, each as a number, then the
+        folder's name; a Store, in no matter, comes last either way),
+        `matters` takes `matter` or `client` (the client's name, ignoring
+        case, then the matter, so one client's matters go by number), and
+        `clients` takes `client`. Any other `sort` is `400`. What is still
+        equal goes by the folder's or matter's `id`, in the sort's
+        direction. Sorted, they read the first 10,000 hits and sort
+        the ones the caller can see: `total` is their count when the search
+        found every hit; when it stopped before the last, `total` is `null`
+        and `totalAtLeast` says how many it found.
 
         With `within`, the `folders` and `documents` scopes return only what
         is inside that folder, at any depth. A `#` lookup in the `documents`
@@ -2443,20 +2455,34 @@ paths:
           in: query
           required: false
           description: |
-            `name` (ignoring case), `deleted` (when it was deleted) or
-            `removed` (when it was removed, for the `removed` view). By
-            default `removed` in the `removed` view and `deleted` in the
-            others. Ties go by the item's age. Doc # and where it was deleted
-            from don't sort.
+            `name` (ignoring case), `docNumber` (as a number), `deletedFrom`
+            (as a list shows it: the client's and the matter's numbers of
+            the matter recorded at the delete, each as a number, then the
+            folders inside the matter on the path recorded then, folder by
+            folder, ignoring case, a folder before what it holds; an item
+            deleted from outside a matter, as a matter's own folder is,
+            comes after those, by its whole path; a place renamed or moved
+            since shows its path as it is now, but sorts by the old one),
+            `deletedBy` (the name recorded at the delete, ignoring case),
+            `deleted` (when it was deleted), `removedBy` (the name recorded
+            at the removal, ignoring case, for the `removed` view),
+            `removed` (when it was removed, for the `removed` view) or
+            `destroyed` (as `removed`, for the `removed` view: the night
+            it's destroyed follows its removal). By default `removed` in the
+            `removed` view and `deleted` in the others. An item with no
+            value comes last either way, as a folder does by `docNumber`
+            and an item outside the Stores by `deletedFrom`. Ties go by the
+            item's age.
           schema:
             type: string
-            enum: [name, deleted, removed]
+            enum: [name, docNumber, deletedFrom, deletedBy, deleted, removedBy, removed, destroyed]
         - name: order
           in: query
           required: false
           description: |
-            `asc` or `desc`. By default `asc` by name, and `desc` by a time,
-            so the newest come first.
+            `asc` or `desc`. By default `desc` by a time (`deleted`,
+            `removed` and `destroyed`), so the newest come first, and `asc`
+            by anything else.
           schema:
             type: string
             enum: [asc, desc]
@@ -2657,13 +2683,27 @@ components:
         What to sort the documents by: `title` (the file name, ignoring
         case), `docNumber` (as a number), `version` (the file version,
         `fileVersion`, as a list shows it: by its major, then its minor
-        number), `author` (by name) or `edited` (when its file last changed: filed, or a new version saved;
-        a change to its properties, a rename or a move doesn't count). Ties
-        go by the document's age, so pages never overlap, and documents with
-        no value to sort by come last either way. Anything else is `400`.
+        number), `author` (by name), `edited` (when its file last changed: filed, or a new version saved;
+        a change to its properties, a rename or a move doesn't count),
+        `matter` (the client's number, then the matter's, each as a number,
+        so 998.9 comes before 998.10), `client` (the client's name, ignoring
+        case), `location` (the folder's name, ignoring case, then as
+        `matter`), `filed` (`dateFiled`), `size`, `type` (the File Type
+        filter's names, A to Z: Email, Excel, OpenDocument, Other, PDF,
+        Picture, PowerPoint, Word; then the extension, ignoring case),
+        `class`, `subclass` (`docClass`, `docSubclass`, ignoring case),
+        `typist` (by name, as `author`), `from`, `to` (an email's, ignoring
+        case) or `sent` (when an email was sent). `matter`, `client` and
+        `location` take the client and matter numbers stamped on the
+        document. A document that isn't an email, by its type as the File
+        Type filter decides, has no From, To or Sent, whatever properties it
+        holds. Ties go by the document's age, so pages never overlap,
+        and documents with no value to sort by, or a blank one, come last
+        either way. Anything else is `400`.
       schema:
         type: string
-        enum: [title, docNumber, version, author, edited]
+        enum: [title, docNumber, version, author, edited, matter, client, location, filed, size, type, class,
+          subclass, typist, from, to, sent]
     ListOrder:
       name: order
       in: query
@@ -3182,16 +3222,36 @@ components:
           $ref: '#/components/schemas/ClientRef'
     AuthorRef:
       type: object
-      description: A document's Author
+      description: A document's Author or Typist
       additionalProperties: false
       required: [username, displayName]
       properties:
         username:
           type: string
-          description: The username, which the `author` filter takes
+          description: The username; for an Author, what the `author` filter takes
         displayName:
           type: string
-          description: The Author's name, to show; the username when the Author is no longer a user
+          description: The person's name, to show; the username when the person is no longer a user
+    EmailView:
+      type: object
+      description: |
+        An email's sender, recipients and sent date, as its document's
+        From, To and Sent properties hold them
+      additionalProperties: false
+      required: [from, to, sent]
+      properties:
+        from:
+          type: [string, 'null']
+          description: The From property, as stored; null when it has none
+          examples: ['Ann Smith <ann@example.com>']
+        to:
+          type: [string, 'null']
+          description: The To property, as stored; null when it has none
+          examples: ['Bob Jones <bob@example.com>, carol@example.com']
+        sent:
+          type: [string, 'null']
+          format: date-time
+          description: The Sent property; null when it has none
     HoldView:
       type: object
       description: Who has a document checked out or locked
@@ -3293,7 +3353,7 @@ components:
     DocumentView:
       type: object
       additionalProperties: false
-      required: [type, docNumber, name, kind, size, version, fileVersion, reference, folder, matter, author, dateFiled, lastModified, hold, canEdit, canOpen]
+      required: [type, docNumber, name, kind, size, version, fileVersion, reference, folder, matter, author, dateFiled, lastModified, hold, canEdit, canOpen, docClass, docSubclass, typist, email]
       properties:
         type:
           type: string
@@ -3346,6 +3406,27 @@ components:
             - $ref: '#/components/schemas/AuthorRef'
             - type: 'null'
           description: The document's Author property; null when it has none
+        docClass:
+          type: [string, 'null']
+          description: The document's Class property, as stored; null when it has none
+        docSubclass:
+          type: [string, 'null']
+          description: The document's Subclass property, as stored; null when it has none
+        typist:
+          oneOf:
+            - $ref: '#/components/schemas/AuthorRef'
+            - type: 'null'
+          description: The document's Typist property, named as `author` is; null when it has none
+        email:
+          oneOf:
+            - $ref: '#/components/schemas/EmailView'
+            - type: 'null'
+          description: |
+            An email's From, To and Sent properties; null for a document
+            that isn't an email, whatever its properties hold. An email is
+            one by its type, as the `from`, `to` and `sent` sorts and the
+            File Type filter decide, which `kind`, read from the file's
+            name, follows unless the name has lost its extension
         dateFiled:
           type: string
           format: date-time
@@ -3947,10 +4028,12 @@ components:
               type: integer
               minimum: 0
               description: |
-                For the `documents`, `emails` and `all` scopes, when the search
-                stopped before its last hit: how many it found that pass the
+                For the `documents`, `emails` and `all` scopes, and the others
+                with `sort`, when the search stopped before its last hit: how
+                many it found that the caller can see and that pass the
                 filters. There are more; `total` is then `null`. Left out when
-                `total` is the real count.
+                `total` is the real count, and in the `folders`, `matters` and
+                `clients` scopes without `sort`.
             facets:
               $ref: '#/components/schemas/Facets'
       unevaluatedProperties: false

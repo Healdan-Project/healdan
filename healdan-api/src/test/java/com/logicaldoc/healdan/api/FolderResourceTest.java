@@ -736,7 +736,7 @@ public class FolderResourceTest extends ApiTestCase {
 		String token = signIn(clerk);
 		String base = "/api/v1/folders/" + documents.getId() + "/children";
 
-		for (String query : new String[] { "sort=size", "sort=docnumber", "order=up", "type=folder&type=pdf",
+		for (String query : new String[] { "sort=colour", "sort=docnumber", "order=up", "type=folder&type=pdf",
 				"type=folder&author=clerk", "type=folder&facets=type", "type=docx", "edited=week",
 				"edited=7d&from=2026-01-01", "from=2026-13-01", "from=2026-06-02&to=2026-06-01", "facets=size",
 				"matter=1", "client=x", "author=", "zone=Mars/Olympus", "edited=today&zone=%2B99:00" }) {

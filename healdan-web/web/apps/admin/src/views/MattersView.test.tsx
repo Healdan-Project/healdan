@@ -8,6 +8,7 @@ import { formatDate, formatDateTime, formatSize, setLabels } from '@healdan/ui'
 import { expectNoAxeViolations } from '../test/axe'
 import { clientList, clientOf, findPeople, matterList, matterRow, matterRows, problem, sally, saltmarsh, tom } from '../test/fakeApi'
 import { bringObservedIntoView } from '../test/intersection'
+import { setListSize } from '../test/listSize'
 import { renderApp } from '../test/renderApp'
 import { TYPING_DELAY_MS } from '../pickers/typing'
 
@@ -251,8 +252,9 @@ describe('The Matters list', () => {
     expect(router.state.location.search).toEqual({})
   })
 
-  // 201 rows drawn three times over in jsdom: 2 s alone, but past Vitest's 5 s on a busy runner, so it has a limit of its own
-  it('loads 100 rows at a time as the end of the list comes into view, to the end of what the server counted', { timeout: 15_000 }, async () => {
+  it('loads 100 rows at a time as the end of the list comes into view, to the end of what the server counted', async () => {
+    // Sized, the list draws the rows in view, as in a browser: with none it would draw all 201, and each again at every page
+    setListSize(1280, 680)
     const many = Array.from({ length: 201 }, (_, i) => matterRow({ id: 1000 + i, number: `2000.${i + 1}`, name: `Matter ${String(i + 1).padStart(3, '0')}` }))
     const { api } = await renderApp('/matters', {
       'GET /v1/admin/matters': ({ query }: { query?: Record<string, unknown> }) => {
@@ -261,12 +263,17 @@ describe('The Matters list', () => {
       },
     })
     const table = await grid()
+    // How many rows the list holds, drawn or not: its heading row and the matters loaded
+    const held = () => Number(table.getAttribute('aria-rowcount'))
     expect(await within(table).findByRole('row', { name: '2000.1 Matter 001' })).toBeTruthy()
     expect(within(main()).getByText('201 Matters')).toBeTruthy()
+    expect(held()).toBe(1 + 100)
+    // It draws the rows in view, not all 100
+    expect(within(table).queryByRole('row', { name: '2000.100 Matter 100' })).toBeNull()
     act(() => bringObservedIntoView())
-    expect(await within(table).findByRole('row', { name: '2000.150 Matter 150' })).toBeTruthy()
+    await waitFor(() => expect(held()).toBe(1 + 200))
     act(() => bringObservedIntoView())
-    expect(await within(table).findByRole('row', { name: '2000.201 Matter 201' })).toBeTruthy()
+    await waitFor(() => expect(held()).toBe(1 + 201))
     // The last page has come and nothing is loading. Every row the server counted is here, so the list draws no row that
     // asks for more; one it asked for anyway would be counted as the end comes into view, inside act
     await waitFor(() => expect(within(table).queryByText('Loading…')).toBeNull())
@@ -276,6 +283,12 @@ describe('The Matters list', () => {
       [100, 100],
       [200, 100],
     ])
+    // Scrolled past its end, where the list stops, it draws the last matter the server counted, and the second page's before it
+    expect(within(table).queryByRole('row', { name: '2000.201 Matter 201' })).toBeNull()
+    table.scrollTop = Number.MAX_SAFE_INTEGER
+    fireEvent.scroll(table)
+    expect(await within(table).findByRole('row', { name: '2000.201 Matter 201' })).toBeTruthy()
+    expect(within(table).getByRole('row', { name: '2000.190 Matter 190' })).toBeTruthy()
   })
 
   it("opens a matter's page when its row is clicked, or Enter is pressed on it", async () => {

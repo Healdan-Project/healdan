@@ -6,11 +6,12 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, onTestFinished, vi } from 'vitest'
 import type { components } from '@healdan/api'
 import { expectNoAxeViolations } from '../test/axe'
-import { resizeByKeys, sliderOf } from '../test/columns'
+import { EVERY_COLUMN, FIRST_SORTS, resizeByKeys, sliderOf } from '../test/columns'
 import { comeBack, settle } from '../test/comeBack'
 import { client, document, folder, matter, problem, zone, type Routes } from '../test/fakeApi'
 import { detailsRoutes } from '../test/details'
 import { bringObservedIntoView } from '../test/intersection'
+import { setListSize } from '../test/listSize'
 import { renderApp } from '../test/renderApp'
 
 type S = components['schemas']
@@ -104,8 +105,32 @@ describe('SearchView', () => {
     await waitFor(() => expect(within(grid2()).getByRole('columnheader', { name: /Doc #/ }).getAttribute('aria-sort')).toBe('ascending'))
     fireEvent.click(within(grid2()).getByRole('columnheader', { name: /Doc #/ }))
     await waitFor(() => expect(api.callsTo('GET /v1/search').at(-1)?.query).toMatchObject({ sort: 'docNumber', order: 'desc' }))
-    // The Matter column has nothing to sort by
-    expect(within(grid2()).getByRole('columnheader', { name: /Matter/ }).getAttribute('aria-sort')).toBeNull()
+  })
+
+  describe('every document column sorts on a search, asking the server', () => {
+    /** Renders a search of documents with every document column shown */
+    async function everyColumn() {
+      window.localStorage.setItem('healdan.columns.documents', JSON.stringify({ v: 1, shown: EVERY_COLUMN, widths: {} }))
+      const rendered = await renderApp('/search?scope=documents&q=charter', routes())
+      await rows()
+      return rendered
+    }
+
+    it('by relevance at first, so none is the sort, and every one can be', async () => {
+      await everyColumn()
+      expect(headerNames()).toEqual(['Title', 'Doc #', 'Version', 'Author', 'Edit Date', 'Matter', 'Client', 'Location', 'Date Filed', 'Size', 'File Type', 'Class', 'Subclass', 'Typist', 'From', 'To', 'Sent'])
+      expect(within(grid2()).getAllByRole('columnheader').map((one) => one.getAttribute('aria-sort'))).toEqual(Array(17).fill('none'))
+    })
+
+    // One click each, so that no test waits out many: Date Filed and Sent newest first, the others A to Z
+    it.each(FIRST_SORTS)('%s, first by %s %s', async (name, sort, order) => {
+      const { api, router } = await everyColumn()
+      fireEvent.click(header(name))
+      await waitFor(() => expect(api.callsTo('GET /v1/search').at(-1)?.query).toEqual({ scope: 'documents', q: 'charter', sort, order, zone, offset: 0, limit: 100 }))
+      const address = new URLSearchParams(router.history.location.search)
+      expect([address.get('sort'), address.get('order')]).toEqual([sort, order])
+      await waitFor(() => expect(header(name).getAttribute('aria-sort')).toBe(order === 'asc' ? 'ascending' : 'descending'))
+    })
   })
 
   it('sorts Edit Date newest first at its first click', async () => {
@@ -119,9 +144,9 @@ describe('SearchView', () => {
     const { api, router } = await renderApp('/search?scope=documents&q=charter&sort=title&order=desc&type=word', routes())
     await rows()
     expect(within(main()).getByText('in Documents')).toBeTruthy()
-    // From any heading's menu while the search is sorted, Matter's too, which doesn't sort yet
+    // From any heading's menu while the search is sorted, beside the column's own sorts
     const menu = await headingMenu('Matter')
-    expect(within(menu).queryByRole('menuitemradio', { name: 'Sort Ascending' })).toBeNull()
+    expect(within(menu).getByRole('menuitemradio', { name: 'Sort Ascending' })).toBeTruthy()
     await userEvent.click(within(menu).getByRole('menuitem', { name: 'Sort by Relevance' }))
     // The address loses the sort and keeps the rest; it was replaced, so Back leaves the search
     await waitFor(() => expect(new URLSearchParams(router.history.location.search).has('sort')).toBe(false))
@@ -137,7 +162,7 @@ describe('SearchView', () => {
     expect(within(await headingMenu('Title')).queryByRole('menuitem', { name: 'Sort by Relevance' })).toBeNull()
   })
 
-  it('chooses the columns of each document scope apart: Emails starts without Version', async () => {
+  it('chooses the columns of each document scope apart: the Emails search starts with From and Sent', async () => {
     const { view } = await renderApp('/search?scope=documents&q=charter', routes())
     await rows()
     await userEvent.click(within(await headingMenu('Author')).getByRole('menuitem', { name: 'Hide Author' }))
@@ -147,7 +172,7 @@ describe('SearchView', () => {
 
     await renderApp('/search?scope=emails&q=charter', routes())
     await rows()
-    expect(headerNames()).toEqual(['Title', 'Doc #', 'Matter', 'Author', 'Edit Date'])
+    expect(headerNames()).toEqual(['Title', 'Doc #', 'Matter', 'From', 'Sent'])
     await userEvent.click(within(main()).getByRole('button', { name: 'Columns' }))
     expect(await screen.findByRole('dialog', { name: 'Columns', description: 'For Emails Search' })).toBeTruthy()
     await userEvent.keyboard('{Escape}')
@@ -161,6 +186,18 @@ describe('SearchView', () => {
     expect(api.callsTo('GET /v1/search')[0]?.query).toEqual({ scope: 'all', q: 'charter', sort: 'title', order: 'desc', type: ['pdf'], matter: ['1001.1'], zone, offset: 0, limit: 100 })
     expect(within(grid2()).getByRole('columnheader', { name: /Title/ }).getAttribute('aria-sort')).toBe('descending')
     expect(within(main()).getByText('in Docs & Emails')).toBeTruthy()
+  })
+
+  it("takes a column's first sort for an address with no order: a date newest first, as a click does", async () => {
+    const dated = await renderApp('/search?scope=documents&q=charter&sort=edited', routes())
+    await rows()
+    expect(dated.api.callsTo('GET /v1/search')[0]?.query).toEqual({ scope: 'documents', q: 'charter', sort: 'edited', order: 'desc', zone, offset: 0, limit: 100 })
+    expect(within(grid2()).getByRole('columnheader', { name: /Edit Date/ }).getAttribute('aria-sort')).toBe('descending')
+    dated.view.unmount()
+    const titled = await renderApp('/search?scope=documents&q=charter&sort=title', routes())
+    await rows()
+    expect(titled.api.callsTo('GET /v1/search')[0]?.query).toEqual({ scope: 'documents', q: 'charter', sort: 'title', order: 'asc', zone, offset: 0, limit: 100 })
+    expect(within(grid2()).getByRole('columnheader', { name: /Title/ }).getAttribute('aria-sort')).toBe('ascending')
   })
 
   it("sends the person's time zone with a document search, so Today and the days of a range are theirs", async () => {
@@ -181,6 +218,8 @@ describe('SearchView', () => {
   })
 
   it('pages on as the end of the list comes into view, to the end of what the server counted', async () => {
+    // Sized, the list draws the rows in view, as in a browser: with none it would draw all 150, and each again at every page
+    setListSize(1280, 680)
     const many = Array.from({ length: 150 }, (_, i) => document({ docNumber: 20000 + i, name: `Doc ${String(i).padStart(3, '0')}.docx` }))
     const { api } = await renderApp(
       '/search?scope=documents&q=doc',
@@ -191,17 +230,25 @@ describe('SearchView', () => {
         },
       }),
     )
-    expect(await within(await grid()).findByRole('row', { name: /Doc 000/ })).toBeTruthy()
+    const table = await grid()
+    // How many rows the list holds, drawn or not: its heading row and the documents loaded
+    const held = () => Number(table.getAttribute('aria-rowcount'))
+    expect(await within(table).findByRole('row', { name: /Doc 000/ })).toBeTruthy()
     expect(await within(main()).findByText('150 documents')).toBeTruthy()
+    expect(held()).toBe(1 + 100)
     act(() => {
       bringObservedIntoView()
       bringObservedIntoView()
     })
-    expect(await within(await grid()).findByRole('row', { name: /Doc 120/ })).toBeTruthy()
+    await waitFor(() => expect(held()).toBe(1 + 150))
     // The second page starts where the first ended, and the 150 counted are all there: nothing more is asked for
     act(() => bringObservedIntoView())
     await new Promise((resolve) => setTimeout(resolve, 100))
     expect(api.callsTo('GET /v1/search').map((call) => call.query?.offset)).toEqual([0, 100])
+    // Scrolled past its end, where the list stops, it draws the last document the server counted
+    table.scrollTop = Number.MAX_SAFE_INTEGER
+    fireEvent.scroll(table)
+    expect(await within(table).findByRole('row', { name: /Doc 149/ })).toBeTruthy()
   })
 
   it('has Filters with Client and Matter besides Edit Date, File Type, Author and Class', async () => {
@@ -335,15 +382,15 @@ describe('SearchView', () => {
     expect(within(await grid()).getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['Title', 'Matter'])
     const [row] = await rows()
     expect(within(row!).getByRole('gridcell').textContent).toContain('1001.1')
-    // Folders take no filters or sorting
+    // Folders take no filters; they sort, but start in the search's own order, which no column shows
     expect(within(main()).queryByRole('button', { name: /^Filters/ })).toBeNull()
-    expect(within(await grid()).getAllByRole('columnheader').every((h) => h.getAttribute('aria-sort') === null)).toBe(true)
+    expect(within(await grid()).getAllByRole('columnheader').map((h) => h.getAttribute('aria-sort'))).toEqual(['none', 'none'])
     fireEvent.keyDown(row!, { key: 'Enter' })
     fireEvent.keyUp(row!, { key: 'Enter' })
     await waitFor(() => expect(router.history.location.pathname).toBe('/app/folders/111'))
   })
 
-  it("the Folders scope's columns resize and keep their widths under its own name, with no Columns or Sort items", async () => {
+  it("the Folders scope's columns resize and keep their widths under its own name, with no Columns or Sort by Relevance", async () => {
     window.localStorage.setItem('healdan.columns.folders', JSON.stringify({ v: 1, widths: { title: 300 } }))
     await renderApp('/search?scope=folders&q=corr', routes({ 'GET /v1/search': hits([folder({ id: 111, name: 'Correspondence' })]) }))
     await rows()
@@ -357,8 +404,10 @@ describe('SearchView', () => {
     expect(window.localStorage.getItem('healdan.columns.documents')).toBeNull()
     expect(window.localStorage.getItem('healdan.columns.matters')).toBeNull()
 
-    // Its heading's menu resizes and resets, and neither sorts nor chooses columns
+    // Its heading's menu sorts, resizes and resets, and neither chooses columns nor goes back to relevance, which a
+    // folder search has none of
     const menu = await headingMenu('Title')
+    expect(within(menu).getAllByRole('menuitemradio').map((item) => item.textContent)).toEqual(['Sort Ascending', 'Sort Descending'])
     expect(within(menu).getAllByRole('menuitem').map((item) => item.textContent)).toEqual(['Resize Column', 'Reset Columns'])
     await userEvent.click(within(menu).getByRole('menuitem', { name: 'Reset Columns' }))
     await waitFor(() => expect(window.localStorage.getItem('healdan.columns.folders')).toBeNull())
@@ -402,6 +451,66 @@ describe('SearchView', () => {
     fireEvent.keyUp(row!, { key: 'Enter' })
     await waitFor(() => expect(router.history.location.pathname).toBe('/app/folders/110'))
     expect(api.callsTo('GET /v1/search')[0]?.query).toEqual({ scope, q: '1001', offset: 0, limit: 100 })
+  })
+
+  // Spec 5.2: the Folders scope sorts by Title and Matter, the Matters scope by Matter and Client, and the Clients scope by Client
+  it.each([
+    { scope: 'folders', sorts: { Title: 'title', Matter: 'matter' }, unsorted: [] },
+    { scope: 'matters', sorts: { Matter: 'matter', Client: 'client' }, unsorted: [] },
+    { scope: 'clients', sorts: { Client: 'client' }, unsorted: ['Matter'] },
+  ])('the $scope search sorts by its own columns, asking the server, with the sort in the address', async ({ scope, sorts, unsorted }) => {
+    const found = scope === 'folders' ? folder({ id: 111, name: 'Correspondence' }) : matter({ id: 11, folderId: 110 })
+    const { api, router } = await renderApp(`/search?scope=${scope}&q=1001`, routes({ 'GET /v1/search': hits([found], { total: null }) }))
+    await rows()
+    const address = () => new URLSearchParams(router.history.location.search)
+    for (const [name, sort] of Object.entries(sorts)) {
+      // A to Z, then the other way; no filters or time zone, which these scopes don't take
+      fireEvent.click(header(name))
+      await waitFor(() => expect(api.callsTo('GET /v1/search').at(-1)?.query).toEqual({ scope, q: '1001', sort, order: 'asc', offset: 0, limit: 100 }))
+      expect([address().get('scope'), address().get('q'), address().get('sort'), address().get('order')]).toEqual([scope, '1001', sort, 'asc'])
+      await waitFor(() => expect(header(name).getAttribute('aria-sort')).toBe('ascending'))
+      fireEvent.click(header(name))
+      await waitFor(() => expect(api.callsTo('GET /v1/search').at(-1)?.query).toEqual({ scope, q: '1001', sort, order: 'desc', offset: 0, limit: 100 }))
+      await waitFor(() => expect(header(name).getAttribute('aria-sort')).toBe('descending'))
+    }
+    // Each sort replaced the address, so Back leaves the search
+    expect(router.history.length).toBe(1)
+    // A heading that doesn't sort here has no arrow, and a click on it changes nothing: a sort would be in the address as
+    // the click ends, as the others' were
+    const calls = api.callsTo('GET /v1/search').length
+    const last = router.history.location.search
+    for (const name of unsorted) {
+      expect(header(name).getAttribute('aria-sort')).toBeNull()
+      fireEvent.click(header(name))
+      expect(router.history.location.search).toBe(last)
+      expect(api.callsTo('GET /v1/search')).toHaveLength(calls)
+    }
+    // Sorted, its menus still have no Sort by Relevance: it isn't a search of documents, which has none
+    const menu = await headingMenu(Object.keys(sorts)[0]!)
+    expect(within(menu).getAllByRole('menuitemradio').map((item) => item.textContent)).toEqual(['Sort Ascending', 'Sort Descending'])
+    expect(within(menu).queryByRole('menuitem', { name: 'Sort by Relevance' })).toBeNull()
+  })
+
+  it("keeps a scope's sort from the address, and drops one the scope doesn't take", async () => {
+    const one = (scope: string) => ({ 'GET /v1/search': hits([scope === 'folders' ? folder() : matter()], { total: null }) })
+    const first = await renderApp('/search?scope=matters&q=1001&sort=client&order=desc', routes(one('matters')))
+    await rows()
+    expect(first.api.callsTo('GET /v1/search')[0]?.query).toEqual({ scope: 'matters', q: '1001', sort: 'client', order: 'desc', offset: 0, limit: 100 })
+    expect(header('Client').getAttribute('aria-sort')).toBe('descending')
+    first.view.unmount()
+
+    // A document's sort, or another scope's, is no sort: the scope's own order, as for a sort no list knows
+    for (const [scope, sort] of [
+      ['clients', 'matter'],
+      ['folders', 'docNumber'],
+      ['matters', 'title'],
+    ] as const) {
+      const { api, view } = await renderApp(`/search?scope=${scope}&q=1001&sort=${sort}&order=asc`, routes(one(scope)))
+      await rows()
+      expect(api.callsTo('GET /v1/search')[0]?.query, `${scope} ${sort}`).toEqual({ scope, q: '1001', offset: 0, limit: 100 })
+      expect(within(grid2()).getAllByRole('columnheader').map((h) => h.getAttribute('aria-sort'))).not.toContain('ascending')
+      view.unmount()
+    }
   })
 
   it('pages an uncounted folders search on while its pages are full, and ends at the first short one', async () => {

@@ -8,6 +8,7 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeParseException;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -35,9 +36,8 @@ import com.logicaldoc.healdan.listing.ListingQuery.Sort;
  */
 record Filters(ListingQuery query, boolean foldersOnly, Set<String> facets) {
 
-	/** The {@code sort} parameter's values */
-	static final Map<String, Sort> SORTS = Map.of("title", Sort.TITLE, "docNumber", Sort.DOC_NUMBER, "version",
-			Sort.VERSION, "author", Sort.AUTHOR, "edited", Sort.EDITED);
+	/** The {@code sort} parameter's values, in the order a refusal lists them */
+	static final Map<String, Sort> SORTS = sorts();
 
 	/** The {@code edited} parameter's values */
 	static final List<String> EDITED = List.of("today", "7d", "30d", "year");
@@ -51,8 +51,8 @@ record Filters(ListingQuery query, boolean foldersOnly, Set<String> facets) {
 	/**
 	 * @param type {@code folder} for the subfolders alone, or the file kinds to
 	 *        keep
-	 * @param sort {@code title}, {@code docNumber}, {@code version},
-	 *        {@code author} or {@code edited}; none for the list's own order
+	 * @param sort one of {@link #SORTS}, such as {@code title} or
+	 *        {@code matter}; none for the list's own order
 	 * @param order {@code asc} (the default) or {@code desc}
 	 * @param author the Authors' usernames
 	 * @param docClass the classes
@@ -86,8 +86,8 @@ record Filters(ListingQuery query, boolean foldersOnly, Set<String> facets) {
 		if (StringUtils.isNotEmpty(sort)) {
 			sorting = SORTS.get(sort);
 			if (sorting == null)
-				throw ApiProblem.badRequest(
-						"The sort can be title, docNumber, version, author or edited, not %s.".formatted(sort));
+				throw ApiProblem.badRequest("The sort can be %s, not %s."
+						.formatted(String.join(", ", SORTS.keySet()), sort));
 		}
 		if (order != null && !"asc".equals(order) && !"desc".equals(order))
 			throw ApiProblem.badRequest("The order can be asc or desc, not %s.".formatted(order));
@@ -111,6 +111,28 @@ record Filters(ListingQuery query, boolean foldersOnly, Set<String> facets) {
 		if (foldersOnly && (!types.isEmpty() || query.filtered() || !counts.isEmpty()))
 			throw ApiProblem.badRequest("type=folder lists the subfolders alone, which take no filters or facets.");
 		return new Filters(query, foldersOnly, counts);
+	}
+
+	private static Map<String, Sort> sorts() {
+		Map<String, Sort> sorts = new LinkedHashMap<>();
+		sorts.put("title", Sort.TITLE);
+		sorts.put("docNumber", Sort.DOC_NUMBER);
+		sorts.put("version", Sort.VERSION);
+		sorts.put("author", Sort.AUTHOR);
+		sorts.put("edited", Sort.EDITED);
+		sorts.put("matter", Sort.MATTER);
+		sorts.put("client", Sort.CLIENT);
+		sorts.put("location", Sort.LOCATION);
+		sorts.put("filed", Sort.FILED);
+		sorts.put("size", Sort.SIZE);
+		sorts.put("type", Sort.TYPE);
+		sorts.put("class", Sort.CLASS);
+		sorts.put("subclass", Sort.SUBCLASS);
+		sorts.put("typist", Sort.TYPIST);
+		sorts.put("from", Sort.FROM);
+		sorts.put("to", Sort.TO);
+		sorts.put("sent", Sort.SENT);
+		return Collections.unmodifiableMap(sorts);
 	}
 
 	/**

@@ -105,6 +105,15 @@ export interface AddressSort {
   order?: ListingOrder
 }
 
+/**
+ * The direction of a sort the address names: its order, or with none the column's first sort, as a click's is (a date's
+ * newest first)
+ */
+export function addressDirection(column: string, order: ListingOrder | undefined): TableSort['direction'] {
+  if (order !== undefined) return order === 'desc' ? 'descending' : 'ascending'
+  return Object.hasOwn(documentColumns, column) && documentColumns[column]!.newestFirst ? 'descending' : 'ascending'
+}
+
 /** A route's `validateSearch` for a list the browser sorts: a sort only by a column one of its lists has (`ids`) */
 export function sortSearch(search: Record<string, unknown>, ids: readonly string[]): AddressSort {
   return {
@@ -123,9 +132,7 @@ export function useBrowserSort(ids: readonly string[], own: TableSort, address: 
   const navigate = useNavigate()
   const asked = address.sort !== undefined && ids.includes(address.sort) ? address.sort : undefined
   const column = asked ?? own.column
-  // An address with no order takes the column's first sort, as a click does: a date's newest first
-  const first: TableSort['direction'] = asked !== undefined && Object.hasOwn(documentColumns, asked) && documentColumns[asked]!.newestFirst ? 'descending' : 'ascending'
-  const direction: TableSort['direction'] = asked === undefined ? own.direction : address.order === 'desc' ? 'descending' : address.order === 'asc' ? 'ascending' : first
+  const direction: TableSort['direction'] = asked === undefined ? own.direction : addressDirection(asked, address.order)
   const sort = useMemo(() => ({ column, direction }), [column, direction])
   const { column: ownColumn, direction: ownDirection } = own
   const onSort = useCallback(
