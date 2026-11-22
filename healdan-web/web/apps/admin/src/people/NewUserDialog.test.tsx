@@ -207,23 +207,41 @@ describe('New User', () => {
   })
 
   it("says so, with Try Again, when what it offers can't be read, and fills in the language once it can", async () => {
-    let failing = true
-    const { api, view } = renderDialog({ 'GET /v1/admin/users/options': () => (failing ? problem(500, 'server-error') : userOptions()) })
-    const note = await within(dialog()).findByText("Couldn't read the languages and time zones to choose from, so the account can't be made yet.")
-    expect(note).toBeTruthy()
+    const UNREAD = "Couldn't read the languages and time zones to choose from, so the account can't be made yet."
+    // Each read fails, until the test gives one an answer of its own
+    let next: () => unknown = () => problem(500, 'server-error')
+    const { api, view } = renderDialog({ 'GET /v1/admin/users/options': () => next() })
+    expect(await within(dialog()).findByText(UNREAD)).toBeTruthy()
     await userEvent.type(field('Username'), 'ann')
     await userEvent.type(field('First Name'), 'Ann')
     await userEvent.type(field('Last Name'), 'Lee')
     await pause()
     expect(isDisabled(create())).toBe(true)
     await expectNoAxeViolations(view.baseElement)
-    failing = false
-    await userEvent.click(within(dialog()).getByRole('button', { name: 'Try Again' }))
     const language = within(dialog()).getByRole('combobox', { name: 'Language' }) as HTMLSelectElement
+    const tryAgain = () => within(dialog()).getByRole('button', { name: /^Try Again/ })
+
+    // A second read that fails too: the note stays, and the focus with Try Again
+    await userEvent.click(tryAgain())
+    await waitFor(() => expect(api.callsTo('GET /v1/admin/users/options')).toHaveLength(2))
+    await waitFor(() => expect(tryAgain().hasAttribute('data-pending')).toBe(false))
+    expect(within(dialog()).getByText(UNREAD)).toBeTruthy()
+    expect(document.activeElement).toBe(tryAgain())
+
+    // While a read is on its way, the note and Try Again stay, pending, and the focus stays on it: Language has no choices yet
+    let answer: (options: A['UserOptions']) => void = () => {}
+    next = () => new Promise((resolve) => (answer = resolve))
+    await userEvent.click(tryAgain())
+    await waitFor(() => expect(tryAgain().getAttribute('data-pending')).toBe('true'))
+    expect(within(dialog()).getByText(UNREAD)).toBeTruthy()
+    expect(document.activeElement).toBe(tryAgain())
+    expect(language.options).toHaveLength(1)
+
+    // Once they come, Try Again goes with the note, and the focus goes to the menu they filled
+    await act(async () => answer(userOptions()))
     await waitFor(() => expect(language.value).toBe('en'))
-    expect(within(dialog()).queryByText("Couldn't read the languages and time zones to choose from, so the account can't be made yet.")).toBeNull()
-    expect(api.callsTo('GET /v1/admin/users/options')).toHaveLength(2)
-    // Try Again went with the note, so the focus goes to the menu it filled
+    expect(within(dialog()).queryByText(UNREAD)).toBeNull()
+    expect(api.callsTo('GET /v1/admin/users/options')).toHaveLength(3)
     expect(document.activeElement).toBe(language)
     expect(isDisabled(create())).toBe(false)
   })
