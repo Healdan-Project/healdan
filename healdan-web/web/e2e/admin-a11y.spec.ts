@@ -160,62 +160,66 @@ for (const scheme of ['light', 'dark'] as const) {
       }
       page.on('request', writes)
 
-      await pane.getByRole('link', { name: 'Stores' }).click()
-      await expect(row('Stores', 'Smoke')).toBeVisible()
-      // With the Deleted Stores under the list, whether it holds any or not
-      await expect(main().getByRole('heading', { level: 2, name: 'Deleted Stores' })).toBeVisible()
-      await expect(main().getByText('Loading…')).toHaveCount(0)
-      await check('the Stores list')
+      // Taken off whatever happens, so a failing step leaves it on no later test
+      try {
+        await pane.getByRole('link', { name: 'Stores' }).click()
+        await expect(row('Stores', 'Smoke')).toBeVisible()
+        // With the Deleted Stores under the list, whether it holds any or not
+        await expect(main().getByRole('heading', { level: 2, name: 'Deleted Stores' })).toBeVisible()
+        await expect(main().getByText('Loading…')).toHaveCount(0)
+        await check('the Stores list')
 
-      await row('Stores', 'Smoke').click()
-      await expect(main().getByRole('heading', { level: 1, name: 'Smoke' })).toBeVisible()
-      await expect(main().getByRole('grid', { name: 'Matters in Smoke' }).getByRole('row', { name: /^1\.1 Smoke Matter/ })).toBeVisible()
-      await check("a Store's Matters")
-      await main().getByRole('tab', { name: 'Who Can See It' }).click()
-      await expect(main().getByRole('list', { name: 'Who Can See Smoke' }).getByRole('listitem').first()).toBeVisible()
-      await check("a Store's Who Can See It")
-      await main().getByRole('tab', { name: 'Storage' }).click()
-      await expect(main().getByRole('tabpanel').getByText('Waiting to Move', { exact: true })).toBeVisible()
-      await check("a Store's Storage")
-      // Change Backend, opened on the backend Smoke keeps its files on, and cancelled
-      await main().getByRole('button', { name: 'Change Backend' }).click()
-      const change = page.getByRole('dialog', { name: 'Change the Backend of Smoke' })
-      await expect(change.getByRole('radio', { name: /^Original/ })).toBeChecked()
-      await expect(change.getByRole('radio', { name: /^Smoke Garage/ })).toBeVisible()
-      await check('Change Backend')
-      await change.getByRole('button', { name: 'Cancel' }).click()
-      await expect(change).toBeHidden()
+        await row('Stores', 'Smoke').click()
+        await expect(main().getByRole('heading', { level: 1, name: 'Smoke' })).toBeVisible()
+        await expect(main().getByRole('grid', { name: 'Matters in Smoke' }).getByRole('row', { name: /^1\.1 Smoke Matter/ })).toBeVisible()
+        await check("a Store's Matters")
+        await main().getByRole('tab', { name: 'Who Can See It' }).click()
+        await expect(main().getByRole('list', { name: 'Who Can See Smoke' }).getByRole('listitem').first()).toBeVisible()
+        await check("a Store's Who Can See It")
+        await main().getByRole('tab', { name: 'Storage' }).click()
+        await expect(main().getByRole('tabpanel').getByText('Waiting to Move', { exact: true })).toBeVisible()
+        await check("a Store's Storage")
+        // Change Backend, opened on the backend Smoke keeps its files on, and cancelled
+        await main().getByRole('button', { name: 'Change Backend' }).click()
+        const change = page.getByRole('dialog', { name: 'Change the Backend of Smoke' })
+        await expect(change.getByRole('radio', { name: /^Original/ })).toBeChecked()
+        await expect(change.getByRole('radio', { name: /^Smoke Garage/ })).toBeVisible()
+        await check('Change Backend')
+        await change.getByRole('button', { name: 'Cancel' }).click()
+        await expect(change).toBeHidden()
 
-      await pane.getByRole('link', { name: 'Backends' }).click()
-      await expect(row('Backends', 'Smoke Garage')).toBeVisible()
-      // The settings are drawn once they've come
-      await expect(main().getByRole('region', { name: 'Settings' }).getByRole('textbox', { name: 'Parallel Transfers' })).toBeVisible()
-      await check('the Backends list, with the files with no Store and the settings')
-      // Add Backend, opened on its S3 fields, as it starts, and cancelled
-      await main().getByRole('button', { name: 'Add Backend' }).click()
-      const add = page.getByRole('dialog', { name: 'Add a Storage Backend' })
-      await expect(add.getByRole('radio', { name: 'S3' })).toBeChecked()
-      await expect(add.getByRole('textbox', { name: 'Bucket' })).toBeVisible()
-      await check('Add Backend')
-      await add.getByRole('button', { name: 'Cancel' }).click()
-      await expect(add).toBeHidden()
+        await pane.getByRole('link', { name: 'Backends' }).click()
+        await expect(row('Backends', 'Smoke Garage')).toBeVisible()
+        // The settings are drawn once they've come
+        await expect(main().getByRole('region', { name: 'Settings' }).getByRole('textbox', { name: 'Parallel Transfers' })).toBeVisible()
+        await check('the Backends list, with the files with no Store and the settings')
+        // Add Backend, opened on its S3 fields, as it starts, and cancelled
+        await main().getByRole('button', { name: 'Add Backend' }).click()
+        const add = page.getByRole('dialog', { name: 'Add a Storage Backend' })
+        await expect(add.getByRole('radio', { name: 'S3' })).toBeChecked()
+        await expect(add.getByRole('textbox', { name: 'Bucket' })).toBeVisible()
+        await check('Add Backend')
+        await add.getByRole('button', { name: 'Cancel' }).click()
+        await expect(add).toBeHidden()
 
-      await row('Backends', 'Smoke Garage').click()
-      await expect(main().getByRole('heading', { level: 1, name: 'Smoke Garage' })).toBeVisible()
-      await expect(main().getByText('Smoke Cloud', { exact: true })).toBeVisible()
-      await check("a backend's page")
-      // Its Key History: the seed's showing and confirmation of its recovery key
-      await main().getByRole('button', { name: 'Key History' }).click()
-      const history = page.getByRole('dialog', { name: 'Key History of Smoke Garage' })
-      await expect(history.getByRole('row').nth(1)).toBeVisible()
-      await check('Key History')
-      await history.getByRole('button', { name: 'Close' }).click()
-      await expect(history).toBeHidden()
+        await row('Backends', 'Smoke Garage').click()
+        await expect(main().getByRole('heading', { level: 1, name: 'Smoke Garage' })).toBeVisible()
+        await expect(main().getByText('Smoke Cloud', { exact: true })).toBeVisible()
+        await check("a backend's page")
+        // Its Key History: the seed's showing and confirmation of its recovery key
+        await main().getByRole('button', { name: 'Key History' }).click()
+        const history = page.getByRole('dialog', { name: 'Key History of Smoke Garage' })
+        await expect(history.getByRole('row').nth(1)).toBeVisible()
+        await check('Key History')
+        await history.getByRole('button', { name: 'Close' }).click()
+        await expect(history).toBeHidden()
 
-      // Back where the next test starts
-      await pane.getByRole('link', { name: 'Dashboard' }).click()
-      await expect(main().getByRole('heading', { level: 1, name: 'Dashboard' })).toBeVisible()
-      page.off('request', writes)
+        // Back where the next test starts
+        await pane.getByRole('link', { name: 'Dashboard' }).click()
+        await expect(main().getByRole('heading', { level: 1, name: 'Dashboard' })).toBeVisible()
+      } finally {
+        page.off('request', writes)
+      }
       expect(changes, "Phase 3's screens and dialogs, only read").toEqual([])
     })
 

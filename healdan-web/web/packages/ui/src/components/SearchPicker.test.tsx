@@ -272,7 +272,7 @@ describe('SearchPicker', () => {
     expect(status.textContent).toBe('Something went wrong.')
   })
 
-  it('makes the box its rows scroll in a stop of its own while they need scrolling, and only then', async () => {
+  it('makes the box its rows scroll in a stop of its own, named by its heading, while they need scrolling, and only then', async () => {
     const user = userEvent.setup()
     // jsdom has no ResizeObserver, and lays nothing out: the box is given its heights, and its observers are called back by
     // hand, as a browser calls them when the box changes size (its height follows the window's)
@@ -289,11 +289,12 @@ describe('SearchPicker', () => {
     )
     try {
       const { search } = controlled()
+      // In a landmark, as on a page or in a dialog, so axe looks at the box as it is there
       render(
-        <>
+        <main>
           <Example search={search} initial={[series, charter, charity, lease]} />
           <button type="button">After</button>
-        </>,
+        </main>,
       )
       const after = screen.getByRole('button', { name: 'After' })
       const box = screen.getByRole('listbox', { name: 'Recent Matters' }).parentElement!
@@ -305,6 +306,7 @@ describe('SearchPicker', () => {
 
       // Every row fits: Tab goes from the field to what follows, as the arrow keys in the field reach every row
       lay(200)
+      expect(screen.queryByRole('region')).toBeNull()
       await user.click(field())
       await user.tab()
       expect(document.activeElement).toBe(after)
@@ -312,6 +314,10 @@ describe('SearchPicker', () => {
       // More rows than the box shows: Tab stops at the box, which the arrow keys then scroll, then goes on
       lay(400)
       expect(box.getAttribute('tabindex')).toBe('0')
+      // A stop is named, as a region, by the heading over its rows
+      expect(screen.getByRole('region', { name: 'Recent Matters' })).toBe(box)
+      expect(document.getElementById(box.getAttribute('aria-labelledby') ?? '')?.tagName).toBe('H3')
+      await expectNoAxeViolations(document.body)
       await user.click(field())
       await user.tab()
       expect(document.activeElement).toBe(box)
@@ -321,6 +327,8 @@ describe('SearchPicker', () => {
       // The window grew and they fit again: no stop
       lay(200)
       expect(box.hasAttribute('tabindex')).toBe(false)
+      expect(box.hasAttribute('role')).toBe(false)
+      expect(box.hasAttribute('aria-labelledby')).toBe(false)
     } finally {
       vi.unstubAllGlobals()
     }
