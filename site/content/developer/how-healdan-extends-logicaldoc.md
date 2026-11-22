@@ -277,11 +277,11 @@ see [Building from Source](../building-from-source/#running-the-war-outside-dock
     nothing. `MonitoringView`, `AuditView` and `BackgroundJobView` hold the contract's records, and cut a user name
     and password written in a URL from a fault's message and stack and from a job's error (`UrlCredentials`, below). A
     malformed parameter (a window, an area, an `unresolved` other than `true` or `false`, a position, a cursor, a
-    zone, a day of the years 0001 to 9999 written as `2026-11-22`) is `400`, before a path's `404`; a schedule's fields
-    are `422`; and what a job doesn't allow now is `409 refused`, with `JobControl`'s sentence. A log's download and the
-    export stream through `StreamingOutput`, both `no-store`: the log's files are checked, and the export's filters
-    worked out and its first page read (`AuditCsv.open`), before the first byte, so a failure there is a problem, not a
-    file cut short, and a `HEAD` of either reads no file and no row.
+    zone, a day not of the years 0001 to 9999, or not written as `2026-11-22`) is `400`, before a path's `404`; a
+    schedule's fields are `422`; and what a job doesn't allow now is `409 refused`, with `JobControl`'s sentence. A
+    log's download and the export stream through `StreamingOutput`, both `no-store`: the log's files are checked, and
+    the export's filters worked out and its first page read (`AuditCsv.open`), before the first byte, so a failure
+    there is a problem, not a file cut short, and a `HEAD` of either reads no file and no row.
 - **`healdan-storage`** keeps documents' files on [storage backends](../../admin/storage-backends/), and is a plugin
   of its own that requires `healdan-core`. Its code is under `com.logicaldoc.healdan.storage`, where `healdan-core`'s
   Spring scan finds its beans.

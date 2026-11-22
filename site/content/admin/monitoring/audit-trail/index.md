@@ -162,9 +162,9 @@ it as UTF-8, with these columns, in this order:
 | Column | What it holds |
 |---|---|
 | Time | when, in UTC, in ISO 8601, such as `2026-11-22T10:44:07.120Z` |
-| Who | as a row's details show it |
+| Who | as a row's details show it, but empty where they say "Not recorded" |
 | Kind | Sign-In, Document, Folder, User or Administration |
-| What, Detail, From | as a row's details show them |
+| What, Detail, From | as a row's details show them, Detail and From empty where they say "Not recorded" |
 | Changes | an administration row's changed fields, each on a line of its own, as `name: before → after` |
 
 In **Changes**, a value that was none is `(none)`, and a secret is `name: changed`, with no value. A cell that would
@@ -175,11 +175,13 @@ An export stops at 100,000 rows: the newest 100,000 come, and then a last line t
 narrow the filters to export the rest." Narrow the dates, say, and export again.
 
 Export CSV first asks Healdan whether it would answer these filters, and only then downloads the file, so a refusal
-is said on the page, beside the buttons, as is one Healdan answers in the file's place; should your session have ended,
-or you no longer be an administrator, the Admin app says so in place of the screen. The file's column names come at
-once, and its rows as Healdan reads them. One that can't finish ends with a last line that says so: "Stopped before the
-end: the server couldn't read the rest. Export again.", or, should you be taken out of the `admin` group while it's
-being read, "Stopped before the end: only an administrator can export the Audit Trail."
+is said on the page, under the buttons, as is one Healdan answers in the file's place; should your session have ended,
+or you no longer be an administrator, the Admin app says so in place of the screen. Firefox doesn't tell the page that
+Healdan answered in the file's place, so there nothing is saved and the page says nothing of it: try again, or reload
+the page, which asks you to sign in if you've been signed out. The file's column names come at once, and its rows as
+Healdan reads them. One that can't finish ends with a last line that says so: "Stopped before the end: the server
+couldn't read the rest. Export again.", or, should you be taken out of the `admin` group while it's being read,
+"Stopped before the end: only an administrator can export the Audit Trail."
 
 ## How Long Rows Are Kept
 

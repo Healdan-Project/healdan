@@ -102,10 +102,10 @@ Needs Attention comes first: what an administrator should act on, each with how 
 which Store or since when, and a link to where it's fixed. Stuck files link to **Stores**, where each Store's stuck
 files are, or to **Backends** when only files with no Store are stuck, as those are listed there; a storage backend
 that can't be reached, or a disk more than 85% full, links to **Backends** too (the disk to the Classic Interface on a
-server that doesn't use storage backends). Unresolved errors link to **Errors**, and previews given up on and a
-background job that failed or is overdue to **Background Jobs**. Documents that couldn't be indexed link to
-**Classic Interface** until their place is in the Admin app. With nothing to report, it says "Nothing needs your
-attention."
+server that doesn't use storage backends). Unresolved errors link to **Errors**, with **Unresolved Only** ticked, and
+previews given up on and a background job that failed or is overdue to **Background Jobs**. Documents that couldn't be
+indexed link to **Classic Interface** until their place is in the Admin app. With nothing to report, it says "Nothing
+needs your attention."
 
 | It says, for example | What it means |
 |---|---|

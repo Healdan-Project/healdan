@@ -495,7 +495,7 @@ start them; `DashboardServiceTest` calls `forget()`, which drops what the Dashbo
   and a person's rows coming in one page through their indexes behind more rows than the window; `who` read now; a
   secret's change with no value; a detail that isn't JSON, its warning pinned; a recovery key shown through the Admin
   app as one row; another tenant's rows; a non-administrator refused; `forEach`'s most; and a destroyed document's
-  administration rows and Trash record. Since the final review it also checks the text filter on rows the writers
+  administration rows and Trash record. It also checks the text filter on rows the writers
   make, the login and the name a row kept and never a name read now or what was typed at a failed sign-in
   (`testTheTextFilter`); a User row naming who made the change, its account and note, and no message's or search's
   text (`testAnAccountsRowNamesWhoMadeTheChange`); a failed sign-in for a username no account has naming nobody, its
@@ -1188,23 +1188,31 @@ Tests](#the-web-modules-tests) are Maven's). [The Web App](../the-web-app/) says
     earlier one left there, run one `test-web.sh` at a time against a stack: two at once could remove each other's
     backend.
   - `admin-monitoring.spec.ts` walks Phase 5's Monitoring screens (Admin app spec §8.8). As `admin`, with names of its
-    own run, it makes a group and renames it, and finds the change in the Audit Trail by **Administration** and its
-    words: one row, saying the old and the new name on its one line, every row 34 pixels high however long its Detail,
-    and **Row Details** listing the change. In a second browser context `webuser` selects one of two PDFs it filed in
-    a folder of its own inside the shared `E2E` folder, which shows its details and asks for no `/preview`, and reads
-    the other in Quick Look twice, once after a reload; the Audit Trail kept to each doc # then has one Viewed row, by
-    `webuser`, for the one read, and none for the other. The Server Log on the Main Log follows the lines that
-    documents filed through the API make the server write (LogicalDOC's `Before listener` lines, at info), staying at
+    own run, it opens the Audit Trail on **Administration** and the run's words, then makes a group and renames it in
+    a second tab: the change shows only on **Refresh**, with no reload, as one row saying the old and the new name on
+    its one line, every row 34 pixels high however long its Detail, and **Row Details** listing the change; **Export
+    CSV** then answers `200` with a CSV of those rows. In a second browser context `webuser` selects one of two PDFs it
+    filed in a folder of its own inside the shared `E2E` folder, which shows its details and asks for no `/preview`,
+    and reads the other in Quick Look twice, once after a reload; the Audit Trail kept to each doc # then has one
+    Viewed row, by `webuser`, for the one read, and none for the other. The Server Log on the Main Log follows the
+    lines that emails filed through the API make the server write (LogicalDOC's `Before listener` lines, at info,
+    found by the document's id, which `GET /v1/emails` gives in its copy's `frontend.jsp?docId=` address), staying at
     its end, and, read halfway up, keeps the entry at its top where it was; paused, it reads nothing while two of the
-    follow's turns pass, and catches up on **Follow**; and its download answers `200` with a zip. Errors answers each
-    window, **Area**, **Unresolved Only** and words no fault holds, opens the first fault's details when there is one
-    (none resolved), and shares the page between the list and the details at 1,280 × 800 and 768 pixels. Background
-    Jobs lists Healdan's jobs and LogicalDOC's tasks, and **Schedule…** opens on Tags Processor and is cancelled, with
-    no request that writes. Matter 1.1's **Activity** lists its rows, and `webuser`'s, with **Document** ticked, has
-    the view. It changes nothing global: it resolves or reopens no fault, as the Dashboard's counts are other specs',
-    runs, stops, switches or reschedules no job, as step 9 relies on the Indexer's 5 seconds, only reads `webuser`'s
-    account and matter 1.1, and makes the server log no error; its group and documents stay on the stack, one of each
-    per browser per run.
+    follow's turns pass, and catches up on **Follow**; and **Download** answers `200` with a zip. Then it presses
+    **Show Earlier** by the keyboard, fourteen times at most, on each log in turn, the main log last, until one reaches
+    its start, where the focus moves to the box of lines, and says in the run's output which log did, or that none
+    did, as that depends on how long the stack has run. Errors answers `200` for its first read and for each window,
+    **Area**, **Unresolved Only** and words no fault holds; **Clear Filters** leaves the focus on **Message or
+    Logger**; and it opens the first fault's details when there is one (none resolved), the list and the details
+    sharing the page at 1,280 × 800 and 768 pixels. Background Jobs lists Healdan's jobs and LogicalDOC's tasks, and
+    **Schedule…** opens on Tags Processor's schedule as its row says it and is cancelled, the focus back on the button,
+    with no request that writes. Matter 1.1's **Activity** lists its rows, and `webuser`'s, with **Document** ticked
+    and its own dates and **Refresh**, has the view, which **Open in the Audit Trail** then reads to its end by doc #.
+    Both downloads go through `helpers.ts`' `downloadBy`, which checks the server's answer and its `Content-Type`, not
+    only the file saved. It changes nothing global: it resolves or reopens no fault, as the Dashboard's counts are
+    other specs', runs, stops, switches or reschedules no job, as step 9 relies on the Indexer's 5 seconds, only reads
+    `webuser`'s account and matter 1.1, and makes the server log no error; its group, folder and documents stay on
+    the stack, one set per browser per run.
   - `admin-a11y.spec.ts` runs axe on the Admin app as `admin`, in the light theme and again in the dark one, as
     `a11y.spec.ts` does: the Dashboard once its ten tiles and Usage's figures are drawn (it waits for Usage's chart,
     so a summary that failed fails it), the find's list for the smoke fixture's client and matter, the Help menu, the
@@ -1218,9 +1226,11 @@ Tests](#the-web-modules-tests) are Maven's). [The Web App](../the-web-app/) says
     the Groups list and a group's page, with **New User** and the temporary password it shows, **Reset Password**'s
     question and the password it shows, **Disable**'s question, cancelled, **New Group**, and **Add Member** with its
     list of people open, cancelled), Phase 5's (Errors and the first fault's details, when there is one, the Server
-    Log following and paused, the Audit Trail with a row's details and its **Person** and **Matter** lists open,
-    Background Jobs with Tags Processor's **Schedule…** and **Disable** question, both cancelled, and the **Activity**
-    tabs of matter 1.1 and of the person it made in the theme, with a listener failing it on any request that writes;
+    Log following and paused, the Audit Trail with its **Refresh** and **Export CSV**, a row's details and its
+    **Person** and **Matter** lists open, Background Jobs with Tags Processor's **Schedule…** and **Disable**
+    question, each cancelled with the focus back on its button, and the **Activity** tabs of matter 1.1, also with a
+    **To Date** before its **From Date**, and of the person it made in the theme, with a listener failing it on any
+    request that writes;
     and the Errors and Audit Trail lists at 768 × 1024 too), and last the signed-out screen. Phase 4's dialogs are
     opened on a person and a group it makes in each theme, with names of its own run, so it changes nothing global. A
     check that follows the press of a button that goes pending (**Create User**, **Reset Password**, **Create Group**)

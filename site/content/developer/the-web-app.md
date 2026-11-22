@@ -377,11 +377,11 @@ What the screens from Phase 2 on share (the spec's section 7.2):
     Follow, and once the new file's top leaves the kept entries. The session's view is kept with the log, level and
     words it's of, so the box never draws an old log's lines for a new one. **Download** is a button: `useDownload`
     (`download.ts`) first asks `GET /v1/admin/logs` through the guarded client, then sends the shared
-    `launchDownload`'s frame to the log's file, and says beside the buttons, with `forms/Refusal`, what either
-    refused, while a `401` or a `403 admins-only`, from the check or in the frame, is the app's own Signed Out or
-    no-access page. The box (`LogLines`) is a named region that's a Tab stop, not a live region: at its end it keeps
-    to its end, and further up the first entry in view keeps its place, so new lines never move the reader or take the
-    focus.
+    `launchDownload`'s frame to the log's file, and says under the filters, with `forms/Refusal`, what either refused
+    (of the frame's, what Chromium and WebKit tell the page; Firefox tells it nothing), while a `401` or a
+    `403 admins-only`, from the check or in the frame, is the app's own Signed Out or no-access page. The box
+    (`LogLines`) is a named region that's a Tab stop, not a live region: at its end it keeps to its end, and further
+    up the first entry in view keeps its place, so new lines never move the reader or take the focus.
   - **The Audit Trail** (`AuditList.tsx`, `AuditFilters.tsx`, `ActivityPanel.tsx`, `queries.ts`, `text.ts`): one list,
     the screen's and both Activity tabs', through `useCursorList`, 100 rows a time, with the browser's `zone`; every
     cell plain text, an administration row's changes after its detail, and a row's details in a region under the list,

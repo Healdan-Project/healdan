@@ -22,9 +22,10 @@ logged, its log files, the Audit Trail of who did what, and the background jobs.
 and **Background Jobs** how many jobs failed when they last ran or are overdue, as the Dashboard's Needs Attention
 counts them. As with **Backends**, the counts are asked for when the Admin app opens and each time you come back to its
 window, and every 30 seconds while the Dashboard is showing. Marking a fault resolved or reopening it, and each action
-on a job, asks for them again at once, and the count follows; so does a job whose run ends failed, or succeeds after
-failing, the next time they're asked for. A new fault can take a minute or two to show, as the server works out the
-errors afresh once a minute.
+on a job, asks for them again at once, and the count follows; so does one of Healdan's jobs whose run ends failed, or
+succeeds after failing, and a LogicalDOC task's run that **Run Now** started, the next time they're asked for. A new
+fault, and a LogicalDOC task's scheduled run that fails, can take a minute or two to show, as the server works them
+out afresh once a minute.
 
 ## From the Dashboard
 

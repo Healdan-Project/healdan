@@ -1685,7 +1685,7 @@ changes nothing, and anything that only reads, a log's download and the export i
   administration rows aimed at the matter or at a folder or search folder in it, which a matter's Activity tab is;
   `docNumber`; `from` and `to`, days in `zone` (the server's without it); and `q`, on a file name, a folder's path, a
   target's name, an address, or the person as the row kept them (their username, and in LogicalDOC's history their
-  name at the time), never the name `who` gives. A page holds at most `limit` rows, 200 at most, and where no index
+  name at the time), never a name read now. A page holds at most `limit` rows, 200 at most, and where no index
   serves the filter it reads each source only so far, so it can hold fewer, or none, and still have a `nextCursor`,
   which goes back as `cursor`, with the same filters, for the rows after it. It's null once every source has been read
   to its end, and there's no total. `readBackTo` says how far back the reading has reached: every row the filters keep
@@ -1729,8 +1729,9 @@ changes nothing, and anything that only reads, a log's download and the export i
   jobs, which keep their own schedules.
 - **What's recorded:** `job.run-requested`, `job.stop-requested`, `job.enabled`, `job.disabled` and
   `job.schedule-changed`, with the schedule before and after as `every 1800 seconds` or `cron 0 0 3 * * ?`, each aimed
-  at the job by its name. The Dashboard's jobs, and so the Admin app's left pane, follow each of them, and a run that
-  ends otherwise than the one before, at their next read.
+  at the job by its name. The Dashboard's jobs, and so the Admin app's left pane, follow each of them at their next
+  read, and so do a run of one of Healdan's jobs that ends otherwise than the one before and a task's run that Run Now
+  started; a task's scheduled run shows within the Dashboard's minute or two.
 
 ## Healdan's Own Client
 

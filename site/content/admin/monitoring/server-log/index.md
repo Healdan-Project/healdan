@@ -29,9 +29,9 @@ The entries show in a box of their own, the oldest at the top and the newest at 
 second, in your browser's time zone, with its day for one before today; its level in words, such as **Warn** or
 **Error**; its source, the class and line of code that logged it, such as `Mover:322`, whose whole name shows when you
 point at it; and its message, with the lines that follow it, such as a stack trace, under it. A line that starts no
-entry, as the rest of a stack can be, shows indented, on its own. A few logs write no level, or neither a level nor a
-source: their entries show the time and the message alone. A line longer than 10,000 characters is cut there:
-**Download** has it whole.
+entry, as the rest of a stack can be, shows indented, on its own. A few logs write no source, or neither a level nor
+a source: their entries show the time, the level and the message, or the time and the message alone. A line longer
+than 10,000 characters is cut there: **Download** has it whole.
 
 Above the box:
 
@@ -92,8 +92,10 @@ file and the older ones, each under its own name. The zip is named after the log
 UTC, such as `dms-20261122-104107.zip`. Downloading a log isn't recorded.
 
 **Download** first asks Healdan for the logs, and only then downloads the file, so a refusal is said on the page,
-beside the buttons, as is one Healdan answers in the file's place; should your session have ended, or you no longer be
-an administrator, the Admin app says so in place of the screen.
+under the **Log**, **Level** and **Search the Log** fields, as is one Healdan answers in the file's place; should your
+session have ended, or you no longer be an administrator, the Admin app says so in place of the screen. Firefox
+doesn't tell the page that Healdan answered in the file's place, so there nothing is saved and the page says nothing
+of it: try again, or reload the page, which asks you to sign in if you've been signed out.
 
 For a zip of the logs with the server's settings and environment, for whoever helps you with a problem, use
 **Download the logs** on the Classic Interface's
