@@ -140,6 +140,8 @@ A destroyed folder's own history rows stay too. A destroyed document's own histo
 folder's history keeps a row of the destroy. The Admin app's [Audit Trail](../monitoring/audit-trail/) lists what
 stays, as the Classic Interface's **Last Changes** report does.
 
+<!-- P5 docs pass 2 -->
+
 ## A Backup's Reach
 
 A destroyed item's rows are gone for good, but its files aren't, at once. Storage holds a destroyed document's files for

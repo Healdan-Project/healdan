@@ -8,6 +8,8 @@ errors the server has logged: everything logged at error level or above, by Heal
 fault is one row, however often it happened, and Healdan keeps them in its database as they happen, so they're still
 there after a restart, and after the log file they were written to has rolled over.
 
+<!-- P5 docs pass 2 -->
+
 Healdan catches them from the moment its own start has run: an error logged before that, as the server starts, is
 only in the [Server Log](../server-log/). In a storm of errors, with more than a thousand waiting to be written at
 once, Healdan leaves the rest out rather than slow the server down, so a count here can be lower than the log's.
@@ -46,7 +48,8 @@ and the whole hour before it, and can include errors up to two hours old.
 The filters above the list all apply together:
 
 - **The text filter** keeps the faults whose latest message, or the name of the logger it was logged through, holds
-  what you type, in any case. The list follows once you pause typing.
+  what you type, in any case. It compares the message as Healdan keeps it, before a URL's user name and password are
+  taken out, where the Server Log's search finds what shows. The list follows once you pause typing.
 - **Area** keeps one area's faults: **Previews**, **Storage**, **Search Index** (reading documents' text included),
   **Email**, **Sign-In**, **Background Jobs**, or **Server** for anything else.
 - **Unresolved** keeps the faults nobody has marked resolved since they last happened.
@@ -73,9 +76,9 @@ are:
 ## Resolving a Fault
 
 **Mark Resolved** marks the fault resolved, by you, now. It changes nothing on the server but that mark: use it once
-you've dealt with the cause, or found the fault harmless, as some of LogicalDOC's own errors can be. It leaves the
-**Unresolved** list at once, and the Dashboard's Needs Attention, the left pane's count and, for an error sending
-email, the Dashboard's **Outgoing Email** tile within a minute or two, as the Dashboard's figures follow.
+you've dealt with the cause, or found the fault harmless. It leaves the **Unresolved** list at once, and the Dashboard's
+Needs Attention, the left pane's count and, for an error sending email, the Dashboard's **Outgoing Email** tile within a
+minute or two, as the Dashboard's figures follow.
 
 A resolved fault that happens again is unresolved again, of itself, so nothing that recurs stays hidden. **Reopen**
 marks a resolved fault unresolved again, and forgets who resolved it and when.

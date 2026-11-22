@@ -8,6 +8,8 @@ what was done in Healdan, newest first, in one list: sign-ins, what was done to 
 the administration record, which holds every change made through the Admin app, with what it changed. Only
 administrators see it, and reading or exporting it isn't recorded.
 
+<!-- P5 docs pass 2 -->
+
 ## The List
 
 | Column | What it shows |
@@ -23,9 +25,9 @@ administrators see it, and reading or exporting it isn't recorded.
 
 - **Who** is the person's name as it is now, so someone who has been renamed shows under their new name. Where no
   account has the row's user any more, it's the username the row kept.
-- **From** is empty for a row that kept no address: a client or matter made or edited in the Classic Interface, and
-  a recovery key shown or entered on its Storage tab. For a row made through a device signed in to Healdan's API,
-  such as Healdan Helper, it's the address the device signed in from.
+- **From** is empty for a row that kept no address: a client or matter made or edited outside the Admin app, as in the
+  Classic Interface, and a recovery key shown or entered on the Classic Interface's Storage tab. For a row made through
+  a device signed in to Healdan's API, such as Healdan Helper, it's the address the device signed in from.
 - **An administration row** shows each field it changed, with its value before and after. A secret, such as an S3
   access key or secret, shows as changed, with no value: Healdan never records a secret's value, nor a recovery key.
 
@@ -44,9 +46,11 @@ rows: the list reads back as far as you go.
 - **Folder:** what was done to a folder, from LogicalDOC's history of folders.
 - **User:** the rest of an account's history, such as a new password.
 - **Administration:** Healdan's administration record: each change made through the Admin app, and each client and
-  matter made or edited in the Classic Interface, with the fields it changed; and each time a storage backend's
-  recovery key was shown or entered. One shown or entered in the Admin app is one row, the administration record's;
-  one shown or entered on the Classic Interface's Storage tab is listed from that tab's own record.
+  matter made or edited elsewhere, as in the Classic Interface, with the fields it changed; and each time a storage
+  backend's recovery key was shown or entered. One shown or entered in the Admin app is one row, the administration
+  record's; one shown or entered on the Classic Interface's Storage tab is listed from that tab's own record.
+
+<!-- P5 docs pass 2 -->
 
 See [What Isn't Recorded](#what-isnt-recorded) for what the administration record leaves out.
 
@@ -96,6 +100,8 @@ Reading a document is recorded, as a Document row. Checking that it's the right 
 
 **Not recorded:** the thumbnail, a document's properties, the list of its versions, and its row in a list.
 
+<!-- P5 docs pass 2 -->
+
 A view is recorded once per person, per document, per half hour, so going through a list twice with the arrow keys, or
 reloading the page, doesn't fill the trail. Healdan remembers the half hour in the server's memory, so a restart can
 record one more. A preview still being made records nothing until it's shown, a refusal records nothing, and a view
@@ -132,13 +138,16 @@ Rows are kept for good: nothing deletes them. A document destroyed for good, by 
 destroy. The administration rows stay, and so does
 [the Trash's record](../../the-trash-and-removed-items/#the-record-that-outlives-an-item) of it.
 
+<!-- P5 docs pass 2 -->
+
 ## What Isn't Recorded
 
 The administration record holds every change made through the Admin app, and the clients and matters made or edited
-in the Classic Interface. Other changes made in the Classic Interface aren't in it, such as those on Healdan Settings,
-with its Sign-In and Storage tabs, and on LogicalDOC's own screens, such as its users, groups and settings. Make a
-change in the Admin app to have it recorded. A recovery key shown or entered on the Storage tab is listed all the
-same, from that tab's own record.
+elsewhere, as in the Classic Interface. Other changes made in the Classic Interface aren't in the administration record,
+such as those on Healdan Settings, with its Sign-In and Storage tabs, and on LogicalDOC's own screens, such as its
+users, groups and settings. Make a change in the Admin app to have it recorded there. The history rows of documents,
+folders and accounts are listed whichever screen made them. A recovery key shown or entered on the Storage tab is listed
+all the same, from that tab's own record.
 
 A change that changes nothing, such as saving someone's groups as they were, isn't recorded, and neither is anything
 that only reads in the Admin app, such as opening a screen, downloading a log or exporting this list.

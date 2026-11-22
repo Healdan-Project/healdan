@@ -72,11 +72,15 @@ and **Groups**; under **Storage**, **Stores** and **Backends**; under **Monitori
 the same window, for everything else. The entry for the screen you're on is marked, and so is a list's entry while one
 of its pages is open, such as **Matters** for a matter's page.
 
+<!-- P5 docs pass 2 -->
+
 An entry shows a count where something there needs attention, as Needs Attention counts it (below): **Backends**, how
 many storage backends can't be reached or are failing; **Errors**, how many unresolved errors the server logged in the
 last 24 hours, each kind of fault counting once; and **Background Jobs**, how many jobs failed or are overdue. The
 counts are asked for when the Admin app opens and each time you come back to its window, and every 30 seconds while the
 Dashboard is showing.
+
+<!-- P5 docs pass 2 -->
 
 On a window narrower than 1,024 pixels, the left pane folds away behind the **☰** (Navigation) button in the top bar,
 which opens it over the page. Esc or choosing a link closes it again. The Admin app is designed for a window 1,280
@@ -106,6 +110,8 @@ background job that failed or is overdue to **Background Jobs**. Documents that 
 **Classic Interface** until their place is in the Admin app. With nothing to report, it says "Nothing needs your
 attention."
 
+<!-- P5 docs pass 2 -->
+
 | It says, for example | What it means |
 |---|---|
 | "3 files are stuck moving to storage" | files Healdan gave up moving to their Store's storage backend: see [Stuck Files and Retry](../storage-backends/waiting-and-stuck-files/#stuck-files-and-retry) |
@@ -126,6 +132,8 @@ Ten tiles, each with its status in words and a line of detail. A tile opens the 
 Backends** and **Disk** open **Backends** (**Disk** the Classic Interface on a server that doesn't use storage
 backends); **Server**, **Database** and **Memory** open **Server Log**; **Previews** and **Background Jobs** open
 **Background Jobs**; and the others, for now, the Classic Interface. The status is:
+
+<!-- P5 docs pass 2 -->
 
 - **OK** when all is well;
 - **Needs Attention** when something needs acting on;

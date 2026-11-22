@@ -9,6 +9,8 @@ shows the server's log files: the main log, `dms.log`, and the logs some of Logi
 It doesn't show the container's own output, such as the start-up tool's messages before the server starts, which
 `docker compose logs app` has: see the Install manual's [Troubleshooting](../../../install/troubleshooting/).
 
+<!-- P5 docs pass 2 -->
+
 ## Choosing a Log
 
 The log menu has **Main Log** first, then each other log that holds anything: a LogicalDOC task's log under the task's
@@ -37,6 +39,10 @@ the lines that follow it, such as a stack trace, under it. A line longer than 10
   the very start of the oldest file, show only under Everything.
 - **The search** keeps the entries whose message, source or following lines hold what you type, in any case, as they
   show here.
+
+With a level or a search, each read looks through only so much of the log, about 5 MB, so it can show few entries, or
+none, before it reaches the start of the oldest file: an empty page isn't the end of the log until the page says it
+has reached the start.
 
 <!-- P5 docs pass 2 -->
 

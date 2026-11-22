@@ -16,6 +16,8 @@ logged, its log files, the Audit Trail of who did what, and the background jobs.
 - **[Background Jobs](background-jobs/),** at `/admin/jobs`: Healdan's background jobs and LogicalDOC's scheduled
   tasks, with when each last ran and how it went, and what each allows you to do.
 
+<!-- P5 docs pass 2 -->
+
 ## Counts in the Left Pane
 
 **Errors** shows how many unresolved errors the server logged in the last 24 hours, each kind of fault counting once,
@@ -23,6 +25,8 @@ and **Background Jobs** how many jobs failed when they last ran or are overdue, 
 counts them. As with **Backends**, the counts are asked for when the Admin app opens and each time you come back to its
 window, and every 30 seconds while the Dashboard is showing. Resolving a fault, or an action on a job, asks for them
 again, and they follow within a minute or two, as the Dashboard's figures do.
+
+<!-- P5 docs pass 2 -->
 
 ## From the Dashboard
 
@@ -32,6 +36,8 @@ The Dashboard's links open these screens:
   that hasn't run when it should have open **Background Jobs**;
 - in Server Health, the **Server**, **Database** and **Memory** tiles open **Server Log**, and the **Previews** and
   **Background Jobs** tiles open **Background Jobs**.
+
+<!-- P5 docs pass 2 -->
 
 See [The Dashboard](../the-admin-app/#the-dashboard).
 
