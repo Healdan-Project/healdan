@@ -1,19 +1,23 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { expect, test, type BrowserContext, type Page } from '@playwright/test'
+import { expect, test, type BrowserContext, type Page, type Request } from '@playwright/test'
 import { expectNoViolations } from './axe'
 import { ADMIN_PASSWORD, ADMIN_USERNAME, expectListUnder, signIn } from './helpers'
 
 // An axe pass on Healdan Admin's Dashboard (admin spec 8.1 and 17.1), with its frame's find, Help and person menus, on
-// Phase 2's screens (8.2 to 8.5: Clients, Matters, a matter's Overview and Workspace, and Workspace Templates) and on
-// Phase 3's (8.6: Stores, a Store's three tabs, Backends with the storage settings, and a backend's page), in the light
-// theme and in the dark one, which Playwright's `colorScheme` switches as the system's setting would, and in a tablet-wide
-// window with the left pane opened over the main area, where the Stores and Backends lists are checked too. A real browser
-// draws the page, so this is where the screens' colour contrast is checked: the app's Vitest checks run in jsdom, which
-// has no colours. It signs in as the stack's admin and only reads, so it changes nothing on the stack and depends on
-// nothing an earlier step left. The find and Phase 2's screens look at the smoke fixture's client and matter, and Phase
-// 3's at its Store Smoke and the storage overlay's Smoke Garage, which every smoke stack has.
+// Phase 2's screens (8.2 to 8.5: Clients, Matters, a matter's Overview and Workspace, and Workspace Templates), on
+// Phase 3's (8.6: Stores, a Store's three tabs, Backends with the storage settings, and a backend's page, with the Add
+// Backend, Key History and Change Backend dialogs) and on Phase 4's (8.7: Users, a person's page, Groups and a group's
+// page, with the New User, Reset Password, Disable, New Group and Add Member dialogs), in the light theme and in the dark
+// one, which Playwright's `colorScheme` switches as the system's setting would, and in a tablet-wide window with the left
+// pane opened over the main area, where the Stores and Backends lists are checked too. A real browser draws the page, so
+// this is where the screens' colour contrast is checked: the app's Vitest checks run in jsdom, which has no colours. It
+// signs in as the stack's admin and depends on nothing an earlier step left. It changes nothing global: Phase 3's dialogs
+// are closed with nothing sent, and Phase 4's are opened on a person and a group it makes, with names of its own run, in
+// each theme, whose password it resets and whose Disable it cancels. The find and Phase 2's screens look at the smoke
+// fixture's client and matter, and Phase 3's at its Store Smoke and the storage overlay's Smoke Garage, which every smoke
+// stack has, and which it only reads.
 
 for (const scheme of ['light', 'dark'] as const) {
   test.describe(`the Dashboard in the ${scheme} theme`, () => {
@@ -21,9 +25,15 @@ for (const scheme of ['light', 'dark'] as const) {
     test.describe.configure({ mode: 'serial' })
     let context: BrowserContext | undefined
     let page: Page
+    /** The person and the group Phase 4's dialogs are opened on: this run's own, in this theme */
+    let own = { username: '', person: '', group: '' }
 
     test.beforeAll(async ({ browser }, testInfo) => {
       expect(ADMIN_PASSWORD, 'ADMIN_PASSWORD is set by docker/tests/test-web.sh').not.toBe('')
+      // A time and a random part, so two runs, the two themes or the two browsers never share a name
+      const stamp = `${Date.now().toString(36)}${Math.floor(Math.random() * 36 ** 4).toString(36)}`
+      const run = `${scheme} ${testInfo.project.name}-${stamp}`
+      own = { username: `e2ea${scheme.slice(0, 1)}${testInfo.project.name.slice(0, 1)}${stamp}`, person: `E2E A11y ${run}`, group: `E2E A11y Group ${run}` }
       context = await browser.newContext({ ...testInfo.project.use, colorScheme: scheme })
       page = await context.newPage()
       await page.goto('/admin/')
@@ -40,6 +50,17 @@ for (const scheme of ['light', 'dark'] as const) {
     const main = () => page.getByRole('main')
     const banner = () => page.getByRole('banner')
     const check = (what: string) => expectNoViolations(page, `${what} (${scheme})`)
+    /**
+     * The check, once React Aria's announcement of a button press that was still on its way has gone. A focused button
+     * that goes pending (Create User, Reset Password, Create Group) is announced by its label, through a node that names
+     * the button (`aria-labelledby`) and stays in React Aria's live region for 7 seconds. The button goes with its form
+     * as the answer comes, and axe would find the node naming nothing until then, though the announcement was made while
+     * the button was there.
+     */
+    const checkOnceAnnounced = async (what: string) => {
+      await expect(page.locator('[data-live-announcer] [role="img"][aria-labelledby]'), 'the pending button announced').toHaveCount(0, { timeout: 10_000 })
+      await check(what)
+    }
 
     test('the page really is in the theme', async () => {
       expect(await page.evaluate(() => matchMedia('(prefers-color-scheme: dark)').matches)).toBe(scheme === 'dark')
@@ -125,12 +146,19 @@ for (const scheme of ['light', 'dark'] as const) {
     })
 
     // Phase 3's screens (admin spec 8.6), opened from the left pane: the smoke fixture's Store Smoke on each of its tabs, and
-    // the storage overlay's Smoke Garage, which they only read
-    test("Stores, a Store's tabs, Backends with the settings, and a backend's page", async () => {
+    // the storage overlay's Smoke Garage, which they only read; with Change Backend on Smoke, Add Backend and Smoke Garage's
+    // Key History, each closed with nothing sent
+    test("Stores, a Store's tabs, Backends with the settings, and a backend's page, with their dialogs", async () => {
       const pane = page.getByRole('navigation', { name: 'Navigation' })
       const list = (name: string) => main().getByRole('grid', { name })
       // A list's row, by its first column: Smoke's row, not Smoke Cloud's
       const row = (name: string, rowName: string) => list(name).getByRole('row').filter({ has: page.getByRole('rowheader', { name: rowName, exact: true }) })
+      // It only reads: no request it makes may change anything
+      const changes: string[] = []
+      const writes = (request: Request) => {
+        if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method())) changes.push(`${request.method()} ${new URL(request.url()).pathname}`)
+      }
+      page.on('request', writes)
 
       await pane.getByRole('link', { name: 'Stores' }).click()
       await expect(row('Stores', 'Smoke')).toBeVisible()
@@ -149,17 +177,144 @@ for (const scheme of ['light', 'dark'] as const) {
       await main().getByRole('tab', { name: 'Storage' }).click()
       await expect(main().getByRole('tabpanel').getByText('Waiting to Move', { exact: true })).toBeVisible()
       await check("a Store's Storage")
+      // Change Backend, opened on the backend Smoke keeps its files on, and cancelled
+      await main().getByRole('button', { name: 'Change Backend' }).click()
+      const change = page.getByRole('dialog', { name: 'Change the Backend of Smoke' })
+      await expect(change.getByRole('radio', { name: /^Original/ })).toBeChecked()
+      await expect(change.getByRole('radio', { name: /^Smoke Garage/ })).toBeVisible()
+      await check('Change Backend')
+      await change.getByRole('button', { name: 'Cancel' }).click()
+      await expect(change).toBeHidden()
 
       await pane.getByRole('link', { name: 'Backends' }).click()
       await expect(row('Backends', 'Smoke Garage')).toBeVisible()
       // The settings are drawn once they've come
       await expect(main().getByRole('region', { name: 'Settings' }).getByRole('textbox', { name: 'Parallel Transfers' })).toBeVisible()
       await check('the Backends list, with the files with no Store and the settings')
+      // Add Backend, opened on its S3 fields, as it starts, and cancelled
+      await main().getByRole('button', { name: 'Add Backend' }).click()
+      const add = page.getByRole('dialog', { name: 'Add a Storage Backend' })
+      await expect(add.getByRole('radio', { name: 'S3' })).toBeChecked()
+      await expect(add.getByRole('textbox', { name: 'Bucket' })).toBeVisible()
+      await check('Add Backend')
+      await add.getByRole('button', { name: 'Cancel' }).click()
+      await expect(add).toBeHidden()
 
       await row('Backends', 'Smoke Garage').click()
       await expect(main().getByRole('heading', { level: 1, name: 'Smoke Garage' })).toBeVisible()
       await expect(main().getByText('Smoke Cloud', { exact: true })).toBeVisible()
       await check("a backend's page")
+      // Its Key History: the seed's showing and confirmation of its recovery key
+      await main().getByRole('button', { name: 'Key History' }).click()
+      const history = page.getByRole('dialog', { name: 'Key History of Smoke Garage' })
+      await expect(history.getByRole('row').nth(1)).toBeVisible()
+      await check('Key History')
+      await history.getByRole('button', { name: 'Close' }).click()
+      await expect(history).toBeHidden()
+
+      // Back where the next test starts
+      await pane.getByRole('link', { name: 'Dashboard' }).click()
+      await expect(main().getByRole('heading', { level: 1, name: 'Dashboard' })).toBeVisible()
+      page.off('request', writes)
+      expect(changes, "Phase 3's screens and dialogs, only read").toEqual([])
+    })
+
+    // Phase 4's screens (admin spec 8.7), opened from the left pane, with their dialogs, on a person and a group this run
+    // makes in this theme: never webuser, apiuser, Everyone or admin's own account
+    test("Users, a person's page, Groups and a group's page, with their dialogs", async () => {
+      // Two accounts' worth of dialogs, each asking the server
+      test.setTimeout(150_000)
+      const pane = page.getByRole('navigation', { name: 'Navigation' })
+      const list = (name: string) => main().getByRole('grid', { name })
+
+      await pane.getByRole('link', { name: 'Users' }).click()
+      await expect(list('Users').getByRole('row').nth(1)).toBeVisible()
+      await expect(main().getByText('Loading…')).toHaveCount(0)
+      await check('the Users list')
+
+      await test.step('New User, and the temporary password it shows', async () => {
+        await main().getByRole('button', { name: 'New User' }).click()
+        const dialog = page.getByRole('dialog', { name: 'New User' })
+        // Its groups to add, from the first by name, once they've come
+        await expect(dialog.getByRole('listbox', { name: 'Groups' }).getByRole('option').first()).toBeVisible()
+        await expect(dialog.getByRole('combobox', { name: 'Language' })).not.toHaveValue('')
+        await check('New User')
+        await dialog.getByRole('textbox', { name: 'Username' }).fill(own.username)
+        await dialog.getByRole('textbox', { name: 'First Name' }).fill('E2E')
+        await dialog.getByRole('textbox', { name: 'Last Name' }).fill(own.person.slice('E2E '.length))
+        const create = dialog.getByRole('button', { name: 'Create User' })
+        await expect(create).toBeEnabled()
+        await create.click()
+        const made = page.getByRole('dialog', { name: `Added ${own.person}` })
+        await expect(made.getByRole('group', { name: 'Temporary Password' })).not.toBeEmpty()
+        await checkOnceAnnounced("New User's temporary password")
+        await made.getByRole('button', { name: 'Done' }).click()
+        await expect(main().getByRole('heading', { level: 1, name: own.person })).toBeVisible()
+      })
+
+      await expect(main().getByRole('list', { name: `Groups of ${own.person}` }).getByRole('listitem').first()).toBeVisible()
+      await expect(main().getByText('Loading…')).toHaveCount(0)
+      await check("a person's page")
+
+      await test.step('Reset Password: its question, and the temporary password it shows', async () => {
+        await main().getByRole('button', { name: 'Reset Password' }).click()
+        const question = page.getByRole('alertdialog', { name: `Reset the Password of ${own.person}?` })
+        await expect(question).toBeVisible()
+        await check("Reset Password's question")
+        await question.getByRole('button', { name: 'Reset Password' }).click()
+        const done = page.getByRole('dialog', { name: `New Password for ${own.person}` })
+        await expect(done.getByRole('group', { name: 'Temporary Password' })).not.toBeEmpty()
+        await checkOnceAnnounced("Reset Password's temporary password")
+        await done.getByRole('button', { name: 'Done' }).click()
+        await expect(done).toBeHidden()
+      })
+
+      await test.step("Disable's question, cancelled", async () => {
+        await main().getByRole('button', { name: 'Disable', exact: true }).click()
+        const question = page.getByRole('alertdialog', { name: `Disable ${own.person}?` })
+        await expect(question).toBeVisible()
+        await check("Disable's question")
+        await question.getByRole('button', { name: 'Cancel' }).click()
+        await expect(question).toBeHidden()
+        await expect(main().getByRole('button', { name: 'Disable', exact: true })).toBeVisible()
+      })
+
+      await pane.getByRole('link', { name: 'Groups' }).click()
+      await expect(list('Groups').getByRole('row').nth(1)).toBeVisible()
+      await expect(main().getByText('Loading…')).toHaveCount(0)
+      await check('the Groups list')
+
+      await test.step('New Group', async () => {
+        await main().getByRole('button', { name: 'New Group' }).click()
+        const dialog = page.getByRole('dialog', { name: 'New Group' })
+        await expect(dialog.getByRole('textbox', { name: 'Name' })).toBeFocused()
+        await check('New Group')
+        await dialog.getByRole('textbox', { name: 'Name' }).fill(own.group)
+        const create = dialog.getByRole('button', { name: 'Create Group' })
+        await expect(create).toBeEnabled()
+        await create.click()
+        await expect(main().getByRole('heading', { level: 1, name: own.group })).toBeVisible()
+      })
+
+      await expect(main().getByText('Nobody is in this group.')).toBeVisible()
+      await checkOnceAnnounced("a group's page")
+
+      await test.step("Add Member, with its list of people open, cancelled", async () => {
+        await main().getByRole('button', { name: 'Add Member' }).click()
+        const dialog = page.getByRole('dialog', { name: `Add a Member to ${own.group}` })
+        await expect(dialog.getByRole('combobox', { name: 'Person' })).toBeVisible()
+        await check('Add Member')
+        // The person this theme made, found by their username: the list is drawn as the form's are, after the field
+        await dialog.getByRole('combobox', { name: 'Person' }).fill(own.username)
+        await expect(page.getByRole('option', { name: `${own.person} ${own.username}` })).toBeVisible()
+        await check("Add Member's list of people")
+        // Esc closes the list alone, then Cancel the dialog, with nobody added
+        await page.keyboard.press('Escape')
+        await expect(page.getByRole('listbox')).toBeHidden()
+        await dialog.getByRole('button', { name: 'Cancel' }).click()
+        await expect(dialog).toBeHidden()
+        await expect(main().getByText('Nobody is in this group.')).toBeVisible()
+      })
 
       // Back where the next test starts
       await pane.getByRole('link', { name: 'Dashboard' }).click()

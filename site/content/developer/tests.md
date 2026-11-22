@@ -993,6 +993,17 @@ Tests](#the-web-modules-tests) are Maven's). [The Web App](../the-web-app/) says
     Workspace Editor. Then it signs in as `webuser` and checks in the User app that the matter's restricted folder
     isn't visible and the other folder is. Like every admin spec, it changes nothing global: it makes its own clients,
     matters, Stores and templates, and changes neither `webuser`, Everyone nor `Smoke Garage`.
+  - `admin-people.spec.ts` walks Phase 4's Users and Groups (Admin app spec §8.7). As `admin`, with a person and a
+    group of its own run, it makes the person with **New User**, a password account, whose temporary password is shown
+    once; makes the group with **New Group** and adds the person from its **Add Member**, and finds each listed on the
+    other's page; and resets the person's password, which shows a new temporary password. In a second browser context
+    the person signs in at the sign-in page with it, changes it in LogicalDOC's window for a password that has to
+    change, to one the default password rules take, and signs in afresh into the User app. **Disable**, after its
+    question, closes that session: its next `/api/v1/me` is `401`, and the app, asked again by a window `focus` event,
+    says it's signed out. **Enable** lets the person sign in again, with the password they chose. It never touches
+    `webuser`, `apiuser`, Everyone or `admin`'s own account, and no sign-in of any name fails with a wrong password, as
+    five block a username for 15 minutes: the person's first, with the temporary password, is the right password that
+    has to change, which the sign-in throttle doesn't count.
   - `admin-storage.spec.ts` walks Phase 3's Storage screens (Admin app spec §8.6). As `admin`, with names of its own
     run, it finds `Smoke Garage` reachable on the Backends list, with its page and the storage settings and their
     limits, which it only reads: none of its requests there writes, and a value outside a setting's limits is said
@@ -1012,9 +1023,17 @@ Tests](#the-web-modules-tests) are Maven's). [The Web App](../the-web-app/) says
     person menu, at 768 × 1024 the Dashboard (with no sideways scroll) and the left pane opened over it (Esc closes it,
     and the focus goes back to **☰**), Phase 2's screens (the Clients list, the Matters list, a matter's page on its
     Overview and Workspace tabs, and Workspace Templates, with the smoke fixture's client 1 and matter 1.1, which it
-    only reads, so it changes nothing and needs the smoke overlay), Phase 3's (the Stores list, the smoke fixture's
-    Store `Smoke` on its three tabs, the Backends list with the storage settings, and `Smoke Garage`'s page, which it
-    only reads too, and the Stores and Backends lists at 768 × 1024), and last the signed-out screen. This is where the
+    only reads, so it needs the smoke overlay), Phase 3's (the Stores list, the smoke fixture's Store `Smoke` on its
+    three tabs, the Backends list with the storage settings, and `Smoke Garage`'s page, which it only reads too, with
+    **Change Backend** on `Smoke`, **Add Backend** and `Smoke Garage`'s **Key History**, each closed with no request
+    that writes, and the Stores and Backends lists at 768 × 1024), Phase 4's (the Users list, a person's page, the
+    Groups list and a group's page, with **New User** and the temporary password it shows, **Reset Password**'s question
+    and the password it shows, **Disable**'s question, cancelled, **New Group**, and **Add Member** with its list of
+    people open, cancelled), and last the signed-out screen. Phase 4's dialogs are opened on a person and a group it
+    makes in each theme, with names of its own run, so it changes nothing global. A check that follows the press of a
+    button that goes pending (**Create User**, **Reset Password**, **Create Group**) first waits for React Aria's
+    announcement of the button to go: a node in its live region that names the button by `aria-labelledby` and stays
+    7 seconds, after the button has gone with its form, which axe would otherwise find naming nothing. This is where the
     Dashboard's colour contrast is checked. The find's list is checked with the whole page around it, as the User app's
     search box's is: `@healdan/ui`'s `ComboBox` draws the list right after the box, inside the find's search landmark,
     and keeps the page around it shown to a screen reader while it's open (The Web App page's The Search Box and Search
