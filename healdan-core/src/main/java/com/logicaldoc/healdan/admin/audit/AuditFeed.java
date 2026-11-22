@@ -191,7 +191,7 @@ public class AuditFeed {
 	private record Frontier(long id, Instant when) {
 	}
 
-	/** How many rows a bounded read looks through: {@link #SCAN_PER_SOURCE}, which tests set lower and put back */
+	/** The most rows of a source a bounded page looks through, {@link #SCAN_PER_SOURCE}; a seam for tests */
 	volatile int scanPerSource = SCAN_PER_SOURCE;
 
 	private final JdbcTemplate jdbc;
@@ -390,12 +390,18 @@ public class AuditFeed {
 			}
 		}
 
-		/** The first page's statement for a source's rows, for its plan */
+		/** The first page's statement for a source's rows, for its plan; a bounded read's has its window's end too */
 		Sql firstPageSql(String source) {
 			Source which = Source.of(source);
 			long[] range = ranges.get(which);
 			long upper = range != null ? range[1] + 1 : Long.MAX_VALUE;
-			return rowsSql(which, upper, range != null ? range[0] : Long.MIN_VALUE, query.limit());
+			long low = range != null ? range[0] : Long.MIN_VALUE;
+			if (bounded(which)) {
+				Frontier end = frontier(which, upper, low, Math.max(1, scanPerSource));
+				if (end != null)
+					low = end.id();
+			}
+			return rowsSql(which, upper, low, query.limit());
 		}
 
 		/** A dated source's id range, inclusive; null when it holds no row of the days */
@@ -443,11 +449,13 @@ public class AuditFeed {
 
 		/**
 		 * Whether a read of the source looks through a window of its rows: its rows are filtered, and no index
-		 * serves any of the filters on them
+		 * serves any of the filters on them. The storage record's rows always are, as its twins are left out
+		 * (ruling P5-R11), and a table of twins would otherwise be read to its end.
 		 */
 		private boolean bounded(Source source) {
 			boolean filtered = query.userId() != null || query.matterId() != null || query.docNumber() != null
-					|| from != null || to != null || pattern != null || source == Source.USER && oneAccountKind();
+					|| from != null || to != null || pattern != null || source == Source.USER && oneAccountKind()
+					|| source == Source.STORAGE;
 			return filtered && !indexed(source);
 		}
 

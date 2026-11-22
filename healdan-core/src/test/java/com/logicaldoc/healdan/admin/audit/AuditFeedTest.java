@@ -485,6 +485,12 @@ public class AuditFeedTest extends AbstractHealdanTestCase {
 				when = when.minus(Duration.ofMinutes(45));
 			if (i % 11 == 5)
 				when = when.plus(Duration.ofMinutes(40));
+			// At each edge, a row within the hour's margin: half an hour into the first day, below a row of the day
+			// before, and half an hour before the last day's end, above rows of the day after
+			if (i == 23)
+				when = start.plus(Duration.ofHours(24)).plus(Duration.ofMinutes(30));
+			if (i == 74)
+				when = start.plus(Duration.ofHours(71)).plus(Duration.ofMinutes(30));
 			history("ld_history", 5000 + i, when, 1L, "admin", "event.viewed");
 			adminRow(100 + i, when, 1L, "admin", "client.renamed", "client", 1L, "C", null);
 			storage(100 + 50L * i, when, 1L, 1L, "admin", "key-shown");
@@ -493,18 +499,6 @@ public class AuditFeedTest extends AbstractHealdanTestCase {
 		LocalDate to = LocalDate.parse("2026-11-22");
 
 		AuditFeed.Prepared prepared = feed.prepare(dates(from, to, ZoneOffset.UTC).build(), admin);
-
-		// The id range: from the first row of the first day less an hour (i = 23) to the last before the last day's
-		// end plus an hour, which is i = 73, 45 minutes early
-		long[] range = prepared.idRange("d");
-		assertEquals(5023, range[0]);
-		assertEquals(5073, range[1]);
-		long[] admins = prepared.idRange("a");
-		assertEquals(123, admins[0]);
-		assertEquals(173, admins[1]);
-		long[] stored = prepared.idRange("s");
-		assertEquals(100 + 50 * 23, stored[0]);
-		assertEquals(100 + 50 * 73, stored[1]);
 
 		Timestamp low = Timestamp.from(Instant.parse("2026-11-21T00:00:00Z"));
 		Timestamp high = Timestamp.from(Instant.parse("2026-11-23T00:00:00Z"));
@@ -519,6 +513,21 @@ public class AuditFeedTest extends AbstractHealdanTestCase {
 		assertEquals(Set.copyOf(scanned), Set.copyOf(ids(listed)));
 		assertEquals(scanned.size(), listed.size());
 		assertTrue(listed.size() > 100);
+		assertTrue(ids(listed).containsAll(List.of("d5023", "d5074", "a123", "a174", "s" + (100 + 50 * 23),
+				"s" + (100 + 50 * 74))));
+
+		// The id range: from the first row at or after the first day's start less an hour (i = 23, the edge row) to
+		// the last before the last day's end plus an hour (i = 74, the other). Without the margin a search ends past
+		// its edge row, and the full scan above finds rows the list leaves out
+		long[] range = prepared.idRange("d");
+		assertEquals(5023, range[0]);
+		assertEquals(5074, range[1]);
+		long[] admins = prepared.idRange("a");
+		assertEquals(123, admins[0]);
+		assertEquals(174, admins[1]);
+		long[] stored = prepared.idRange("s");
+		assertEquals(100 + 50 * 23, stored[0]);
+		assertEquals(100 + 50 * 74, stored[1]);
 
 		// From a day on, and to a day
 		assertEquals(jdbc.queryForObject("select count(*) from ld_history where ld_date >= ?", Long.class, low),
@@ -661,30 +670,50 @@ public class AuditFeedTest extends AbstractHealdanTestCase {
 	}
 
 	@Test
-	public void testADocNumberAndAPersonAreReadThroughTheirIndexes() throws Exception {
+	public void testEveryReadAnIndexServesUsesThatIndex() throws Exception {
 		Folder store = fx.store("Client Work");
 		Matter matter = fx.matter(fx.client(1001, "Ashcombe"), 1, "Charter Dispute", store, "Documents");
 		Document letter = fx.upload(child(matter.getFolderId(), "Documents"), "letter.txt", "x", admin);
 		HealdanFixtures.awaitVersionSaves();
-		// Statistics that show each document and person holds few of the rows
-		jdbc.update("insert into ld_history (ld_id, ld_lastmodified, ld_creation, ld_recordversion, ld_deleted,"
-				+ " ld_tenantid, ld_notified, ld_date, ld_userid, ld_username, ld_event, ld_docid)"
-				+ " select 100000 + n, current_timestamp, current_timestamp, 1, 0, 1, 0, current_timestamp,"
-				+ " 10000 + n % 2000, 'someone', 'event.viewed', 10000 + n % 2000 from generate_series(1, 20000) n");
-		jdbc.execute("analyze ld_history");
+		// Statistics in which each document, person, folder and target holds few of a table's rows, and sequential
+		// scans off: the test is that the planner takes the filter's index, not the primary key read backwards
+		// until enough rows match, which is the scan a bound exists to prevent
+		for (String table : List.of("ld_history", "ld_folder_history", "ld_user_history"))
+			jdbc.update("insert into " + table + " (ld_id, ld_lastmodified, ld_creation, ld_recordversion,"
+					+ " ld_deleted, ld_tenantid, ld_notified, ld_date, ld_userid, ld_username, ld_event, ld_docid,"
+					+ " ld_folderid) select 100000 + n, current_timestamp, current_timestamp, 1, 0, 1, 0,"
+					+ " current_timestamp, 10000 + n % 2000, 'someone', 'event.x', 10000 + n % 2000,"
+					+ " 10000 + n % 2000 from generate_series(1, 20000) n");
+		jdbc.update("insert into hd_admin_event (hd_id, hd_tenantid, hd_date, hd_userid, hd_username, hd_area,"
+				+ " hd_action, hd_targetkind, hd_targetid) select 100000 + n, 1, current_timestamp, 10000 + n % 2000,"
+				+ " 'someone', 'MATTERS', 'x.y', case n % 3 when 0 then 'user' when 1 then 'folder' else 'matter' end,"
+				+ " 10000 + n % 2000 from generate_series(1, 20000) n");
+		for (String table : TABLES)
+			jdbc.execute("analyze " + table);
+		AuditQuery byDocNumber = new AuditQuery(null, null, null, docNumber(letter), null, null, null, null, 50, null);
+		AuditQuery byPerson = new AuditQuery(null, 10007L, null, null, null, null, null, null, 50, null);
+		AuditQuery byMatter = new AuditQuery(null, null, matter.getId(), null, null, null, null, null, 50, null);
+		record Read(AuditQuery query, String source, String table, List<String> indexes) {
+		}
 		TransactionTemplate transaction = new TransactionTemplate(Context.get(PlatformTransactionManager.class));
 
-		for (AuditQuery query : List.of(
-				new AuditQuery(null, null, null, docNumber(letter), null, null, null, null, 50, null),
-				new AuditQuery(null, 10007L, null, null, null, null, null, null, 50, null))) {
-			AuditFeed.Sql sql = feed.prepare(query, admin).firstPageSql("d");
+		for (Read read : List.of(new Read(byDocNumber, "d", "ld_history", List.of("ld_hist_docid")),
+				new Read(byPerson, "d", "ld_history", List.of("ld_hist_uid")),
+				new Read(byPerson, "u", "ld_user_history", List.of("ld_uhist_uid")),
+				new Read(byPerson, "a", "hd_admin_event", List.of("hd_admin_event_user", "hd_admin_event_target")),
+				new Read(byMatter, "f", "ld_folder_history", List.of("ld_fhist_fid")),
+				new Read(byMatter, "a", "hd_admin_event", List.of("hd_admin_event_target")))) {
+			AuditFeed.Sql sql = feed.prepare(read.query(), admin).firstPageSql(read.source());
 			String plan = transaction.execute(status -> {
 				jdbc.execute("set local enable_seqscan = off");
 				return String.join("\n", jdbc.query("explain (costs off) " + sql.text(),
 						ps -> AuditFeed.bind(ps, sql.params()), (rs, n) -> rs.getString(1)));
 			});
-			String index = query.docNumber() != null ? "ld_hist_docid" : "ld_hist_uid";
-			assertTrue(plan, plan.contains(index));
+			for (String index : read.indexes())
+				assertTrue(read + ":\n" + plan, plan.contains(" " + index));
+			String key = jdbc.queryForObject("select c.conname from pg_constraint c join pg_class t on t.oid ="
+					+ " c.conrelid where t.relname = ? and c.contype = 'p'", String.class, read.table());
+			assertFalse(read + ":\n" + plan, plan.contains("Index Scan Backward using " + key));
 		}
 	}
 

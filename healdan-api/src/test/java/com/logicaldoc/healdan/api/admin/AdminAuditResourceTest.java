@@ -146,10 +146,20 @@ public class AdminAuditResourceTest extends ApiTestCase {
 				StandardCharsets.UTF_8)).webSession(session).send().json().path("items"));
 		assertFalse(byText.isEmpty());
 		assertTrue(byText.stream().allMatch(item -> item.path("detail").textValue().contains("Letter_100%.txt")));
-		String today = LocalDate.now(ZoneId.of("Asia/Tokyo")).toString();
+		ZoneId tokyo = ZoneId.of("Asia/Tokyo");
+		LocalDate today = LocalDate.now(tokyo);
 		ApiResponse dated = get(AUDIT + "?limit=200&zone=Asia/Tokyo&from=" + today + "&to=" + today)
 				.webSession(session).send();
 		assertEquals(dated.toString(), 200, dated.status());
+		List<JsonNode> todays = list(dated.json().path("items"));
+		assertFalse(todays.isEmpty());
+		for (JsonNode item : todays)
+			assertEquals(item.toString(), today, Instant.parse(item.path("when").textValue()).atZone(tokyo)
+					.toLocalDate());
+		// A day before every row keeps none
+		ApiResponse before = get(AUDIT + "?zone=Asia/Tokyo&from=2020-01-01&to=2020-01-01").webSession(session)
+				.send();
+		assertEquals(before.toString(), 0, before.json().path("items").size());
 		ApiResponse backwards = get(AUDIT + "?from=2026-11-22&to=2026-11-21").webSession(session).send();
 		assertEquals(backwards.toString(), 200, backwards.status());
 		assertEquals(0, backwards.json().path("items").size());
