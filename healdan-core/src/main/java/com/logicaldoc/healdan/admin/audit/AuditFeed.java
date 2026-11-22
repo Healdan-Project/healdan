@@ -53,10 +53,15 @@ import com.logicaldoc.util.spring.Context;
  * <p>
  * None of the tables has an index on its date, and Healdan adds none to LogicalDOC's, so each source is read newest
  * first by its primary key, below its place in the {@link AuditCursor}, and the sources are merged by date here. A
- * page reads at most as many rows of a source as it holds; with a filter, at most {@link #SCAN_PER_SOURCE} of a
- * source's rows are looked through (ruling P5-R13), so a filter that keeps few rows can't make one request read a
- * whole table: such a page may be short, even empty, and still have a next cursor. A row of one source is given only
- * once every source that could still hold a newer row has been read that far, so the order holds across short reads.
+ * page reads at most as many rows of a source as it holds. A filter an index serves (ruling P5-R28) reads the source
+ * through that index, still newest first by key, so a document's or a person's rows come in one request however old
+ * they are: a doc # ({@code ld_history} by {@code ld_docid}), a person ({@code ld_history} and
+ * {@code ld_user_history} by {@code ld_userid}, the administration record by {@code hd_userid} and by its target), a
+ * matter ({@code ld_folder_history} by {@code ld_folderid}, the administration record by its target). Any other
+ * filter looks through at most {@link #SCAN_PER_SOURCE} of a source's rows a page (ruling P5-R13), so one that keeps
+ * few rows can't make one request read a whole table: such a page may be short, even empty, and still have a next
+ * cursor. A row of one source is given only once every source that could still hold a newer row has been read that
+ * far, so the order holds across short reads.
  * <p>
  * A date range becomes an id range for each table (ruling P5-R12) by a binary search on the primary key, each probe
  * reading the row with the greatest id at or below a point, widened by {@link #DATE_SLACK} each side; the rows are
@@ -72,8 +77,15 @@ public class AuditFeed {
 	/** The most rows a page holds; the API asks for 200 at most, and the export for this many a page */
 	public static final int MAX_LIMIT = 1000;
 
-	/** The most rows of a source a filtered page looks through */
-	static final int SCAN_PER_SOURCE = 10_000;
+	/**
+	 * The most rows of a source a page looks through when no index serves its filter (ruling P5-R28): as many as one
+	 * request can afford. Measured on the test database (PostgreSQL 18, its data in memory, warm), on an
+	 * {@code ld_history} of 300,000 rows with a text filter that matches none, a page looked through rows at about
+	 * 0.9 microseconds each, linearly: 9 ms for 10,000, 48 ms for 50,000, 91 ms for 100,000, 183 ms for 200,000. So
+	 * a page whose five sources each look through this many takes about half a second there, and more on a server
+	 * reading from disk; an index-served page took 4 ms.
+	 */
+	static final int SCAN_PER_SOURCE = 100_000;
 
 	/** How far out of step with its id's order a row's date may be, for a date range to find it */
 	static final Duration DATE_SLACK = Duration.ofHours(1);
@@ -100,11 +112,6 @@ public class AuditFeed {
 	private static final String CE_COLUMNS = "t.ld_id, " + CE_DATE
 			+ ", t.ld_userid, t.ld_username, t.ld_event, t.ld_ip, t.ld_folderid, t.ld_docid, t.ld_filename,"
 			+ " t.ld_path, t.ld_device, t.ld_keylabel, t.ld_comment, ";
-
-	/** A person's name contains the pattern, given as the tenant and the pattern */
-	private static final String NAMED = "select u.ld_id from ld_user u where u.ld_tenantid = ?"
-			+ " and lower(trim(concat_ws(' ', trim(u.ld_firstname), trim(u.ld_name)))) like ? "
-			+ ListingSql.LIKE_ESCAPE;
 
 	/**
 	 * A storage row's twin: the administration record's row of the same showing or entering, made through the Admin
@@ -184,7 +191,7 @@ public class AuditFeed {
 	private record Frontier(long id, Instant when) {
 	}
 
-	/** A filtered read's rows, or how far {@link #scanPerSource} lets one look */
+	/** How many rows a bounded read looks through: {@link #SCAN_PER_SOURCE}, which tests set lower and put back */
 	volatile int scanPerSource = SCAN_PER_SOURCE;
 
 	private final JdbcTemplate jdbc;
@@ -423,7 +430,7 @@ public class AuditFeed {
 			if (upper <= floor)
 				return Read.done(source);
 
-			Frontier frontier = filtered(source) ? frontier(source, upper, floor, scan) : null;
+			Frontier frontier = bounded(source) ? frontier(source, upper, floor, scan) : null;
 			List<Raw> rows = query(source, rowsSql(source, upper, frontier != null ? frontier.id() : floor, limit));
 			if (rows.size() == limit) {
 				Raw last = rows.get(rows.size() - 1);
@@ -434,10 +441,31 @@ public class AuditFeed {
 			return new Read(source, rows, false, 0, null);
 		}
 
-		/** Whether the source's rows are filtered, so that a read looks through a window of them */
-		private boolean filtered(Source source) {
-			return query.userId() != null || query.matterId() != null || query.docNumber() != null || from != null
-					|| to != null || pattern != null || source == Source.USER && oneAccountKind();
+		/**
+		 * Whether a read of the source looks through a window of its rows: its rows are filtered, and no index
+		 * serves any of the filters on them
+		 */
+		private boolean bounded(Source source) {
+			boolean filtered = query.userId() != null || query.matterId() != null || query.docNumber() != null
+					|| from != null || to != null || pattern != null || source == Source.USER && oneAccountKind();
+			return filtered && !indexed(source);
+		}
+
+		/**
+		 * @return whether an index serves one of the filters on the source's rows (ruling P5-R28): LogicalDOC's
+		 *         {@code LD_HIST_DOCID} and {@code LD_HIST_UID} on {@code ld_history}, {@code LD_FHIST_FID} on
+		 *         {@code ld_folder_history}, {@code LD_UHIST_UID} on {@code ld_user_history}, and
+		 *         {@code hd_admin_event_user} and {@code hd_admin_event_target}. A person's folder rows, a matter's
+		 *         document rows and the storage record's rows have none.
+		 */
+		private boolean indexed(Source source) {
+			return switch (source) {
+			case DOCUMENT -> query.docNumber() != null || query.userId() != null;
+			case FOLDER -> query.matterId() != null;
+			case USER -> query.userId() != null;
+			case ADMIN -> query.userId() != null || query.matterId() != null;
+			case STORAGE -> false;
+			};
 		}
 
 		private boolean oneAccountKind() {
@@ -526,20 +554,19 @@ public class AuditFeed {
 				switch (source) {
 				case ADMIN -> {
 					where.add("(lower(t.hd_username)" + like + " or lower(t.hd_targetname)" + like
-							+ " or lower(t.hd_address)" + like + " or t.hd_userid in (" + NAMED + "))");
-					params.addAll(List.of(pattern, pattern, pattern, tenantId, pattern));
+							+ " or lower(t.hd_address)" + like + ")");
+					params.addAll(List.of(pattern, pattern, pattern));
 				}
 				case STORAGE -> {
-					where.add("(lower(t.hd_username)" + like + " or t.hd_userid in (" + NAMED + ")"
-							+ " or t.hd_backendid in (select b.ld_id from hd_storage_backend b where b.ld_tenantid = ?"
-							+ " and lower(b.hd_name)" + like + "))");
-					params.addAll(List.of(pattern, tenantId, pattern, tenantId, pattern));
+					// The backend is a storage row's target, and its name the row's
+					where.add("(lower(t.hd_username)" + like + " or t.hd_backendid in (select b.ld_id from"
+							+ " hd_storage_backend b where b.ld_tenantid = ? and lower(b.hd_name)" + like + "))");
+					params.addAll(List.of(pattern, tenantId, pattern));
 				}
 				default -> {
 					where.add("(lower(t.ld_username)" + like + " or lower(t.ld_filename)" + like
-							+ " or lower(t.ld_path)" + like + " or lower(t.ld_ip)" + like + " or t.ld_userid in ("
-							+ NAMED + "))");
-					params.addAll(List.of(pattern, pattern, pattern, pattern, tenantId, pattern));
+							+ " or lower(t.ld_path)" + like + " or lower(t.ld_ip)" + like + ")");
+					params.addAll(List.of(pattern, pattern, pattern, pattern));
 				}
 				}
 			}
@@ -769,7 +796,8 @@ public class AuditFeed {
 		}
 	}
 
-	private static void bind(PreparedStatement ps, Object[] params) throws SQLException {
+	/** Binds a statement's values, an {@link Ids} as one {@code bigint} array */
+	static void bind(PreparedStatement ps, Object[] params) throws SQLException {
 		for (int i = 0; i < params.length; i++) {
 			Object param = params[i];
 			switch (param) {

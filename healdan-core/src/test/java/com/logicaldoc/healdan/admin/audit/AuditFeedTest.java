@@ -466,8 +466,9 @@ public class AuditFeedTest extends AbstractHealdanTestCase {
 		assertEquals(List.of("a11"), ids(all(text("198.51.100.9"))));
 		assertEquals(List.of("u3001"), ids(all(text("198.51.100.4"))));
 		assertEquals(List.of("f2001"), ids(all(text("matters/100"))));
-		assertEquals(List.of("u3002"), ids(all(text("vance"))));
-		assertEquals(List.of("u3002"), ids(all(text("dorothy v"))));
+		// The username the row kept, not the person's name now: the person filter finds a person
+		assertEquals(List.of("u3002"), ids(all(text("dvance"))));
+		assertEquals(List.of(), ids(all(text("dorothy"))));
 		assertEquals(List.of("s100"), ids(all(text("garage_"))));
 		assertEquals(List.of("s150"), ids(all(text("erin"))));
 		assertEquals(List.of(), ids(all(text("nothing like it"))));
@@ -593,6 +594,98 @@ public class AuditFeedTest extends AbstractHealdanTestCase {
 		List<AuditRow> rows = all(text("tom"));
 
 		assertEquals(expected, ids(rows));
+	}
+
+	@Test
+	public void testADocNumbersRowsComeInOnePageThroughItsIndex() throws Exception {
+		Folder store = fx.store("Client Work");
+		Matter matter = fx.matter(fx.client(1001, "Ashcombe"), 1, "Charter Dispute", store, "Documents");
+		Document old = fx.upload(child(matter.getFolderId(), "Documents"), "old-letter.txt", "old", admin);
+		HealdanFixtures.awaitVersionSaves();
+		DocumentManager.get().rename(old.getId(), "old-letter-2.txt", fx.documentHistory(admin));
+		HealdanFixtures.awaitVersionSaves();
+		List<Long> its = jdbc.queryForList("select ld_id from ld_history where ld_docid = ? order by ld_id desc",
+				Long.class, old.getId());
+		assertTrue(its.size() >= 2);
+		// Many more rows since, of other documents, than a bounded read looks through
+		feed.scanPerSource = 10;
+		unrelated("ld_history", 60);
+
+		AuditPage page = feed.page(new AuditQuery(null, null, null, docNumber(old), null, null, null, null, 50, null),
+				admin);
+
+		assertEquals(its.stream().map(id -> "d" + id).toList(), ids(page.items()));
+		assertNull(page.nextCursor());
+
+		// The same document found by its file name, which no index serves: pages a window at a time
+		AuditQuery byName = text("old-letter").build();
+		AuditPage first = feed.page(byName, admin);
+		assertEquals(List.of(), first.items());
+		assertNotNull(first.nextCursor());
+		assertTrue(ids(all(byName)).containsAll(its.stream().map(id -> "d" + id).toList()));
+	}
+
+	@Test
+	public void testAPersonsRowsComeInOnePageThroughTheIndexes() throws Exception {
+		User alice = fx.user("alice");
+		empty();
+		// Hers, old: a document's, the account's, one she made, one about her, a folder's and a key's
+		history("ld_history", 1001, T0.plusSeconds(1), alice.getId(), "alice", "event.viewed");
+		history("ld_user_history", 3001, T0.plusSeconds(2), alice.getId(), "alice", "event.user.login");
+		adminRow(11, T0.plusSeconds(3), alice.getId(), "alice", "client.renamed", "client", 1L, "C", null);
+		adminRow(12, T0.plusSeconds(4), 1L, "admin", "user.disabled", "user", alice.getId(), "alice", null);
+		history("ld_folder_history", 2001, T0.plusSeconds(5), alice.getId(), "alice", "event.folder.created");
+		storage(100, T0.plusSeconds(6), 1L, alice.getId(), "alice", "key-shown");
+		// Many more since, by others, than a bounded read looks through, in each source an index serves
+		feed.scanPerSource = 10;
+		unrelated("ld_history", 60);
+		unrelated("ld_user_history", 60);
+		unrelated("hd_admin_event", 60);
+		// Fewer than that in the two it doesn't: a person's folder rows and key rows are read a window at a time
+		unrelated("ld_folder_history", 5);
+		unrelated("hd_storage_event", 5);
+
+		AuditQuery query = new AuditQuery(null, alice.getId(), null, null, null, null, null, null, 50, null);
+		AuditPage page = feed.page(query, admin);
+
+		assertEquals(List.of("s100", "f2001", "a12", "a11", "u3001", "d1001"), ids(page.items()));
+		assertNull(page.nextCursor());
+
+		// Where a source no index serves holds more than its window, a page waits for it, and the order holds
+		unrelated("ld_folder_history", 60);
+		AuditPage short1 = feed.page(query, admin);
+		assertTrue(short1.items().size() < 6);
+		assertNotNull(short1.nextCursor());
+		List<AuditRow> rows = all(query);
+		assertEquals(List.of("s100", "f2001", "a12", "a11", "u3001", "d1001"), ids(rows));
+	}
+
+	@Test
+	public void testADocNumberAndAPersonAreReadThroughTheirIndexes() throws Exception {
+		Folder store = fx.store("Client Work");
+		Matter matter = fx.matter(fx.client(1001, "Ashcombe"), 1, "Charter Dispute", store, "Documents");
+		Document letter = fx.upload(child(matter.getFolderId(), "Documents"), "letter.txt", "x", admin);
+		HealdanFixtures.awaitVersionSaves();
+		// Statistics that show each document and person holds few of the rows
+		jdbc.update("insert into ld_history (ld_id, ld_lastmodified, ld_creation, ld_recordversion, ld_deleted,"
+				+ " ld_tenantid, ld_notified, ld_date, ld_userid, ld_username, ld_event, ld_docid)"
+				+ " select 100000 + n, current_timestamp, current_timestamp, 1, 0, 1, 0, current_timestamp,"
+				+ " 10000 + n % 2000, 'someone', 'event.viewed', 10000 + n % 2000 from generate_series(1, 20000) n");
+		jdbc.execute("analyze ld_history");
+		TransactionTemplate transaction = new TransactionTemplate(Context.get(PlatformTransactionManager.class));
+
+		for (AuditQuery query : List.of(
+				new AuditQuery(null, null, null, docNumber(letter), null, null, null, null, 50, null),
+				new AuditQuery(null, 10007L, null, null, null, null, null, null, 50, null))) {
+			AuditFeed.Sql sql = feed.prepare(query, admin).firstPageSql("d");
+			String plan = transaction.execute(status -> {
+				jdbc.execute("set local enable_seqscan = off");
+				return String.join("\n", jdbc.query("explain (costs off) " + sql.text(),
+						ps -> AuditFeed.bind(ps, sql.params()), (rs, n) -> rs.getString(1)));
+			});
+			String index = query.docNumber() != null ? "ld_hist_docid" : "ld_hist_uid";
+			assertTrue(plan, plan.contains(index));
+		}
 	}
 
 	@Test
@@ -823,6 +916,22 @@ public class AuditFeedTest extends AbstractHealdanTestCase {
 	}
 
 	// What the tests write and read
+
+	/** Writes rows of others, newer than the tests' own, with ids above theirs */
+	private void unrelated(String table, int count) {
+		long first = jdbc.queryForObject("select coalesce(max(" + (table.equals("hd_admin_event") ? "hd_id" : "ld_id")
+				+ "), 0) + 1000 from " + table, Long.class);
+		Instant later = Instant.now().plusSeconds(3600);
+		for (int i = 0; i < count; i++) {
+			Instant when = later.plusSeconds(i);
+			switch (table) {
+			case "hd_admin_event" -> adminRow(first + i, when, 987654L, "other", "client.renamed", "client", 1L,
+					"Other", null);
+			case "hd_storage_event" -> storage(first + 50L * i, when, 1L, 987654L, "other", "key-shown");
+			default -> history(table, first + i, when, 987654L, "other", "event.viewed", "other.txt", null, null);
+			}
+		}
+	}
 
 	private void empty() {
 		for (String table : TABLES)
