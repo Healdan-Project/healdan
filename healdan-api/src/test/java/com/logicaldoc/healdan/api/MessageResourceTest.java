@@ -632,6 +632,33 @@ public class MessageResourceTest extends ApiTestCase {
 				.intValue());
 	}
 
+	@Test
+	public void testAFailureAfterTheLinkTakesTheLinkBackPastABackgroundWrite() throws Exception {
+		// CE's link DAO writes both documents' counts in the delete's transaction too, so the delete is lost the
+		// same way: the copy's delete then took the link with it, and the email kept the count of a link it no
+		// longer had
+		Document email = file("parts-attached.eml");
+		String token = signIn(clerk);
+		BackgroundWrite indexer = BackgroundWrite.atFlush(email.getId(), DocumentEvent.INDEXED, d -> d.setColor("red"))
+				.overtakingLinkCount();
+		MessageResource.afterLinked = copy -> {
+			// From here on: the link's store isn't the write to overtake
+			indexer.start();
+			throw new IllegalStateException("The answer couldn't be made");
+		};
+		try (indexer) {
+			ApiResponse response = post(path(email, "/attachments/1/file")).token(token).send();
+			assertEquals(response.toString(), 500, response.status());
+			indexer.assertWritten();
+		} finally {
+			MessageResource.afterLinked = null;
+		}
+
+		assertEquals(0, jdbc().queryForObject("select count(*) from ld_link where ld_deleted = 0", Integer.class)
+				.intValue());
+		assertEquals(0, linksOf(email.getId()));
+	}
+
 	/** @return the count of links CE keeps on the document's row */
 	private int linksOf(long docId) {
 		return jdbc().queryForObject("select ld_links from ld_document where ld_id = ?", Integer.class, docId)

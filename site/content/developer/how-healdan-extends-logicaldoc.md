@@ -796,7 +796,11 @@ see [Building from Source](../building-from-source/#running-the-war-outside-dock
   whether the link's row is there and stores a new link while it isn't, three times at most; a link still not
   stored fails the filing, which takes back what it filed (`MessageResourceTest`'s saves past the Indexer's write
   and `EmailFilingTest#testFilesTickedAttachmentsPastABackgroundWriteAtTheFlush`, with `BackgroundWrite`'s
-  `overtakingLinkCount`). A link made in the Classic Interface can still be lost this way.
+  `overtakingLinkCount`). The delete of a link that a failed filing takes back is read back the same way, as
+  LogicalDOC's DAO counts the links again in that transaction: a lost delete left the email the count of a link it
+  no longer had (`MessageResourceTest#testAFailureAfterTheLinkTakesTheLinkBackPastABackgroundWrite`). `link` refuses
+  inside a transaction, where its read-back would count a row that isn't committed yet. A link made in the Classic
+  Interface can still be lost this way.
 - **Licence headers.** Every source file Healdan writes opens with two SPDX lines in its own comment syntax, with
   the year the file was created:
 

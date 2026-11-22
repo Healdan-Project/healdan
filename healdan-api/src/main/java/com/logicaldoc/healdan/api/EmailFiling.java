@@ -24,6 +24,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.logicaldoc.core.PersistenceException;
@@ -487,35 +488,30 @@ public class EmailFiling {
 	 * 2026-11-21, as {@link CheckoutResource#checkOut}). So the link is read
 	 * back from the database, and while it isn't there CE is asked again,
 	 * with a link of its own each time.
+	 * <p>
+	 * It is called outside any transaction: inside one, the read-back would
+	 * count a row that isn't committed yet, in a transaction that may already
+	 * be lost.
 	 *
 	 * @param email the email
 	 * @param attachment the document filed from one of its attachments
 	 * @return the link, stored
 	 * @throws PersistenceException CE's failure; also when the link still
 	 *         isn't stored after the last try
+	 * @throws IllegalStateException inside a transaction
 	 */
 	static DocumentLink link(Document email, Document attachment) throws PersistenceException {
+		if (TransactionSynchronizationManager.isActualTransactionActive())
+			throw new IllegalStateException("A link is stored outside any transaction, so that it can be read back");
 		for (int tries = 1;; tries++) {
 			DocumentLink link = new DocumentLink();
 			link.setType(LINK_TYPE);
 			link.setDocument1(email);
 			link.setDocument2(DocumentDAO.get().findById(attachment.getId()));
 			link.setTenantId(email.getTenantId());
-			try {
-				DocumentLinkDAO.get().store(link);
-			} catch (PersistenceException | RuntimeException e) {
-				if (!CheckoutResource.overtaken(e))
-					throw e;
-				// CE's own transaction decided whether the link was kept
-				if (stored(link))
-					return link;
-				if (tries >= CheckoutResource.TRIES)
-					throw e;
-				log.info("Linking document {} to its email {} again, as another write came first: {}",
-						attachment.getId(), email.getId(), e.getClass().getName());
-				continue;
-			}
-			if (stored(link))
+			// A failure CE throws stands: the write it loses here, it loses in a flush, saying nothing
+			DocumentLinkDAO.get().store(link);
+			if (stored(link.getId()))
 				return link;
 			if (tries >= CheckoutResource.TRIES)
 				throw new PersistenceException(
@@ -531,9 +527,29 @@ public class EmailFiling {
 	 *         a transaction of its own, since the entity CE's DAO was handed
 	 *         has an id whether or not its transaction was kept
 	 */
-	private static boolean stored(DocumentLink link) throws PersistenceException {
-		return link.getId() != 0L && DocumentLinkDAO.get()
-				.queryForLong("select count(*) from ld_link where ld_deleted = 0 and ld_id = " + link.getId()) > 0L;
+	private static boolean stored(long linkId) throws PersistenceException {
+		return linkId != 0L && DocumentLinkDAO.get()
+				.queryForLong("select count(*) from ld_link where ld_deleted = 0 and ld_id = " + linkId) > 0L;
+	}
+
+	/**
+	 * Deletes a link through CE's link DAO, which then writes both documents'
+	 * count of links in the delete's transaction, so the delete can be lost
+	 * unseen as a link's store can ({@link #link}). A document deleted next
+	 * takes its links with it, but nothing counts the other document's again,
+	 * which would keep the count of a link it no longer has. So the row is
+	 * read back, and while it's still there CE is asked again.
+	 *
+	 * @throws PersistenceException CE's failure; also when the link is still
+	 *         there after the last try
+	 */
+	private static void unlink(long linkId) throws PersistenceException {
+		for (int tries = 1; tries <= CheckoutResource.TRIES; tries++) {
+			DocumentLinkDAO.get().delete(linkId);
+			if (!stored(linkId))
+				return;
+		}
+		throw new PersistenceException("Link %d wasn't deleted: other writes kept overtaking it".formatted(linkId));
 	}
 
 	/** The document as stored, for the answer; a test can make it fail after the links are stored */
@@ -553,7 +569,7 @@ public class EmailFiling {
 			Caller caller) {
 		for (int i = links.size() - 1; i >= 0; i--) {
 			try {
-				DocumentLinkDAO.get().delete(links.get(i).getId());
+				unlink(links.get(i).getId());
 			} catch (PersistenceException | RuntimeException e) {
 				// Deleting its documents deletes the link as well
 				log.warn("Can't delete link {} of a failed email filing: {}", links.get(i).getId(),

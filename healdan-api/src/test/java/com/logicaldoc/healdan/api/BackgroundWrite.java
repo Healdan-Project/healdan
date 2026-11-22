@@ -16,6 +16,7 @@ import org.hibernate.event.spi.EventType;
 import org.hibernate.event.spi.PreUpdateEvent;
 import org.hibernate.event.spi.PreUpdateEventListener;
 
+import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentDAO;
 import com.logicaldoc.core.document.DocumentEvent;
@@ -32,9 +33,10 @@ import com.logicaldoc.util.spring.Context;
  * conversion ends in that moment (CI, 2026-10-28), or the old web page when
  * it takes the document. The save is committed before CE's write goes on, so
  * CE's copy is a record version behind. It happens once, at the first of
- * those writes unless it's told which ({@link #overtaking}); the test
- * database, PostgreSQL, reads what's committed while a transaction is open,
- * as MariaDB does.
+ * those writes unless it's told which ({@link #overtaking}), or at each of
+ * them when it's told to go on ({@link #always}); the test database,
+ * PostgreSQL, reads what's committed while a transaction is open, as MariaDB
+ * does.
  * <p>
  * {@link #atFlush} commits it later, in the flush of CE's write, after CE's
  * DAO read the document again and merged its copy, just before the
@@ -83,6 +85,9 @@ final class BackgroundWrite implements DocumentListener, PreUpdateEventListener,
 	private volatile Thread writing;
 
 	private volatile long writtenId;
+
+	/** True while the other thread saves the document: its own store is never one of CE's writes */
+	private volatile boolean saving;
 
 	private int writes;
 
@@ -144,8 +149,9 @@ final class BackgroundWrite implements DocumentListener, PreUpdateEventListener,
 
 	/**
 	 * @return this write, overtaking only the write CE's link DAO makes of the
-	 *         document once it has counted its links: a store with no history
-	 *         entry of a document that has links
+	 *         document once it has counted its links, after it stored a link
+	 *         or deleted one: a store with no history entry that changes the
+	 *         count on the document's row
 	 */
 	BackgroundWrite overtakingLinkCount() {
 		linkCount = true;
@@ -207,7 +213,7 @@ final class BackgroundWrite implements DocumentListener, PreUpdateEventListener,
 
 	@Override
 	public void beforeStore(Document document, DocumentHistory transaction, Map<String, Object> dictionary) {
-		if (!listening || (writes > 0 && !always) || (docId != 0 && document.getId() != docId)
+		if (!listening || saving || (writes > 0 && !always) || (docId != 0 && document.getId() != docId)
 				|| (except != 0 && document.getId() == except) || !overtakes(document, transaction))
 			return;
 		if (atFlush) {
@@ -223,9 +229,19 @@ final class BackgroundWrite implements DocumentListener, PreUpdateEventListener,
 	/** @return whether CE's write of the document is one this overtakes */
 	private boolean overtakes(Document document, DocumentHistory transaction) {
 		if (linkCount)
-			return transaction == null && document.getId() != 0 && document.getLinks() > 0;
+			return transaction == null && document.getId() != 0
+					&& document.getLinks() != linksOnRow(document.getId());
 		return transaction != null && (overtaken != null ? overtaken.equals(transaction.getEvent())
 				: OVERTAKEN.contains(transaction.getEvent()));
+	}
+
+	/** @return the count of links on the document's row, which CE's write is about to change */
+	private static int linksOnRow(long docId) {
+		try {
+			return DocumentDAO.get().queryForInt("select ld_links from ld_document where ld_id = " + docId);
+		} catch (PersistenceException e) {
+			throw new IllegalStateException("Can't read the links of document " + docId, e);
+		}
 	}
 
 	@Override
@@ -245,6 +261,7 @@ final class BackgroundWrite implements DocumentListener, PreUpdateEventListener,
 	 * committed
 	 */
 	private void write(long id) {
+		saving = true;
 		try {
 			other.submit(() -> {
 				// As CE's FormatConversionManager does
@@ -264,6 +281,8 @@ final class BackgroundWrite implements DocumentListener, PreUpdateEventListener,
 		} catch (Exception e) {
 			// CE's write goes on, and the test says what went wrong
 			failure = e;
+		} finally {
+			saving = false;
 		}
 	}
 
