@@ -656,12 +656,11 @@ see [Building from Source](../building-from-source/#running-the-war-outside-dock
     listeners and Healdan's run as on every route: `TokenUserListener` revokes a person's device tokens when a new
     password or a disable is stored, `ThrottleUserListener` clears their username's count once a new password commits,
     and `EveryoneUserListener` keeps every person but a read-only one in Everyone. A person is an account of the
-    reader's tenant that isn't deleted or a system account, and a system account is never changed, as LogicalDOC's
-    store would make it an ordinary one; a read-only account belongs only to its own group and `guest`, which
-    LogicalDOC's store puts back. A group is a live ordinary group of the tenant that isn't a person's own (`_user_…`),
-    and `admin`, `guest`, `publisher` and Everyone are fixed. The Users list reads the accounts, their groups, provider
-    links, throttle counts and device tokens in one go (`PeopleReads`), then filters, sorts and pages in Java, as a
-    firm has hundreds of people. A person's Last Sign-In is when LogicalDOC last opened a session for them: `Session`
+    reader's tenant that isn't deleted or a system account, and a system account is never changed here; a read-only
+    account belongs only to its own group and `guest`. A group is a live ordinary group of the tenant that isn't a
+    person's own (`_user_…`), and `admin`, `guest`, `publisher` and Everyone are fixed. The Users list reads the
+    accounts, their groups, provider links, throttle counts and device tokens in one go (`PeopleReads`), then filters,
+    sorts and pages in Java, as a firm has hundreds of people. A person's Last Sign-In is when LogicalDOC last opened a session for them: `Session`
     writes `ld_lastlogin` and an `event.user.login` history row for every new session, a device token's included once
     its bound session has timed out, and an account with no such row has never signed in.
   - **Each change runs a transaction of its own,** a `TransactionTemplate` rather than `@Transactional`, and refuses
@@ -692,9 +691,8 @@ see [Building from Source](../building-from-source/#running-the-war-outside-dock
     once they've committed, and Sign Out Everywhere once it has revoked the device tokens. M4's account linking
     (`SignInAccounts`) closes an account's sessions, and those its API keys opened, through it too.
   - **Temporary passwords** are `TemporaryPasswords` (`com.logicaldoc.healdan.signin`), which New User, Reset Password
-    and unlinking an account from its sign-in provider (`SignInAdmin`) share. `make` makes one the tenant's password
-    rules accept, before the change's transaction, with a second try, as LogicalDOC's generator can make one its rules
-    refuse; `email` sends each in LogicalDOC's credentials email (`psw.rec1`) once the change has committed, waits 15
+    and unlinking an account from its sign-in provider (`SignInAdmin`) share. `make` makes one and checks it against
+    the tenant's password rules, before the change's transaction, with a second try; `email` sends each in LogicalDOC's credentials email (`psw.rec1`) once the change has committed, waits 15
     seconds at most for the mail server to take it, and says what became of it (`EMAILED`, `NOT_SET_UP`, `NO_EMAIL` or
     `NOT_TAKEN`). A reset stores the password with the must-change flag and the history LogicalDOC writes for a new
     password, through `UserDAO.store`, so the listeners revoke the person's device tokens and lift their username's

@@ -366,7 +366,7 @@ folder access's, Stores', workspaces', templates' and people's tests are in `hea
   signed in last, and paging; a person's page with their check-outs and the
   matters they own; the options; New User's password account in Everyone, its password emailed, or shown when it can't
   be, a username taken in any case, a deleted or system account's included, every field refused at once, and a group
-  that isn't one; an edit of contacts, language and time zone, a stored blank name kept (P4-R29) and a provider
+  that isn't one; an edit of contacts, language and time zone, a stored blank name kept and a provider
   account given no password; a system account never changed, and a non-administrator refused every change first;
   Disable revoking the device tokens and closing the sessions; the guards, each with its sentence, a change that
   changes nothing answered before them and `refusals` null for it; Reset Password signing the person out everywhere,

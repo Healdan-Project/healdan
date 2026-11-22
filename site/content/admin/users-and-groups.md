@@ -210,7 +210,8 @@ provider gives them.
 ## Edit
 
 **Edit**, on a person's page, changes their **First Name** and **Last Name**, both needed, their **Email**, their
-**Language** and their **Time Zone**, with the same limits as New User. A username never changes. **Save** stays
+**Language** and their **Time Zone**, with the same limits as New User. A name that was blank when Edit opened, as a
+provider account's can be, may stay blank; one that wasn't is still needed. A username never changes. **Save** stays
 greyed out until something has changed, and sends only what you changed, so a field you left alone keeps what it
 holds, even if another administrator changed it while Edit was open. A language or time zone set elsewhere that Edit's
 menus don't offer stays as it is unless you change it.

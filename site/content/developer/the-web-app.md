@@ -296,7 +296,8 @@ What the screens from Phase 2 on share (the spec's section 7.2):
   that question, for a change made meanwhile. A Store's delete question names its backend when it isn't Original.
 - **People** are `people/`, with `views/UsersView.tsx`, `UserView.tsx`, `GroupsView.tsx` and `GroupView.tsx`:
   `NewUserDialog`, `EditUserDialog` and `PersonFields` (the fields they share, a time zone found as it's typed among
-  the options' `timeZones`, and a language or time zone the options don't offer kept as it is), `ResetPasswordDialog`
+  the options' `timeZones`, a language or time zone the options don't offer kept as it is, and in Edit a name that
+  was blank when it opened allowed to stay blank, as the server allows), `ResetPasswordDialog`
   and `TemporaryPassword.tsx` (`PasswordShown`: the password once, with **Copy**, or that it was emailed, or why it
   wasn't), `GroupsEditor` (a person's groups, which reports through `useEditState`, so the page's Leave question
   covers it), `DevicesPanel`, `CheckoutsPanel` (whose **Release** is the public `DELETE /v1/documents/{n}/checkout`),
@@ -308,13 +309,13 @@ What the screens from Phase 2 on share (the spec's section 7.2):
   the query cache, the address or the browser's storage, and goes as the dialog closes. Adding someone to `admin`
   asks as the change is sent, at **Create User**, a person's groups' **Save** and Add Member's **Add**
   (`AddAdminQuestion`), not as the group is picked: a question at the pick left React Aria's autocomplete pointing at
-  an option that had gone (P4-R26). An action the server would refuse is greyed out, from the person's `refusals` or
+  an option that had gone. An action the server would refuse is greyed out, from the person's `refusals` or
   the group's facts, with the sentence under the actions, and the server's own refusal still shows for a change made
   meanwhile.
 - **The last good answer stays.** The Users and Groups lists, a person's page, a group's page and the panels on them
   keep their last answer while a new read fails, with `people/StaleNote.tsx`, "Couldn't refresh this, so it shows what
-  was read last." and **Try Again**, in place of the error that would take the page, and any dialog open on it, away
-  (P4-R15); only a read that has never answered shows `ErrorPanel`. A `404` on a new read still shows the page's Not
+  was read last." and **Try Again**, in place of the error that would take the page, and any dialog open on it,
+  away; only a read that has never answered shows `ErrorPanel`. A `404` on a new read still shows the page's Not
   Found. The older screens don't do this yet.
 - **A group's id has a sign.** LogicalDOC's own groups have negative ids, `publisher`'s `-10000`, so the Admin app reads
   a group's id from an address with `groupIdFrom` (`addresses.ts`), which takes a minus sign, for a group's page, the
