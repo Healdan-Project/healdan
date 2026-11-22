@@ -89,6 +89,9 @@ function useStopWhileScrolling(box: RefObject<HTMLElement | null>, drawn: boolea
     if (!drawn || element === null || typeof ResizeObserver === 'undefined') return
     const observer = new ResizeObserver(() => markStop(element, names))
     observer.observe(element)
+    // And the list in it: React Aria draws its rows after this render, and a box already at its full height keeps its
+    // size as they come, so only the list's own size says it now scrolls
+    if (element.firstElementChild) observer.observe(element.firstElementChild)
     return () => observer.disconnect()
   }, [box, drawn, names])
 }
