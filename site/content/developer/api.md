@@ -893,8 +893,8 @@ password.
 | Route | Answers |
 |---|---|
 | `GET /documents/{docNumber}/message` | The subject, From, To, Cc, Sent and Received, the attachments (`index`, `name`, `type`, `size`, `message`, and the `docNumber` of a document already filed from it that the caller can read), and the `body` address. Pictures the body shows aren't attachments |
-| `GET /documents/{docNumber}/message/body?pictures=` | The body as a page of its own, `text/html;charset=utf-8` |
-| `GET /documents/{docNumber}/message/parts/{id}` | An attachment, by its `index`, as a download: `Content-Disposition: attachment`, recorded as a download of the email. With `?inline=true`, a PDF or a picture every browser draws (JPEG, PNG, GIF, WebP, BMP or SVG), known by its type or by its name, to show in place as that type, under Preview, recorded as nothing; any other, a TIFF or a HEIC included, is `404 no-preview` |
+| `GET /documents/{docNumber}/message/body?pictures=` | The body as a page of its own, `text/html;charset=utf-8`, recorded as the caller's view of the email (`event.viewed`), once per person and email in half an hour |
+| `GET /documents/{docNumber}/message/parts/{id}` | An attachment, by its `index`, as a download: `Content-Disposition: attachment`, recorded as a download of the email. With `?inline=true`, a PDF or a picture every browser draws (JPEG, PNG, GIF, WebP, BMP or SVG), known by its type or by its name, to show in place as that type, under Preview, recorded as a view of the email, as the body is; any other, a TIFF or a HEIC included, is `404 no-preview` |
 | `POST /documents/{docNumber}/message/attachments/{id}/file` | Save to Matter: files the attachment in the email's folder as a document of its own, linked to the email as `attachment`, as `POST /emails` does. It takes the properties the email was filed with (its own values of the properties that can be changed, without the email fields, the legacy doc # and any a new document there can't take now, such as an author whose account was deleted), and an optional JSON body, `{"properties": {…}}`, as `POST /documents` takes them, is laid over them. `201`; saving it again files another copy, but an attached message the matter holds is `409 already-filed` with the copy |
 
 Each of them takes `?version=`, a version from the email's timeline such as `1.0`, as `/preview` does: that version's
@@ -947,7 +947,9 @@ document you can't read through the web page doesn't exist through the API eithe
 (`image/*`) of a picture every browser draws (JPEG, PNG, GIF, WebP, BMP or SVG), or the PDF conversion of any other
 file, a TIFF or a HEIC included (M1.5's queue makes one in the background for Office files; asking never makes one). `HEAD` answers the headers alone. `?version=` asks for a version's, as
 for `/content`. It needs the Preview permission on top of reading (`403` without it, and for a document protected by a
-password), and isn't recorded as a download, for a picture as for a PDF (it needs no Download permission).
+password), and isn't recorded as a download, for a picture as for a PDF (it needs no Download permission). Served, it's
+recorded in the document's history as the caller's view of it (`event.viewed`), once per person and document in half
+an hour; a `202`, a refusal, a `404` and a `HEAD` record nothing, and a failure to record it never fails the preview.
 
 | Answer | When |
 |---|---|
