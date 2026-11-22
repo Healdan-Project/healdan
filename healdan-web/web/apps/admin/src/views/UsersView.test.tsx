@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest'
 import { formatDateTime } from '@healdan/ui'
 import { TYPING_DELAY_MS } from '../pickers/typing'
 import { expectNoAxeViolations } from '../test/axe'
-import { adminRow, feeEarners, helenRow, peopleRoutes, problem, userList, userRow, userRows, type Routes } from '../test/fakeApi'
+import { adminRow, feeEarners, groupList, helenRow, peopleRoutes, problem, publisherGroup, userList, userRow, userRows, type Routes } from '../test/fakeApi'
 import { bringObservedIntoView } from '../test/intersection'
 import { renderApp } from '../test/renderApp'
 
@@ -89,6 +89,22 @@ describe('The Users list', () => {
     expect(names()).toEqual(['Helen Ashcombe'])
     await waitFor(() => expect((screen.getByRole('combobox', { name: 'Group' }) as HTMLInputElement).value).toBe('Fee Earners'))
     expect((screen.getByRole('combobox', { name: 'Status' }) as HTMLSelectElement).value).toBe('active')
+  })
+
+  it("filters by LogicalDOC's publisher, whose id is negative, its id kept in the address both ways", async () => {
+    const groups = { 'GET /v1/admin/groups': ({ query }: { query?: Record<string, unknown> }) => groupList(query) }
+    const { api, router, view } = await openUsers('/users', groups)
+    await userEvent.type(screen.getByRole('combobox', { name: 'Group' }), 'pub')
+    await userEvent.click(await screen.findByRole('option', { name: 'publisher' }))
+    await waitFor(() => expect(router.state.location.search).toEqual({ group: String(publisherGroup.id) }))
+    await waitFor(() => expect(queries(api).at(-1)).toEqual({ groupId: publisherGroup.id, offset: 0, limit: 100 }))
+    view.unmount()
+
+    // Read back from the address, named as the server names it
+    const again = await openUsers(`/users?group=${publisherGroup.id}`, { ...groups, 'GET /v1/admin/users': ({ query }: { query?: Record<string, unknown> }) => userList(query, [...userRows, userRow({ id: 50, username: 'pubby', name: 'Pat Ubby', groups: [{ id: publisherGroup.id, name: 'publisher' }] })]) })
+    await waitFor(() => expect(queries(again.api).at(-1)).toEqual({ groupId: publisherGroup.id, offset: 0, limit: 100 }))
+    expect(names()).toEqual(['Pat Ubby'])
+    await waitFor(() => expect((screen.getByRole('combobox', { name: 'Group' }) as HTMLInputElement).value).toBe('publisher'))
   })
 
   it('asks for the next 100 people as the end of the list comes into view', async () => {

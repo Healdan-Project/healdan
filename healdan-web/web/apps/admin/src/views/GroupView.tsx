@@ -5,9 +5,9 @@ import { useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { useState, type ReactNode } from 'react'
 import { ApiError, apiPath, type adminComponents } from '@healdan/api'
-import { ErrorPanel, idFrom, useApi } from '@healdan/shell'
+import { ErrorPanel, useApi } from '@healdan/shell'
 import { Button, formatCount, Icon, toast, type IconName } from '@healdan/ui'
-import { routes } from '../addresses'
+import { groupIdFrom, routes } from '../addresses'
 import { Confirm } from '../dialogs/Confirm'
 import { Fact } from '../facts/Fact'
 import { Problems } from '../forms/Problems'
@@ -34,10 +34,11 @@ type A = adminComponents['schemas']
  * change to the membership of someone who signs in through it is set again at their next sign-in. CE's inherit from
  * group isn't offered. While a new read fails, the page and any dialog open on it stay, with a note that it couldn't
  * refresh (P4-R15). An address that names no group, a person's own or a deleted one among them, says so in the app's
- * words.
+ * words; LogicalDOC's own groups, `publisher` among them, have negative ids (groupIdFrom).
  */
 export function GroupView({ id }: { id: string }) {
-  const groupId = idFrom(id)
+  // LogicalDOC's own groups have negative ids
+  const groupId = groupIdFrom(id)
   return groupId === undefined ? <GroupNotFound /> : <GroupPage id={groupId} />
 }
 

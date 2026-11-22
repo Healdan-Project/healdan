@@ -20,6 +20,7 @@ import {
   partners,
   priyaRow,
   problem,
+  publisherGroup,
   samRow,
   trainees,
   userRow,
@@ -109,6 +110,16 @@ describe("A group's page", () => {
     expect(within(members).queryByRole('button')).toBeNull()
     expect(within(members).queryByRole('columnheader', { name: 'Actions' })).toBeNull()
     await expectNoAxeViolations(view.container)
+  })
+
+  it("opens LogicalDOC's publisher, whose id is negative, as a fixed group", async () => {
+    const { api } = await openGroup(publisherGroup.id)
+    expect(within(main()).getByRole('heading', { level: 1 }).textContent).toBe('publisher')
+    expect(isDisabled(action('Rename'))).toBe(true)
+    expect(isDisabled(action('Delete'))).toBe(true)
+    expect(await within(main()).findByText('Nobody is in this group.')).toBeTruthy()
+    expect(api.callsTo('GET /v1/admin/groups/-10000')).toHaveLength(1)
+    expect(memberQueries(api, publisherGroup.id)).toEqual([{ offset: 0, limit: 100 }])
   })
 
   it('keeps a read-only account in guest', async () => {

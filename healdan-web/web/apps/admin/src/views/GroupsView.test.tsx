@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest'
 import { ApiError, type adminComponents } from '@healdan/api'
 import { TYPING_DELAY_MS } from '../pickers/typing'
 import { expectNoAxeViolations } from '../test/axe'
-import { group, groupDetailOf, groupList, groupRoutes, groupRows, partners, problem, type Routes } from '../test/fakeApi'
+import { group, groupDetailOf, groupList, groupRoutes, groupRows, partners, problem, publisherGroup, type Routes } from '../test/fakeApi'
 import { bringObservedIntoView } from '../test/intersection'
 import { renderApp } from '../test/renderApp'
 
@@ -90,6 +90,13 @@ describe('The Groups list', () => {
     const { router } = await openGroups()
     await userEvent.click(within(table()).getByRole('rowheader', { name: 'Partners' }))
     await waitFor(() => expect(router.state.location.pathname).toBe(`/groups/${partners.id}`))
+  })
+
+  it("opens LogicalDOC's publisher from its row, whose id is negative", async () => {
+    const { router } = await openGroups()
+    await userEvent.click(within(table()).getByRole('rowheader', { name: 'publisher Fixed' }))
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/groups/${publisherGroup.id}`))
+    expect(await screen.findByRole('heading', { level: 1, name: 'publisher' })).toBeTruthy()
   })
 
   it("keeps the rows it has while a new read fails, and says it couldn't refresh (P4-R15)", async () => {

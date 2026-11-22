@@ -7,7 +7,7 @@ import { useId, useMemo, useState } from 'react'
 import { apiPath, type adminComponents } from '@healdan/api'
 import { ErrorPanel, idFrom, useApi } from '@healdan/shell'
 import { Button, Icon, SelectField, Table, TextField, type TableSort } from '@healdan/ui'
-import { routes, userHref } from '../addresses'
+import { groupIdFrom, routes, userHref } from '../addresses'
 import type { SortOrder } from '../lists/usePagedList'
 import { useChosen } from '../lists/useChosen'
 import { useWords } from '../lists/useWords'
@@ -41,7 +41,8 @@ export function usersSearch(search: Record<string, unknown>): UsersSearch {
   const q = typeof search.q === 'string' ? typed(search.q) : ''
   return {
     q: q === '' ? undefined : q,
-    group: idFrom(typeof group === 'number' ? String(group) : typeof group === 'string' ? group : undefined),
+    // A group's id, which is negative for LogicalDOC's own groups
+    group: groupIdFrom(typeof group === 'number' || typeof group === 'string' ? group : undefined),
     status: isUserStatus(search.status) ? search.status : undefined,
     sort: isUserSort(search.sort) ? search.sort : undefined,
     order: search.order === 'asc' || search.order === 'desc' ? search.order : undefined,

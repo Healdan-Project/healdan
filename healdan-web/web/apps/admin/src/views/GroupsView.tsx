@@ -3,9 +3,9 @@
 
 import { useNavigate } from '@tanstack/react-router'
 import { useId, useMemo, useState } from 'react'
-import { ErrorPanel, idFrom } from '@healdan/shell'
+import { ErrorPanel } from '@healdan/shell'
 import { Button, Icon, Table, TextField } from '@healdan/ui'
-import { groupHref, routes } from '../addresses'
+import { groupHref, groupIdFrom, routes } from '../addresses'
 import { useWords } from '../lists/useWords'
 import { groupColumns, groupRowOf } from '../people/groupColumns'
 import { NewGroupDialog } from '../people/GroupDialogs'
@@ -82,7 +82,8 @@ export function GroupsView({ search }: { search: GroupsSearch }) {
           rows={rows}
           selectionMode="none"
           onOpen={(key) => {
-            const id = idFrom(key)
+            // A row's key is its group's id, which is negative for LogicalDOC's own groups
+            const id = groupIdFrom(key)
             if (id !== undefined) void navigate({ href: groupHref(id) })
           }}
           loadMore={listing.loadMore}

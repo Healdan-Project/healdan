@@ -3,7 +3,7 @@
 
 import { createMemoryHistory } from '@tanstack/react-router'
 import { describe, expect, it } from 'vitest'
-import { ADMIN_BASE, appAddressOf, clientHref, pathOf, routes } from './addresses'
+import { ADMIN_BASE, appAddressOf, clientHref, groupHref, groupIdFrom, pathOf, routes } from './addresses'
 import { createAdminRouter } from './router'
 
 // CE's UrlRewriteFilter isn't anchored at the start of the path, and login.jsp drops some return paths, so no address
@@ -102,5 +102,28 @@ describe('A link the server gives', () => {
 describe("A client's page", () => {
   it("is the client's id as one segment under the Clients screen", () => {
     expect(clientHref(7)).toBe('/admin/clients/7')
+  })
+})
+
+describe("A group's id", () => {
+  it('is read from an address or a search parameter, a negative one too, as LogicalDOC gives its own groups', () => {
+    expect(groupIdFrom('7')).toBe(7)
+    expect(groupIdFrom('-10000')).toBe(-10000)
+    expect(groupIdFrom(-10000)).toBe(-10000)
+    expect(groupIdFrom(42)).toBe(42)
+    expect(groupIdFrom('0')).toBe(0)
+    expect(Object.is(groupIdFrom('-0'), 0)).toBe(true)
+  })
+
+  it("isn't read from anything else: no digits, more than a minus, a fraction, words, or more than a safe integer", () => {
+    for (const text of [undefined, '', '-', '--1', '+5', '1.5', '1e3', ' 7', '7 ', 'x7', '7x', '0x10', '99999999999999999', '-99999999999999999']) {
+      expect(groupIdFrom(text)).toBeUndefined()
+    }
+    expect(groupIdFrom(1.5)).toBeUndefined()
+    expect(groupIdFrom(Number.NaN)).toBeUndefined()
+  })
+
+  it("names a group's page, a negative id as one segment", () => {
+    expect(groupHref(-10000)).toBe('/admin/groups/-10000')
   })
 })

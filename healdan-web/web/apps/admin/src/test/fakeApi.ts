@@ -992,8 +992,8 @@ export function peopleRoutes(): Routes {
 // Groups (Phase 4): the Groups list, a group's page and its members, from the people above: each group's members are the
 // people whose row names it, so the counts and the lists agree.
 
-/** LogicalDOC's `publisher`, one of the fixed groups, with nobody in it */
-export const publisherGroup: A['Group'] = group(9, 'publisher', null, { fixed: true })
+/** LogicalDOC's `publisher`, one of the fixed groups, with nobody in it: LogicalDOC gives it a negative id */
+export const publisherGroup: A['Group'] = group(-10000, 'publisher', null, { fixed: true })
 
 /** A person as a group's members list gives them */
 export function memberOf(row: A['UserRow']): A['GroupMember'] {
