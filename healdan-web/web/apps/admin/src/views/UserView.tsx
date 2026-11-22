@@ -9,7 +9,8 @@ import { ErrorPanel, idFrom, useApi, useMe } from '@healdan/shell'
 import { Button, formatDate, formatDateTime, Icon, StatusDot, toast, type IconName } from '@healdan/ui'
 import { routes } from '../addresses'
 import { Confirm } from '../dialogs/Confirm'
-import { Problems } from '../forms/Problems'
+import { useFocusWhenGone } from '../focus'
+import { Problems, type Problem } from '../forms/Problems'
 import { Refusal } from '../forms/Refusal'
 import { CheckoutsPanel } from '../people/CheckoutsPanel'
 import { DevicesPanel } from '../people/DevicesPanel'
@@ -34,10 +35,11 @@ type A = adminComponents['schemas']
  * A person's page, at /admin/users/{id} (spec 8.7): their name and status; Edit, Reset Password (for a password account),
  * Sign Out Everywhere, Clear Sign-In Block (while blocked), and Disable or Enable; then their details, their groups, their
  * signed-in devices and what they hold (check-outs, and the matters they own, in the Matters list). An action the server
- * would refuse is greyed out, with the server's sentence under the actions (`refusals`); its own refusal still shows, for
- * a change made meanwhile. Disable and Sign Out Everywhere ask first. Phase 5 adds an Activity tab (P4-R4). While a new
- * read fails, the page and any dialog open on it stay, with a note that it couldn't refresh (P4-R15). An address that
- * names nobody, or a deleted or system account, says so in the app's words.
+ * would refuse is greyed out, with the server's sentence under the actions (`refusals`), which describes it; its own
+ * refusal still shows, for a change made meanwhile, until a dialog opens or the person's status changes. Disable and Sign
+ * Out Everywhere ask first. Phase 5 adds an Activity tab (P4-R4). While a new read fails, the page and any dialog open on
+ * it stay, with a note that it couldn't refresh (P4-R15). An address that names nobody, or a deleted or system account,
+ * says so in the app's words.
  */
 export function UserView({ id }: { id: string }) {
   const userId = idFrom(id)
@@ -94,10 +96,26 @@ function Person({ person, stale, onRetry }: { person: A['User']; stale: boolean;
   const options = useUserOptions().data
   const [open, setOpen] = useState<Open | null>(null)
   const [busy, setBusy] = useState<'enable' | 'clear-block' | null>(null)
+  // What Enable or Clear Sign-In Block was refused with, said under the actions
   const [failure, setFailure] = useState<unknown>()
+  const [statusSeen, setStatusSeen] = useState(person.status)
+  // The person's status changed, by a change here or a new read: what was refused before no longer stands
+  if (person.status !== statusSeen) {
+    setStatusSeen(person.status)
+    setFailure(undefined)
+  }
   const devicesHeading = useRef<HTMLHeadingElement>(null)
   const holdsHeading = useRef<HTMLHeadingElement>(null)
+  const signOutButton = useRef<HTMLButtonElement>(null)
+  // Clear Sign-In Block goes once the person isn't blocked, so the focus it had goes to the action before it
+  useFocusWhenGone(person.status !== 'blocked', signOutButton)
+  const why = { enable: useId(), disable: useId(), resetPassword: useId() }
   const close = () => setOpen(null)
+  // A dialog opening takes the page's last refusal away
+  const show = (dialog: Open) => {
+    setFailure(undefined)
+    setOpen(dialog)
+  }
   const provider = providerOf(person)
   const disabled = person.status === 'disabled'
   // Where the groups stand (edits.ts), so leaving the page over a change unsaved, or a save on its way, asks first
@@ -111,11 +129,14 @@ function Person({ person, stale, onRetry }: { person: A['User']; stale: boolean;
   }, [])
   const changing = useCallback(() => parts.current.size > 0, [])
 
-  // The sentences of the actions the server would refuse, said under them: only those the page offers
-  const refused = [
-    disabled ? person.refusals.enable : person.refusals.disable,
-    provider === undefined ? person.refusals.resetPassword : null,
-  ].filter((sentence): sentence is string => sentence !== null)
+  // The sentences of the actions the server would refuse, said under them: only those the page offers, each describing
+  // its greyed button (why), so a screen reader says which is whose
+  const offered: { action: keyof typeof why; sentence: string | null }[] = [
+    disabled ? { action: 'enable', sentence: person.refusals.enable } : { action: 'disable', sentence: person.refusals.disable },
+    { action: 'resetPassword', sentence: provider === undefined ? person.refusals.resetPassword : null },
+  ]
+  const refused: Problem[] = offered.flatMap(({ action, sentence }) => (sentence === null ? [] : [{ key: action, id: why[action], sentence }]))
+  const describedBy = (action: keyof typeof why) => (refused.some((problem) => problem.key === action) ? why[action] : undefined)
 
   /** Enable and Clear Sign-In Block: nothing is taken away, so nothing is asked */
   async function run(action: 'enable' | 'clear-block') {
@@ -168,16 +189,16 @@ function Person({ person, stale, onRetry }: { person: A['User']; stale: boolean;
         <h1 className={clientStyles.title}>{person.name}</h1>
         <StatusDot status={statusDot(person.status)}>{statusWords(person, true)}</StatusDot>
         <div className={clientStyles.actions}>
-          <Button onPress={() => setOpen('edit')}>
+          <Button onPress={() => show('edit')}>
             <Action icon="pencil">{t('admin.user.edit')}</Action>
           </Button>
           {/* A provider account has no password in Healdan to reset (spec 8.7) */}
           {provider === undefined && (
-            <Button isDisabled={person.refusals.resetPassword !== null} onPress={() => setOpen('reset')}>
+            <Button isDisabled={person.refusals.resetPassword !== null} aria-describedby={describedBy('resetPassword')} onPress={() => show('reset')}>
               <Action icon="key">{t('admin.user.resetPassword')}</Action>
             </Button>
           )}
-          <Button onPress={() => setOpen('signOut')}>
+          <Button ref={signOutButton} onPress={() => show('signOut')}>
             <Action icon="logout">{t('admin.user.signOut')}</Action>
           </Button>
           {person.status === 'blocked' && (
@@ -186,11 +207,11 @@ function Person({ person, stale, onRetry }: { person: A['User']; stale: boolean;
             </Button>
           )}
           {disabled ? (
-            <Button isDisabled={person.refusals.enable !== null} isPending={busy === 'enable'} onPress={() => void run('enable')}>
+            <Button isDisabled={person.refusals.enable !== null} aria-describedby={describedBy('enable')} isPending={busy === 'enable'} onPress={() => void run('enable')}>
               <Action icon="userCheck">{t('admin.user.enable')}</Action>
             </Button>
           ) : (
-            <Button variant="danger" isDisabled={person.refusals.disable !== null} onPress={() => setOpen('disable')}>
+            <Button variant="danger" isDisabled={person.refusals.disable !== null} aria-describedby={describedBy('disable')} onPress={() => show('disable')}>
               <Action icon="userOff">{t('admin.user.disable')}</Action>
             </Button>
           )}

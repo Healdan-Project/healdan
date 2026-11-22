@@ -25,8 +25,9 @@ interface Reset {
  * Reset Password (spec 8.7; P4-R8), for a password account: it asks first, saying the person gets a temporary password
  * they must change at their next sign-in and that they're signed out everywhere, and offers to email it while outgoing
  * email is set up and they have an email address. Then the temporary password is shown once, with Copy, or the dialog says
- * it was emailed; it goes as the dialog closes (P4-R7). The page isn't offered it for an account linked to a sign-in
- * provider. While the reset is on its way the dialog holds, and a refusal stays in it, in the rule's words.
+ * it was emailed; it goes as the dialog closes (P4-R7), which only Done closes, as that's its only showing (P4-R38). The
+ * page isn't offered it for an account linked to a sign-in provider. While the reset is on its way the dialog holds, and
+ * a refusal stays in it, in the rule's words.
  */
 export function ResetPasswordDialog({ person, onClose }: { person: A['User']; onClose: () => void }) {
   const api = useApi()
@@ -57,19 +58,18 @@ export function ResetPasswordDialog({ person, onClose }: { person: A['User']; on
 
   if (reset !== undefined) {
     return (
-      // The password goes with the dialog
-      <Dialog title={t('admin.resetPassword.doneTitle', { name: person.name })} isOpen onOpenChange={(open) => !open && onClose()}>
-        {(close) => (
-          <div className={formStyles.form}>
-            <PasswordShown person={person} answer={reset.answer} asked={reset.asked} options={options} />
-            <div className={formStyles.buttons}>
-              {/* The question went as this came, so the focus is put inside: on Copy, or here when nothing is shown */}
-              <Button variant="default" autoFocus={reset.answer.temporaryPassword === null} onPress={close}>
-                {t('admin.password.done')}
-              </Button>
-            </div>
+      // The password goes with the dialog, which only Done closes: Esc and a click outside do nothing, as this is its only
+      // showing (P4-R38)
+      <Dialog title={t('admin.resetPassword.doneTitle', { name: person.name })} isOpen onOpenChange={() => undefined}>
+        <div className={formStyles.form}>
+          <PasswordShown person={person} answer={reset.answer} asked={reset.asked} options={options} />
+          <div className={formStyles.buttons}>
+            {/* The question went as this came, so the focus is put inside: on Copy, or here when nothing is shown */}
+            <Button variant="default" autoFocus={reset.answer.temporaryPassword === null} onPress={onClose}>
+              {t('admin.password.done')}
+            </Button>
           </div>
-        )}
+        </div>
       </Dialog>
     )
   }

@@ -924,6 +924,8 @@ export const adminEnUS = {
   'admin.newUser.providers': "People who sign in through {providers} needn't be added here: their account is made at their first sign-in, with the groups the provider's group map gives them. Where a provider links accounts by email, an account made here with the same email is linked to theirs at that sign-in.",
   'admin.newUser.create': 'Create User',
   'admin.newUser.created': 'Added {name}',
+  // What New User offers couldn't be read: Language, which every account needs, has no choices
+  'admin.newUser.optionsUnread': "Couldn't read the languages and time zones to choose from, so the account can't be made yet.",
   // Their name, while none is typed
   'admin.newUser.them': 'this person',
 

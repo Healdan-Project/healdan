@@ -11,7 +11,7 @@ import { routes } from '../addresses'
 import { Confirm } from '../dialogs/Confirm'
 import { useFocusWhenGone } from '../focus'
 import { t } from '../strings'
-import { personChanged, useUserCheckouts, type Checkout } from './queries'
+import { personChanged, useUserCheckouts } from './queries'
 import { StaleNote } from './StaleNote'
 import styles from './People.module.css'
 
@@ -28,11 +28,11 @@ export function CheckoutsPanel({ person, heading }: { person: A['User']; heading
   const api = useApi()
   const queryClient = useQueryClient()
   const asked = useUserCheckouts(person.id)
-  const [releasing, setReleasing] = useState<Checkout>()
+  const [releasing, setReleasing] = useState<A['UserCheckout']>()
   const [released, setReleased] = useState<number>()
   useFocusWhenGone(released !== undefined && asked.data !== undefined && !asked.data.some((one) => one.docNumber === released), heading)
 
-  async function release(checkout: Checkout) {
+  async function release(checkout: A['UserCheckout']) {
     await api.send('DELETE', apiPath`/v1/documents/${checkout.docNumber}/checkout`)
     toast(t('admin.userCheckouts.released', { title: checkout.title }))
     setReleased(checkout.docNumber)

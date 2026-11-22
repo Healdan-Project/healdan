@@ -38,6 +38,8 @@ const facts = () => {
 const action = (name: string) => within(main()).queryByRole('button', { name })
 const isDisabled = (button: HTMLElement | null) => button?.getAttribute('disabled') !== null
 const groupsOf = (name: string) => within(within(main()).getByRole('list', { name: `Groups of ${name}` })).getAllByRole('listitem')
+/** What a button's description says: the sentence its aria-describedby names */
+const why = (button: HTMLElement | null) => document.getElementById(button?.getAttribute('aria-describedby') ?? '')?.textContent
 
 async function openPerson(id: number, over: Routes = {}) {
   const rendered = await renderApp(`/users/${id}`, { ...peopleRoutes(), ...over })
@@ -103,6 +105,11 @@ describe("A person's page", () => {
     expect(isDisabled(action('Sign Out Everywhere'))).toBe(false)
     expect(within(main()).getByText("The admin account can't be disabled.")).toBeTruthy()
     expect(within(main()).getByText('Change your own password from your person menu.')).toBeTruthy()
+    // Each greyed action tells a screen reader its own sentence
+    expect(why(action('Disable'))).toBe("The admin account can't be disabled.")
+    expect(why(action('Reset Password'))).toBe('Change your own password from your person menu.')
+    expect(action('Sign Out Everywhere')?.getAttribute('aria-describedby')).toBeNull()
+    expect(action('Edit')?.getAttribute('aria-describedby')).toBeNull()
     // It can't leave admin either, so admin has no Remove, and says why
     expect(within(main()).queryByRole('button', { name: 'Remove admin' })).toBeNull()
     expect(groupsOf('Alex Morgan')[0]?.textContent).toBe('admin Reads Every DocumentThe admin account is always in admin.')
@@ -157,6 +164,31 @@ describe("A person's page", () => {
     await userEvent.click(action('Clear Sign-In Block')!)
     expect(await screen.findByText('Cleared the sign-in block of Jamie Clarke')).toBeTruthy()
     await waitFor(() => expect(action('Clear Sign-In Block')).toBeNull())
+    // The button pressed has gone, so the focus goes to the action before it
+    await waitFor(() => expect(document.activeElement).toBe(action('Sign Out Everywhere')))
+  })
+
+  it('takes its own refusal line away when a dialog opens', async () => {
+    await openPerson(sallyRow.id, { 'POST /v1/admin/users/8/enable': problem(409, 'refused', 'That account is read-only now.') })
+    await userEvent.click(action('Enable')!)
+    expect((await within(main()).findByRole('alert')).textContent).toBe('That account is read-only now.')
+    await userEvent.click(action('Edit')!)
+    const dialog = await screen.findByRole('dialog', { name: 'Edit Sally Oldham' })
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(within(main()).queryByRole('alert')).toBeNull()
+  })
+
+  it("takes its own refusal line away when the person's status changes, as at a new read", async () => {
+    let person = users[jamieRow.id]!
+    await openPerson(jamieRow.id, { 'GET /v1/admin/users/12': () => person, 'POST /v1/admin/users/12/clear-block': problem(500, 'server-error') })
+    await userEvent.click(action('Clear Sign-In Block')!)
+    expect((await within(main()).findByRole('alert')).textContent).toBe('Something went wrong.')
+    // Another administrator cleared it meanwhile, and the page reads it at a return to the window
+    person = userOf({ ...jamieRow, status: 'active', blockedUntil: null })
+    await act(async () => void window.dispatchEvent(new Event('focus')))
+    await waitFor(() => expect(action('Clear Sign-In Block')).toBeNull())
+    expect(within(main()).queryByRole('alert')).toBeNull()
   })
 
   it("asks before Reset Password, saying they're signed out everywhere, then shows the temporary password once", async () => {
@@ -183,6 +215,11 @@ describe("A person's page", () => {
     await expectNoAxeViolations(shown)
     // The page is asked for again, as the password has changed and the devices are signed out
     await waitFor(() => expect(api.callsTo('GET /v1/admin/users/7').length).toBeGreaterThan(1))
+    // Only Done closes it, as it is the password's only showing (P4-R38)
+    await userEvent.keyboard('{Escape}')
+    await userEvent.click(document.body)
+    expect(screen.getByRole('dialog', { name: 'New Password for Priya Nair' })).toBe(shown)
+    expect(within(shown).getByRole('group', { name: 'Temporary Password' }).textContent).toBe(PASSWORD)
     await userEvent.click(within(shown).getByRole('button', { name: 'Done' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
     expect(document.body.textContent).not.toContain(PASSWORD)
@@ -301,6 +338,53 @@ describe("A person's page", () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
     // The blank name is left out, so it stays as it is
     expect(sent).toEqual({ email: 'p.nair@example.test' } satisfies A['UserChange'])
+  })
+
+  it('saves a first name for someone whose stored email has no dot after its @, which the server takes', async () => {
+    let sent: unknown
+    await openPerson(priyaRow.id, {
+      'GET /v1/admin/users/7': userOf({ ...priyaRow, email: 'root@localhost' }),
+      'PATCH /v1/admin/users/7': ({ body }: Sent) => {
+        sent = body
+        return userOf({ ...priyaRow, email: 'root@localhost', firstName: 'Priyanka', name: 'Priyanka Nair' })
+      },
+    })
+    await userEvent.click(action('Edit')!)
+    const dialog = await screen.findByRole('dialog', { name: 'Edit Priya Nair' })
+    const first = within(dialog).getByRole('textbox', { name: 'First Name' })
+    await userEvent.clear(first)
+    await userEvent.type(first, 'Priyanka')
+    expect(within(dialog).queryByText("That isn't an email address.")).toBeNull()
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(sent).toEqual({ firstName: 'Priyanka' } satisfies A['UserChange'])
+  })
+
+  it("doesn't judge the email it opened with, which Save leaves as it is, as it does a name stored blank", async () => {
+    let sent: unknown
+    await openPerson(priyaRow.id, {
+      'GET /v1/admin/users/7': userOf({ ...priyaRow, email: 'priya at the office' }),
+      'PATCH /v1/admin/users/7': ({ body }: Sent) => {
+        sent = body
+        return userOf({ ...priyaRow, email: 'priya at the office' }, { language: 'de' })
+      },
+    })
+    await userEvent.click(action('Edit')!)
+    const dialog = await screen.findByRole('dialog', { name: 'Edit Priya Nair' })
+    await waitFor(() => expect(within(dialog).getByRole('combobox', { name: 'Language' }).textContent).toContain('German'))
+    fireEvent.change(within(dialog).getByRole('combobox', { name: 'Language' }), { target: { value: 'de' } })
+    expect(within(dialog).queryByText("That isn't an email address.")).toBeNull()
+    const save = within(dialog).getByRole('button', { name: 'Save' })
+    expect(isDisabled(save)).toBe(false)
+    // Changed, it's judged
+    const email = within(dialog).getByRole('textbox', { name: 'Email' })
+    await userEvent.type(email, 's')
+    expect(within(dialog).getByText("That isn't an email address.")).toBeTruthy()
+    expect(isDisabled(save)).toBe(true)
+    await userEvent.type(email, '{Backspace}')
+    await userEvent.click(save)
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(sent).toEqual({ language: 'de' } satisfies A['UserChange'])
   })
 
   it('still needs a name that was there when the dialog opened, once it is cleared', async () => {

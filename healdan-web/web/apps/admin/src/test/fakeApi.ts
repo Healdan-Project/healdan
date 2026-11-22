@@ -945,11 +945,8 @@ export function userDevice(over: Partial<A['UserDevice']> = {}): A['UserDevice']
   }
 }
 
-/** A check-out as the contract gives it once its file version is `fileVersion`, as the public DocumentView names it */
-export type CheckoutFixture = Omit<A['UserCheckout'], 'version' | 'fileVersion'> & { fileVersion: string }
-
 /** A document a person has checked out: Heads of Terms, in 1001.1, on Helen's MacBook in Word, unless `over` says otherwise */
-export function userCheckout(over: Partial<CheckoutFixture> = {}): CheckoutFixture {
+export function userCheckout(over: Partial<A['UserCheckout']> = {}): A['UserCheckout'] {
   return {
     docNumber: 10388,
     fileVersion: '2.1',
@@ -968,7 +965,7 @@ export const userDevices: Record<number, A['UserDevice'][]> = {
   [priyaRow.id]: [userDevice({ id: 503, name: 'Healdan Helper on ThinkPad', device: 'linux-9e0b', provider: null })],
   [jamieRow.id]: [userDevice({ id: 504, name: 'Healdan Helper on iMac', device: null, provider: null })],
 }
-export const userCheckouts: Record<number, CheckoutFixture[]> = {
+export const userCheckouts: Record<number, A['UserCheckout'][]> = {
   [helenRow.id]: [userCheckout()],
   [priyaRow.id]: [
     userCheckout({ docNumber: 10412, title: 'Witness Statement.docx', fileVersion: '1.3', device: 'Healdan Helper on ThinkPad', app: 'LibreOffice', since: '2026-11-19T09:00:00Z' }),

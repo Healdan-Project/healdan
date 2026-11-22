@@ -11,6 +11,8 @@ export interface Problem {
   key: string
   /** What's wrong, drawn as text */
   sentence: string
+  /** The sentence's id, so what it's about, such as a greyed button, can be described by it (`aria-describedby`) */
+  id?: string
   /** Under the sentence: what can put it right, such as a button, and what that was refused with */
   action?: ReactNode
 }
@@ -40,7 +42,9 @@ export function Problems({ lead, problems, framed = false }: ProblemsProps) {
           <li key={problem.key} className={framed ? `${styles.problem} ${styles.framed}` : styles.problem}>
             <Icon name="alertTriangle" className={styles.sign} />
             <div className={styles.text}>
-              <p className={styles.line}>{problem.sentence}</p>
+              <p id={problem.id} className={styles.line}>
+                {problem.sentence}
+              </p>
               {problem.action}
             </div>
           </li>
