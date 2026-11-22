@@ -12,6 +12,7 @@ import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.io.StringWriter;
 import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
@@ -19,6 +20,7 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -35,6 +37,10 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import com.logicaldoc.core.communication.Message;
+import com.logicaldoc.core.communication.Recipient;
+import com.logicaldoc.core.communication.SystemMessage;
+import com.logicaldoc.core.communication.SystemMessageDAO;
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentDAO;
 import com.logicaldoc.core.document.DocumentManager;
@@ -42,10 +48,12 @@ import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.core.security.Client;
 import com.logicaldoc.core.security.Device;
+import com.logicaldoc.core.security.LoginThrottle;
 import com.logicaldoc.core.security.Tenant;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.security.user.UserDAO;
 import com.logicaldoc.core.security.user.UserEvent;
+import com.logicaldoc.core.security.user.UserHistory;
 import com.logicaldoc.core.security.user.UserHistoryDAO;
 import com.logicaldoc.healdan.AbstractHealdanTestCase;
 import com.logicaldoc.healdan.HealdanRuleException;
@@ -54,6 +62,7 @@ import com.logicaldoc.healdan.admin.AdminContext;
 import com.logicaldoc.healdan.admin.AdminEvent;
 import com.logicaldoc.healdan.admin.AdminEvent.Change;
 import com.logicaldoc.healdan.admin.AdminEvents;
+import com.logicaldoc.healdan.admin.people.UserAdministration;
 import com.logicaldoc.healdan.matter.Matter;
 import com.logicaldoc.healdan.support.HealdanFixtures;
 import com.logicaldoc.healdan.support.LogCapture;
@@ -119,7 +128,7 @@ public class AuditFeedTest extends AbstractHealdanTestCase {
 		assertNull(page.nextCursor());
 		assertEquals(List.of("administration", "document", "administration", "user", "folder", "document",
 				"administration", "sign-in", "folder", "document"), page.items().stream().map(AuditRow::kind).toList());
-		assertEquals(List.of("Showed a recovery key", "Viewed", "Created a matter", "Changed the password",
+		assertEquals(List.of("Showed a recovery key", "Viewed", "Created a matter", "Password changed",
 				"Renamed a folder", "Saved a new version", "Renamed a client", "Signed in", "Created a folder",
 				"Downloaded"), page.items().stream().map(AuditRow::what).toList());
 		assertEquals(T0.plusSeconds(600), page.items().get(0).when());
@@ -328,7 +337,9 @@ public class AuditFeedTest extends AbstractHealdanTestCase {
 		assertFalse(rows.isEmpty());
 		for (AuditRow row : rows) {
 			boolean byAlice = "alice alice".equals(row.who());
-			boolean aboutAlice = row.event().equals("user.disabled") && "alice".equals(row.detail());
+			boolean aboutAlice = row.event().equals("user.disabled") && "alice".equals(row.detail())
+					|| row.kind().equals("user") && row.detail() != null
+							&& row.detail().startsWith("alice alice (alice)");
 			assertTrue(row.toString(), byAlice || aboutAlice);
 		}
 		assertTrue(rows.stream().anyMatch(row -> row.kind().equals("document") && row.event().equals("event.stored")));
@@ -435,44 +446,224 @@ public class AuditFeedTest extends AbstractHealdanTestCase {
 		assertNull(none.nextCursor());
 	}
 
+	/**
+	 * The text filter (ruling P5-R29), on rows the writers make for people with first and last names: a file name, a
+	 * folder path, a target's name, an address, and the person as the row kept them, their username and, in
+	 * LogicalDOC's history, their name at the time; never their name now, nor what was typed at a failed sign-in for
+	 * a username no account has (ruling P5-R31)
+	 */
 	@Test
 	public void testTheTextFilter() throws Exception {
-		User dora = fx.user("dvance");
-		dora.setFirstName("Dorothy");
-		dora.setName("Vance");
-		UserDAO.get().store(dora);
+		User dora = named(fx.user("dvance"), "Dorothy", "Vance");
+		User sam = named(fx.user("sokafor"), "Sam", "Okafor");
+		Folder store = fx.store("Client Work");
+		Matter matter = fx.matter(fx.client(1001, "Ashcombe"), 1, "Charter Dispute", store, "Documents");
+		Folder documents = child(matter.getFolderId(), "Documents");
 		long backend = backend("Garage_Main");
 		empty();
-		history("ld_history", 1001, T0.plusSeconds(1), 1L, "admin", "event.viewed", "Skeleton_Argument.docx",
-				"/Default/Client Work", "192.0.2.55");
-		history("ld_history", 1002, T0.plusSeconds(2), 1L, "admin", "event.viewed", "SkeletonXArgument.docx", null,
-				null);
-		history("ld_folder_history", 2001, T0.plusSeconds(3), 1L, "admin", "event.folder.created", null,
-				"/Default/Matters/100% Done", null);
-		history("ld_user_history", 3001, T0.plusSeconds(4), 1L, "carol", "event.user.login", null, null,
-				"198.51.100.4");
-		history("ld_user_history", 3002, T0.plusSeconds(5), dora.getId(), "dvance", "event.user.login", null, null,
-				null);
-		adminRow(11, T0.plusSeconds(6), 1L, "admin", "backend.changed", "backend", 5L, "Wasabi 100%", "198.51.100.9");
-		adminRow(12, T0.plusSeconds(7), 1L, "admin", "backend.changed", "backend", 6L, "Wasabi 1000", null);
-		storage(100, T0.plusSeconds(8), backend, 1L, "admin", "key-shown");
-		storage(150, T0.plusSeconds(9), 1L, 1L, "erin", "key-shown");
+		fx.upload(documents, "Skeleton_Argument.docx", "Dear Sir", dora);
+		fx.upload(documents, "SkeletonXArgument.docx", "Dear Madam", sam);
+		HealdanFixtures.awaitVersionSaves();
+		fx.folder(documents, "100% Done", sam);
+		signIn(dora, "192.0.2.55");
+		signIn(sam, "198.51.100.4");
+		// An administrator disables Sam's account in the Admin app: a row of his account's history, and one of the
+		// administration record
+		AdminContext.set("198.51.100.9");
+		UserAdministration.get().disable(sam.getId(), admin);
+		AdminEvents.get().record(new AdminEvent(AdminArea.STORAGE, "backend.changed", "backend", 5L, "Wasabi 100%",
+				null), admin);
+		AdminEvents.get().record(new AdminEvent(AdminArea.STORAGE, "backend.changed", "backend", 6L, "Wasabi 1000",
+				null), admin);
+		AdminContext.clear();
+		// A password typed into the username box, which no account has
+		LoginThrottle.recordFailedLogin("Vance-Secret!", new Client(null, "203.0.113.9", "host"), "Unknown user");
+		storage(100, Instant.now(), backend, admin.getId(), "admin", "key-shown");
+		storage(150, Instant.now(), backend, admin.getId(), "erin", "key-shown");
+		// Renamed after the rows were written
+		jdbc.update("update ld_user set ld_firstname = 'Doris', ld_name = 'Vane' where ld_id = ?", dora.getId());
 
-		assertEquals(List.of("d1001"), ids(all(text("_ARGUMENT"))));
-		assertEquals(List.of("d1002", "d1001"), ids(all(text("argument"))));
-		assertEquals(List.of("a11", "f2001"), ids(all(text("100%"))));
-		assertEquals(List.of("u3001"), ids(all(text("  CAROL  "))));
-		assertEquals(List.of("a11", "u3001"), ids(all(text("198.51.100."))));
-		assertEquals(List.of("d1001"), ids(all(text("192.0.2.55"))));
-		assertEquals(List.of("a11"), ids(all(text("198.51.100.9"))));
-		assertEquals(List.of("u3001"), ids(all(text("198.51.100.4"))));
-		assertEquals(List.of("f2001"), ids(all(text("matters/100"))));
-		// The username the row kept, not the person's name now: the person filter finds a person
-		assertEquals(List.of("u3002"), ids(all(text("dvance"))));
-		assertEquals(List.of(), ids(all(text("dorothy"))));
-		assertEquals(List.of("s100"), ids(all(text("garage_"))));
+		// A file name, its % and _ as they are, in any case
+		List<AuditRow> underscore = all(text("_ARGUMENT"));
+		assertFalse(underscore.isEmpty());
+		assertTrue(underscore.toString(),
+				underscore.stream().allMatch(row -> row.detail().contains("Skeleton_Argument")));
+		assertTrue(all(text("argument")).stream().anyMatch(row -> row.detail().contains("SkeletonXArgument")));
+		// A folder path, and a target's name
+		List<AuditRow> percent = all(text("100%"));
+		assertTrue(percent.toString(), percent.stream().anyMatch(row -> row.kind().equals("folder")));
+		assertTrue(percent.toString(), percent.stream().anyMatch(row -> "Wasabi 100%".equals(row.detail())));
+		assertTrue(percent.toString(), percent.stream().noneMatch(row -> "Wasabi 1000".equals(row.detail())));
+		// An address
+		assertEquals(List.of("Signed in"), all(text("198.51.100.4")).stream().map(AuditRow::what).toList());
+		assertTrue(all(text("198.51.100.")).stream().anyMatch(row -> row.event().equals("user.disabled")));
+
+		// The username the row kept, trimmed, in any case: every row by Sam, and about him
+		List<AuditRow> byLogin = all(text("  SOKAFOR "));
+		assertEquals(Set.of("document", "folder", "sign-in", "user", "administration"),
+				byLogin.stream().map(AuditRow::kind).collect(Collectors.toSet()));
+		for (AuditRow row : byLogin)
+			assertTrue(row.toString(),
+					"Sam Okafor".equals(row.who()) || row.detail().startsWith("Sam Okafor (sokafor)"));
+		// And his name as the row kept it, which finds the same rows
+		assertEquals(Set.copyOf(ids(byLogin)), Set.copyOf(ids(all(text("okafor")))));
+		// Dorothy's name when the rows were written finds hers; her name now finds nothing
+		List<AuditRow> byName = all(text("dorothy"));
+		assertTrue(byName.toString(), byName.stream().anyMatch(row -> row.kind().equals("document")));
+		assertTrue(byName.toString(), byName.stream().anyMatch(row -> row.kind().equals("sign-in")));
+		assertEquals(Set.copyOf(ids(byName)), Set.copyOf(ids(all(text("dvance")))));
+		assertEquals(List.of(), all(text("doris")));
+		// What was typed at the failed sign-in isn't compared, though its address is
+		assertEquals(List.of(), all(text("secret")));
+		assertTrue(all(text("vance")).stream().noneMatch(row -> AuditFeed.UNKNOWN_USERNAME.equals(row.detail())));
+		assertEquals(List.of(AuditFeed.UNKNOWN_USERNAME),
+				all(text("203.0.113.9")).stream().map(AuditRow::detail).toList());
+		// Healdan's records: the username kept, and a storage row's backend
 		assertEquals(List.of("s150"), ids(all(text("erin"))));
+		assertEquals(List.of("s150", "s100"), ids(all(text("garage_"))));
 		assertEquals(List.of(), ids(all(text("nothing like it"))));
+	}
+
+	/**
+	 * An account's history, but for its sign-ins, names who made the change and, in its detail, the account it was
+	 * made to, with LogicalDOC's note only where it's a short label (ruling P5-R30), on rows the writers make
+	 */
+	@Test
+	public void testAnAccountsRowNamesWhoMadeTheChange() throws Exception {
+		User sam = named(fx.user("sokafor"), "Sam", "Okafor");
+		User rita = named(fx.user("rboss", "admin"), "Rita", "Boss");
+		empty();
+		// In the Admin app, by Rita
+		UserAdministration.get().disable(sam.getId(), rita);
+		// As LogicalDOC's own screens store a change: with no author
+		User stored = UserDAO.get().findById(sam.getId());
+		UserDAO.get().initialize(stored);
+		stored.setEmail("sam@example.org");
+		UserHistory changed = new UserHistory();
+		changed.setEvent(UserEvent.UPDATED);
+		changed.setComment("sokafor");
+		UserDAO.get().store(stored, changed);
+		// A message Rita sent him, whose text is his and hers only
+		SystemMessage message = new SystemMessage();
+		message.setTenantId(Tenant.DEFAULT_ID);
+		message.setType(Message.Type.SYSTEM);
+		message.setAuthor(rita.getUsername());
+		message.setSubject("Settlement");
+		message.setMessageText("Private: the settlement figure is 40,000");
+		message.setSentDate(new Date());
+		Recipient recipient = new Recipient();
+		recipient.setName(sam.getUsername());
+		recipient.setAddress(sam.getUsername());
+		recipient.setType(Recipient.Type.SYSTEM);
+		recipient.setMode(Recipient.Mode.TO);
+		message.getRecipients().add(recipient);
+		SystemMessageDAO.get().store(message);
+		// A search he ran, whose note is what he searched for
+		UserHistoryDAO.get().createUserHistory(sam, UserEvent.SEARCH, "SearchOptions[expression=settlement figure]",
+				null, null);
+		// A legal notice he confirmed, with a note longer than a detail gives
+		UserHistory legal = new UserHistory();
+		legal.setUser(sam);
+		legal.setEvent(UserEvent.LEGAL_CONFIRMED);
+		legal.setComment("T".repeat(400));
+		UserHistoryDAO.get().store(legal);
+
+		List<AuditRow> rows = all(kinds("user"));
+
+		AuditRow disabled = only(rows, row -> row.event().equals("event.user.disabled"));
+		assertEquals("Rita Boss", disabled.who());
+		assertEquals("Account disabled", disabled.what());
+		assertEquals("Sam Okafor (sokafor): By rboss in the Admin app", disabled.detail());
+		AuditRow updated = only(rows, row -> row.event().equals("event.user.updated"));
+		assertNull("nobody the row names", updated.who());
+		assertEquals("Account changed", updated.what());
+		assertEquals("Sam Okafor (sokafor): sokafor", updated.detail());
+		AuditRow received = only(rows, row -> row.event().equals("event.user.message.received"));
+		assertEquals("Rita Boss", received.who());
+		assertEquals("Message received", received.what());
+		assertEquals("Sam Okafor (sokafor)", received.detail());
+		AuditRow searched = only(rows, row -> row.event().equals("event.user.search"));
+		assertNull(searched.who());
+		assertEquals("Sam Okafor (sokafor)", searched.detail());
+		AuditRow confirmed = only(rows, row -> row.event().equals("event.user.legal.confirmed"));
+		assertEquals("Sam Okafor (sokafor): " + "T".repeat(AuditFeed.COMMENT_LIMIT), confirmed.detail());
+		// Neither the message nor the search is in a row, nor in the export
+		for (AuditRow row : rows)
+			assertFalse(row.toString(), row.toString().contains("settlement"));
+		StringWriter csv = new StringWriter();
+		AuditCsv.write(feed.prepare(kinds("user"), admin), 100, csv);
+		assertFalse(csv.toString(), csv.toString().contains("settlement"));
+		// The person filter is his rows and those about him
+		assertTrue(ids(all(person(sam.getId()))).containsAll(ids(rows)));
+	}
+
+	/**
+	 * A failed sign-in for a username no account has names nobody, and what was typed, a password among it, is never
+	 * answered (ruling P5-R31); an id no account has, 0 included, keeps no row
+	 */
+	@Test
+	public void testAFailedSignInForAUsernameNoAccountHas() throws Exception {
+		User sam = named(fx.user("sokafor"), "Sam", "Okafor");
+		empty();
+		Client client = new Client(null, "203.0.113.9", "host");
+		LoginThrottle.recordFailedLogin("Okafor-Pa55word!", client, "Unknown user");
+		LoginThrottle.recordFailedLogin(sam.getUsername(), client, "Wrong password");
+
+		List<AuditRow> rows = all(kinds("sign-in"));
+
+		AuditRow unknown = only(rows, row -> AuditFeed.UNKNOWN_USERNAME.equals(row.detail()));
+		assertNull(unknown.who());
+		assertEquals("Failed to sign in", unknown.what());
+		assertEquals("203.0.113.9", unknown.from());
+		assertFalse(unknown.toString(), unknown.toString().contains("Pa55word"));
+		AuditRow known = only(rows, row -> "Sam Okafor".equals(row.who()));
+		assertEquals("Failed to sign in", known.what());
+		assertEquals(List.of(known.id()), ids(all(text("okafor"))));
+		assertEquals(List.of(), all(text("pa55word")));
+		StringWriter csv = new StringWriter();
+		AuditCsv.write(feed.prepare(kinds("sign-in"), admin), 100, csv);
+		assertFalse(csv.toString(), csv.toString().contains("Pa55word"));
+		// The typed text's row has user id 0, which no account has
+		assertEquals(List.of(), all(person(0L)));
+		assertEquals(List.of(known.id()), ids(all(person(sam.getId()))));
+	}
+
+	/**
+	 * A page says how far back it has read (ruling P5-R33): a bounded read's window end when it found nothing, the
+	 * last row when it's full, and null at the end
+	 */
+	@Test
+	public void testAPageSaysHowFarBackItRead() throws Exception {
+		empty();
+		feed.scanPerSource = 10;
+		// One row the filter keeps, below 30 it doesn't, a minute apart
+		history("ld_history", 1000, T0, 1L, "admin", "event.viewed", "wanted.txt", null, null);
+		for (int i = 1; i <= 30; i++)
+			history("ld_history", 1000 + i, T0.plusSeconds(60L * i), 1L, "admin", "event.viewed", "other.txt", null,
+					null);
+		AuditQuery wanted = text("wanted").kinds("document").build();
+
+		// Each page looks through ten rows and finds none: back to the tenth's time
+		AuditPage first = feed.page(wanted, admin);
+		assertEquals(List.of(), first.items());
+		assertNotNull(first.nextCursor());
+		assertEquals(T0.plusSeconds(60L * 21), first.readBackTo());
+		AuditPage second = feed.page(wanted.at(first.nextCursor()), admin);
+		assertEquals(T0.plusSeconds(60L * 11), second.readBackTo());
+		AuditPage third = feed.page(wanted.at(second.nextCursor()), admin);
+		assertEquals(T0.plusSeconds(60L), third.readBackTo());
+		// The last page has the row, and reads to the end
+		AuditPage last = feed.page(wanted.at(third.nextCursor()), admin);
+		assertEquals(List.of("d1000"), ids(last.items()));
+		assertNull(last.nextCursor());
+		assertNull(last.readBackTo());
+
+		// A full page reaches back to its last row, and the next page's rows are no newer
+		AuditPage full = feed.page(new Query().kinds("document").build(), admin);
+		assertEquals(4, full.items().size());
+		assertEquals(full.items().get(3).when(), full.readBackTo());
+		AuditPage after = feed.page(new Query().kinds("document").build().at(full.nextCursor()), admin);
+		assertFalse(after.items().get(0).when().isAfter(full.readBackTo()));
 	}
 
 	@Test
@@ -678,6 +869,8 @@ public class AuditFeedTest extends AbstractHealdanTestCase {
 		long documents = child(workspace, "Documents").getId();
 		Document letter = fx.upload(child(workspace, "Documents"), "letter.txt", "x", admin);
 		HealdanFixtures.awaitVersionSaves();
+		// The person, as a person filter keeps rows only for an id an account has
+		long person = fx.user("someone").getId();
 		empty();
 		// 40,000 rows a table, each about as wide as a real one. A person who left, the matter's two folders and the
 		// document hold the oldest: 400 rows (1%), 400 and 120 (0.3%), more than a page; the rest are 40 others',
@@ -688,7 +881,7 @@ public class AuditFeedTest extends AbstractHealdanTestCase {
 					+ " ld_folderid, ld_filename, ld_path, ld_comment, ld_sessionid, ld_ip, ld_device)"
 					+ " select 1000000 + n, current_timestamp, current_timestamp, 1, 0, 1, 0,"
 					+ " timestamp '2024-01-01 00:00:00' + n * interval '1 minute',"
-					+ " case when n <= 400 then 10007 else 20000 + n % 40 end, 'someone', 'event.viewed',"
+					+ " case when n <= 400 then ? else 20000 + n % 40 end, 'someone', 'event.viewed',"
 					+ " case when n <= 120 then ? else 40000 + n % 20000 end,"
 					+ " case when n <= 400 then case when n % 2 = 0 then ? else ? end else 30000 + n % 3000 end,"
 					+ " 'Skeleton Argument for the Hearing ' || n || '.docx',"
@@ -696,15 +889,15 @@ public class AuditFeedTest extends AbstractHealdanTestCase {
 					+ " || '/Correspondence/Letters to the Other Side', 'Saved from the Healdan Helper on a laptop,"
 					+ " version ' || n || ', with a comment as long as a real one is', 'session-' || md5(cast(n as text)),"
 					+ " '192.0.2.' || (n % 250), 'Safari v18 on macOS (computer)' from generate_series(1, 40000) n",
-					letter.getId(), workspace, documents);
+					person, letter.getId(), workspace, documents);
 		jdbc.update("insert into hd_admin_event (hd_id, hd_tenantid, hd_date, hd_userid, hd_username, hd_area,"
 				+ " hd_action, hd_targetkind, hd_targetid, hd_targetname, hd_detail) select 1000000 + n, 1,"
 				+ " timestamp '2024-01-01 00:00:00' + n * interval '1 minute',"
-				+ " case when n <= 400 then 10007 else 20000 + n % 40 end, 'someone', 'MATTERS', 'folder.renamed',"
+				+ " case when n <= 400 then ? else 20000 + n % 40 end, 'someone', 'MATTERS', 'folder.renamed',"
 				+ " case when n <= 400 then 'folder' else 'client' end,"
 				+ " case when n <= 400 then case when n % 2 = 0 then ? else ? end else n % 1000 end,"
 				+ " 'A target with a name as long as a real one', '{\"name\":{\"before\":\"Old name of it\","
-				+ "\"after\":\"New name of it\"}}' from generate_series(1, 40000) n", workspace, documents);
+				+ "\"after\":\"New name of it\"}}' from generate_series(1, 40000) n", person, workspace, documents);
 		// And a storage record as large, older than the rest, none of it the person's: a window of it is read
 		jdbc.update("insert into hd_storage_event (ld_id, ld_lastmodified, ld_creation, ld_recordversion, ld_deleted,"
 				+ " ld_tenantid, hd_backendid, hd_event, hd_date, hd_userid, hd_username) select 1000000 + n,"
@@ -726,10 +919,12 @@ public class AuditFeedTest extends AbstractHealdanTestCase {
 		List<Read> reads = List.of(new Read("a page with no filter", query(Set.of("document"), null, null, null), null, 0),
 				new Read("a file name, which no index serves", new AuditQuery(Set.of("document"), null, null, null, null,
 						null, null, "Hearing 5.docx", 50, null), null, 0, 0),
-				new Read("a person's documents", query(Set.of("document"), 10007L, null, null), "ld_hist_uid", 400),
-				new Read("a person's account", query(Set.of("sign-in", "user"), 10007L, null, null), "ld_uhist_uid",
+				new Read("a person's username or name as kept, which no index serves", new AuditQuery(Set.of("sign-in",
+						"user"), null, null, null, null, null, null, "Nobody of this name", 50, null), null, 0, 0),
+				new Read("a person's documents", query(Set.of("document"), person, null, null), "ld_hist_uid", 400),
+				new Read("a person's account", query(Set.of("sign-in", "user"), person, null, null), "ld_uhist_uid",
 						400),
-				new Read("a person's administration", query(Set.of("administration"), 10007L, null, null),
+				new Read("a person's administration", query(Set.of("administration"), person, null, null),
 						"hd_admin_event_user", 400),
 				new Read("a matter's folders", query(Set.of("folder"), null, matter.getId(), null), "ld_fhist_fid",
 						400),
@@ -774,27 +969,28 @@ public class AuditFeedTest extends AbstractHealdanTestCase {
 		}
 		// The statement for a plan test is a bounded or unfiltered read's: an index-served one sends two
 		assertThrows(IllegalArgumentException.class,
-				() -> feed.prepare(query(Set.of("document"), 10007L, null, null), admin).firstPageSql("d"));
+				() -> feed.prepare(query(Set.of("document"), person, null, null), admin).firstPageSql("d"));
 
 		// The single statement the two steps replaced walks the primary key back through the whole table
 		List<String> single = analysed(new AuditFeed.Sql("select t.ld_id from ld_history t where t.ld_tenantid = ?"
 				+ " and t.ld_id < ? and t.ld_userid = ? order by t.ld_id desc limit ?",
-				new Object[] { 1L, Long.MAX_VALUE, 10007L, 50 }));
+				new Object[] { 1L, Long.MAX_VALUE, person, 50 }));
 		assertTrue(String.join("\n", single), removedByFilter(single) > 30_000);
 	}
 
 	@Test
 	public void testAnActivePersonsRowsComeFromTheWindowAlone() throws Exception {
+		long person = fx.user("someone").getId();
 		empty();
 		feed.scanPerSource = 100;
 		// 300 rows: someone else's, then the person's every other row among the newest 100
 		for (int i = 0; i < 300; i++)
-			history("ld_history", 1000 + i, T0.plusSeconds(i), i >= 200 && i % 2 == 0 ? 10007L : 10008L, "someone",
+			history("ld_history", 1000 + i, T0.plusSeconds(i), i >= 200 && i % 2 == 0 ? person : 987654L, "someone",
 					"event.viewed");
 		List<AuditFeed.Sql> statements = new ArrayList<>();
 		feed.sent = statements::add;
 
-		AuditPage page = feed.page(query(Set.of("document"), 10007L, null, null), admin);
+		AuditPage page = feed.page(query(Set.of("document"), person, null, null), admin);
 
 		// A page of them from the window, which didn't reach the end, with no read through the index after it
 		assertEquals(50, page.items().size());
@@ -1214,6 +1410,14 @@ public class AuditFeedTest extends AbstractHealdanTestCase {
 		device.setOperativeSystem("macOS");
 		client.setDevice(device);
 		UserHistoryDAO.get().createUserHistory(user, UserEvent.LOGIN, null, null, client);
+	}
+
+	/** @return the user with a first and last name, stored as the Admin app's and LogicalDOC's screens store them */
+	private static User named(User user, String first, String last) throws Exception {
+		user.setFirstName(first);
+		user.setName(last);
+		UserDAO.get().store(user);
+		return UserDAO.get().findById(user.getId());
 	}
 
 	private static Folder child(long parentId, String name) throws Exception {

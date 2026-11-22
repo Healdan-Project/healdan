@@ -257,7 +257,8 @@ public final class LogTestHooks {
 	}
 
 	/**
-	 * Sets when a file last changed, which orders the files a log rolled over to.
+	 * Sets when a file last changed, which a log's {@code modified} gives for its current file. It doesn't order the
+	 * files a log rolled over to: their numbers do, as the log's configuration counts them.
 	 */
 	public static void modified(Path file, Instant when) throws IOException {
 		Files.setLastModifiedTime(file, FileTime.from(when));

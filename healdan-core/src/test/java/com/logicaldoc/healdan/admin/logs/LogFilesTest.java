@@ -36,9 +36,18 @@ import java.util.concurrent.TimeUnit;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
+import javax.xml.parsers.DocumentBuilderFactory;
+
+import org.apache.logging.log4j.core.LogEvent;
+import org.apache.logging.log4j.core.impl.Log4jLogEvent;
+import org.apache.logging.log4j.core.layout.PatternLayout;
+import org.apache.logging.log4j.message.SimpleMessage;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.NodeList;
 
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.healdan.AbstractHealdanTestCase;
@@ -540,6 +549,100 @@ public class LogFilesTest extends AbstractHealdanTestCase {
 		modified(folder.resolve("cmis.log.1"), start.plusSeconds(10));
 		assertEquals(List.of("Oldest", "Older", "Newest"),
 				messages(files.read("CMIS", query(null, null), admin).orElseThrow()));
+	}
+
+	/**
+	 * Each pattern the server's own log.xml gives a log's file, read from it rather than copied, writes lines that
+	 * start entries: the time, then the level and source where the pattern writes them, null where it doesn't, so
+	 * every log pages back by its entries and its text filter keeps whole entries
+	 */
+	@Test
+	public void testEveryShippedPatternStartsEntries() throws Exception {
+		Map<String, String> patterns = shippedPatterns();
+		// The main log's, and the two of logs with another pattern, as shipped
+		assertTrue(patterns.toString(), patterns.size() >= 3);
+		for (Map.Entry<String, String> shipped : patterns.entrySet()) {
+			String pattern = shipped.getKey();
+			String which = shipped.getValue() + ": " + pattern;
+			boolean level = pattern.contains("%-5p") || pattern.contains("%p");
+			boolean source = pattern.contains("%C");
+			Files.deleteIfExists(dms);
+			PatternLayout layout = PatternLayout.newBuilder().withPattern(pattern).build();
+			Instant first = start.plusSeconds(60L * written++);
+			append(dms, logged(layout, first, org.apache.logging.log4j.Level.INFO, "Started the mover", null)
+					+ logged(layout, first.plusMillis(1), org.apache.logging.log4j.Level.WARN, "Slow - 2 tries", null)
+					+ logged(layout, first.plusMillis(2), org.apache.logging.log4j.Level.ERROR, "Failed",
+							new IllegalStateException("The share is gone")));
+
+			LogLines all = read(query(null, null));
+
+			assertEquals(which, List.of("Started the mover", "Slow - 2 tries", "Failed"), messages(all));
+			for (int i = 0; i < 3; i++) {
+				LogLine line = all.lines().get(i);
+				assertEquals(which, first.plusMillis(i), line.time());
+				assertEquals(which, level ? List.of("INFO", "WARN", "ERROR").get(i) : null, line.level());
+				assertEquals(which, source ? "com.example.Mover:42" : null, line.source());
+			}
+			assertEquals(which, List.of(), all.lines().get(0).continuation());
+			List<String> stack = all.lines().get(2).continuation();
+			assertEquals(which, "java.lang.IllegalStateException: The share is gone", stack.get(0));
+			assertTrue(which, stack.get(1).strip().startsWith("at "));
+
+			// By level where the log writes one; an entry with none is kept only with every level
+			assertEquals(which, level ? List.of("Slow - 2 tries", "Failed") : List.of(),
+					messages(read(new LogQuery(null, null, Level.WARN, null))));
+			// By text, whole entries, the stack's lines with the entry they belong to
+			assertEquals(which, List.of("Failed"),
+					messages(read(new LogQuery(null, null, Level.ALL, "share is gone"))));
+			// Back from the end by entries: the older entries before the last
+			LogLines back = read(query(all.lines().get(2).position(), null));
+			assertEquals(which, List.of("Started the mover", "Slow - 2 tries"), messages(back));
+		}
+	}
+
+	/**
+	 * @return the patterns of the server's own log.xml that its logs' files are written with, each with the name of
+	 *         an appender that has it: every rolling file's but the HTML copies', the properties they name put in
+	 */
+	private static Map<String, String> shippedPatterns() throws Exception {
+		Path shipped = Path.of("..", "logicaldoc-webapp", "src", "main", "resources", "log.xml");
+		assertTrue(shipped.toAbsolutePath().toString(), Files.isRegularFile(shipped));
+		Document xml;
+		try (var in = Files.newInputStream(shipped)) {
+			xml = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(in);
+		}
+		Map<String, String> properties = new LinkedHashMap<>();
+		NodeList property = xml.getElementsByTagName("Property");
+		for (int i = 0; i < property.getLength(); i++) {
+			Element element = (Element) property.item(i);
+			properties.put(element.getAttribute("name"), element.getTextContent().strip());
+		}
+		Map<String, String> patterns = new LinkedHashMap<>();
+		NodeList files = xml.getElementsByTagName("RollingFile");
+		for (int i = 0; i < files.getLength(); i++) {
+			Element file = (Element) files.item(i);
+			String name = file.getAttribute("name");
+			NodeList layouts = file.getElementsByTagName("PatternLayout");
+			if (name.endsWith("_WEB") || layouts.getLength() == 0)
+				continue;
+			Element layout = (Element) layouts.item(0);
+			NodeList texts = layout.getElementsByTagName("Pattern");
+			String pattern = texts.getLength() > 0 ? texts.item(0).getTextContent().strip()
+					: layout.getAttribute("pattern");
+			for (Map.Entry<String, String> named : properties.entrySet())
+				pattern = pattern.replace("${" + named.getKey() + "}", named.getValue());
+			patterns.putIfAbsent(pattern, name);
+		}
+		return patterns;
+	}
+
+	/** @return what the layout writes for an event logged from {@code com.example.Mover}, line 42 */
+	private static String logged(PatternLayout layout, Instant when, org.apache.logging.log4j.Level level,
+			String message, Throwable thrown) {
+		LogEvent event = Log4jLogEvent.newBuilder().setLoggerName("com.example.Mover").setLevel(level)
+				.setMessage(new SimpleMessage(message)).setTimeMillis(when.toEpochMilli()).setThrown(thrown)
+				.setSource(new StackTraceElement("com.example.Mover", "run", "Mover.java", 42)).build();
+		return layout.toSerializable(event);
 	}
 
 	@Test

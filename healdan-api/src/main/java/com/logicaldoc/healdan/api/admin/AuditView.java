@@ -24,12 +24,14 @@ public final class AuditView {
 	/**
 	 * @param items the rows, newest first
 	 * @param nextCursor where the next page starts; null once every source has been read to its end
+	 * @param readBackTo how far back the reading has reached; null once every source has been read to its end
 	 */
-	public record Page(List<Row> items, String nextCursor) {
+	public record Page(List<Row> items, String nextCursor, Date readBackTo) {
 
 		static Page of(AuditPage page) {
 			return new Page(page.items().stream().map(Row::of).toList(),
-					page.nextCursor() != null ? page.nextCursor().text() : null);
+					page.nextCursor() != null ? page.nextCursor().text() : null,
+					page.readBackTo() != null ? Date.from(page.readBackTo()) : null);
 		}
 	}
 

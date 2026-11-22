@@ -93,29 +93,31 @@ public final class AuditWords {
 		words("event.folder.alias.created", "Made a folder alias");
 		words("event.folder.document.destroyed", "Destroyed a document");
 
-		// An account's history (UserEvent)
+		// An account's sign-ins (UserEvent), whose Who is the account
 		words("event.user.login", "Signed in");
 		words("event.user.login.failed", "Failed to sign in");
 		words("event.user.logout", "Signed out");
 		words("event.user.timeout", "Session timed out");
-		words("event.user.passwordchanged", "Changed the password");
-		words("event.user.twofachanged", "Changed two-factor sign-in");
-		words("event.user.deleted", "Deleted the account");
-		words("event.user.file.conversion", "Converted a file");
-		words("event.user.message.received", "Received a message");
-		words("event.user.created", "Created the account");
-		words("event.user.updated", "Changed the account");
-		words("event.user.disabled", "Disabled the account");
-		words("event.user.enabled", "Enabled the account");
-		words("event.user.newapikey", "Made an API key");
-		words("event.user.search", "Searched");
-		words("event.user.ai.query", "Asked the AI");
-		words("event.user.legal.confirmed", "Confirmed a legal notice");
-		words("event.user.impersonators.changed", "Changed who can sign in as the account");
-		words("event.user.impersonation", "Signed in as someone else");
-		words("event.user.quota.overthreshold", "Went over the storage threshold");
-		words("event.user.access", "Opened the application");
-		words("event.user.access.ticket", "Used a download link");
+		// The rest of an account's history, whose Who is who made the change, when the row names them, and whose
+		// detail is the account: words true whoever did it (ruling P5-R30)
+		words("event.user.passwordchanged", "Password changed");
+		words("event.user.twofachanged", "Two-factor sign-in changed");
+		words("event.user.deleted", "Account deleted");
+		words("event.user.file.conversion", "File converted");
+		words("event.user.message.received", "Message received");
+		words("event.user.created", "Account created");
+		words("event.user.updated", "Account changed");
+		words("event.user.disabled", "Account disabled");
+		words("event.user.enabled", "Account enabled");
+		words("event.user.newapikey", "API key made");
+		words("event.user.search", "Search run");
+		words("event.user.ai.query", "Question put to the AI");
+		words("event.user.legal.confirmed", "Legal notice confirmed");
+		words("event.user.impersonators.changed", "Sign-in-as list changed");
+		words("event.user.impersonation", "Signed in as another account");
+		words("event.user.quota.overthreshold", "Storage threshold passed");
+		words("event.user.access", "Application opened");
+		words("event.user.access.ticket", "Download link used");
 
 		// The administration record: Matters
 		words("client.created", "Created a client");
@@ -170,8 +172,9 @@ public final class AuditWords {
 		// Monitoring
 		words("error.resolved", "Marked an error resolved");
 		words("error.reopened", "Marked an error unresolved");
-		words("job.run-requested", "Ran a job");
-		words("job.stop-requested", "Stopped a job");
+		// Run Now and Stop are requests: a run may then do nothing, and a stop comes at the run's next check
+		words("job.run-requested", "Asked a job to run");
+		words("job.stop-requested", "Asked a job to stop");
 		words("job.enabled", "Enabled a job");
 		words("job.disabled", "Disabled a job");
 		words("job.schedule-changed", "Changed a job's schedule");

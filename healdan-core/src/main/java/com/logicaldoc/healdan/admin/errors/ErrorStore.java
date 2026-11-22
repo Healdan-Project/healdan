@@ -315,16 +315,18 @@ public class ErrorStore {
 	 * query: deleted ones too, as a document a message names may be in the
 	 * Trash since.
 	 *
+	 * @param tenantId the reader's tenant, whose documents alone are named
 	 * @param ids the documents' ids, in the order the message names them
 	 * @return each, in the same order, with its doc # and file name, both
-	 *         null for an id no document has
+	 *         null for an id no document of the tenant has
 	 */
-	public List<ErrorDocument> findDocuments(List<Long> ids) {
+	public List<ErrorDocument> findDocuments(long tenantId, List<Long> ids) {
 		if (ids.isEmpty())
 			return List.of();
 		Map<Long, ErrorDocument> found = new HashMap<>();
-		named.query("select ld_id, ld_customid, ld_filename from ld_document where ld_id in (:ids)",
-				new MapSqlParameterSource("ids", List.copyOf(new LinkedHashSet<>(ids))), rs -> {
+		named.query("select ld_id, ld_customid, ld_filename from ld_document where ld_tenantid = :tenant"
+				+ " and ld_id in (:ids)", new MapSqlParameterSource("ids", List.copyOf(new LinkedHashSet<>(ids)))
+						.addValue("tenant", tenantId), rs -> {
 					String number = TrashRecorder.docNumber(rs.getString(2));
 					found.put(rs.getLong(1), new ErrorDocument(rs.getLong(1),
 							number != null ? Long.valueOf(number) : null, rs.getString(3)));

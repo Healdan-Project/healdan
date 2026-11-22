@@ -6,6 +6,7 @@ package com.logicaldoc.healdan.admin;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertThrows;
 
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
@@ -156,6 +157,40 @@ public class DocumentViewsTest extends AbstractHealdanTestCase {
 		DocumentViewsTestHooks.reset();
 		DocumentViews.get().viewed(d, clerk, session, d.getFileVersion());
 		assertEquals(1, views().size());
+	}
+
+	/**
+	 * An error that isn't the virtual machine's, as a class a plugin's zip left out makes, fails the write and not the
+	 * read: it's warned of, as any failure is, and not remembered
+	 */
+	@Test
+	public void testAnErrorInTheWriteDoesntFailTheRead() throws Exception {
+		Document d = file("brief.txt");
+		DocumentViewsTestHooks.failWrites(() -> {
+			throw new NoClassDefFoundError("com/example/Missing");
+		});
+
+		try (LogCapture log = LogCapture.of(DocumentViews.class)) {
+			DocumentViews.get().viewed(d, clerk, session, d.getFileVersion());
+
+			assertEquals(List.of("WARN Couldn't record a view of document " + d.getId()
+					+ ": java.lang.NoClassDefFoundError"), log.lines());
+		}
+		assertEquals(0, views().size());
+		assertEquals(0, DocumentViews.get().remembered());
+	}
+
+	/** The virtual machine's own errors aren't the write's to keep: they go on up */
+	@Test
+	public void testAVirtualMachineErrorGoesOnUp() throws Exception {
+		Document d = file("brief.txt");
+		DocumentViewsTestHooks.failWrites(() -> {
+			throw new StackOverflowError("deep");
+		});
+
+		assertThrows(StackOverflowError.class,
+				() -> DocumentViews.get().viewed(d, clerk, session, d.getFileVersion()));
+		assertEquals(0, views().size());
 	}
 
 	@Test

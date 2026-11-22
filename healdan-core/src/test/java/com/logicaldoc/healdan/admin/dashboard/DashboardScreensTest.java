@@ -39,7 +39,8 @@ public class DashboardScreensTest {
 		shipped.put(Screen.STORES, "/admin/stores");
 		shipped.put(Screen.BACKENDS, "/admin/backends");
 		shipped.put(Screen.USERS, "/admin/users");
-		shipped.put(Screen.ERRORS, "/admin/errors");
+		// The Errors list with Unresolved Only set, in the form the Errors screen's address takes it
+		shipped.put(Screen.UNRESOLVED_ERRORS, "/admin/errors?unresolved=true");
 		shipped.put(Screen.SERVER_LOG, "/admin/server-log");
 		shipped.put(Screen.AUDIT_TRAIL, "/admin/audit");
 		shipped.put(Screen.BACKGROUND_JOBS, "/admin/jobs");

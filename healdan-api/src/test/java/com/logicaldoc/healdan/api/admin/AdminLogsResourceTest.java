@@ -8,6 +8,7 @@ import static com.logicaldoc.healdan.admin.logs.LogTestHooks.entry;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import java.io.ByteArrayInputStream;
@@ -221,6 +222,7 @@ public class AdminLogsResourceTest extends ApiTestCase {
 		assertEquals(head.toString(), 200, head.status());
 		assertEquals(0, head.body().length);
 		assertTrue(head.header("Content-Disposition"), head.header("Content-Disposition").startsWith("attachment"));
+		assertEquals("no-store", head.header("Cache-Control"));
 		assertFalse(opened.isEmpty());
 		assertTrue(opened.stream().noneMatch(FileChannel::isOpen));
 
@@ -231,6 +233,11 @@ public class AdminLogsResourceTest extends ApiTestCase {
 		assertTrue(response.header("Content-Type"), response.header("Content-Type").startsWith("application/zip"));
 		assertTrue(response.header("Content-Disposition"),
 				response.header("Content-Disposition").matches("attachment; filename=\"dms-\\d{8}-\\d{6}\\.zip\""));
+		// The files hold what the server logged: no copy is kept
+		assertEquals("no-store", response.header("Cache-Control"));
+		// Nothing keeps the app's download frame from taking it (ruling P5-R38), as nothing keeps the User app's
+		assertNull(response.header("X-Frame-Options"));
+		assertNull(response.header("Content-Security-Policy"));
 		Map<String, byte[]> entries = new LinkedHashMap<>();
 		try (ZipInputStream in = new ZipInputStream(new ByteArrayInputStream(response.body()))) {
 			for (ZipEntry entry = in.getNextEntry(); entry != null; entry = in.getNextEntry())

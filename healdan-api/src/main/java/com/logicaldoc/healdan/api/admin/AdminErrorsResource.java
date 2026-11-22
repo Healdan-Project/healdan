@@ -34,8 +34,9 @@ import jakarta.ws.rs.core.MediaType;
 /**
  * {@code /v1/admin/errors}: the errors the server logged, by fault, and marking them resolved (Admin app spec
  * sections 8.8 and 9.4). The list and a fault come from {@link ErrorStore}; resolving and reopening go through
- * {@link ErrorReview}, which records each change. A fault's message and stack are answered with any URL's
- * credentials taken out (ruling P5-R2).
+ * {@link ErrorReview}, which records each change. A fault's message and stack are answered with the credentials
+ * {@link com.logicaldoc.healdan.admin.UrlCredentials} recognises in its URLs taken out (rulings P5-R2 and P5-R26),
+ * which isn't every credential a text can hold.
  */
 @Component
 @Path("/v1/admin/errors")
@@ -117,7 +118,8 @@ public class AdminErrorsResource {
 
 	private static ErrorDetail detail(Optional<ErrorGroup> fault, long id) {
 		ErrorGroup found = fault.orElseThrow(() -> ApiProblem.notFound("No fault #" + id));
-		return ErrorDetail.of(found, ErrorStore.get().findDocuments(found.documents()),
+		return ErrorDetail.of(found,
+				ErrorStore.get().findDocuments(Caller.current().user().getTenantId(), found.documents()),
 				LogFiles.get().logOf(found.logger()));
 	}
 

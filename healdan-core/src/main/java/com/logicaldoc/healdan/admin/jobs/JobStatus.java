@@ -5,7 +5,9 @@ package com.logicaldoc.healdan.admin.jobs;
 
 import java.time.Instant;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.UnaryOperator;
 
 import org.springframework.stereotype.Component;
@@ -35,6 +37,9 @@ public class JobStatus {
 	private static final JobStatus DETACHED = new JobStatus();
 
 	private final Map<String, Report> reports = new ConcurrentHashMap<>();
+
+	/** What {@link #changes()} gives */
+	private final AtomicLong changes = new AtomicLong();
 
 	/**
 	 * @return the bean, or, where there's none to be had, as in a unit test with
@@ -117,6 +122,24 @@ public class JobStatus {
 	}
 
 	/**
+	 * @return a count that moves on when a job changes in a way the Dashboard counts and a person waits to see: an
+	 *         action on it ({@link #changed()}), or a run that ended with another result or error than the one
+	 *         before. A run that ended as the one before did doesn't move it, so a job that runs every few seconds
+	 *         leaves the Dashboard's jobs as they're kept (ruling P5-R37)
+	 */
+	public long changes() {
+		return changes.get();
+	}
+
+	/**
+	 * A job changed in a way a person waits to see, as by an action on it in Background Jobs: moves
+	 * {@link #changes()} on. Never throws.
+	 */
+	public void changed() {
+		changes.incrementAndGet();
+	}
+
+	/**
 	 * @param name the job's name
 	 * @return when it runs next, as it last reported: null if it doesn't, that
 	 *         isn't known, or it reported nothing
@@ -138,7 +161,14 @@ public class JobStatus {
 		if (name == null)
 			return;
 		try {
-			reports.compute(name, (key, report) -> change.apply(report != null ? report : Report.NONE));
+			Report[] before = new Report[1];
+			Report after = reports.compute(name, (key, report) -> {
+				before[0] = report != null ? report : Report.NONE;
+				return change.apply(before[0]);
+			});
+			Report was = before[0];
+			if (!Objects.equals(was.result(), after.result()) || !Objects.equals(was.error(), after.error()))
+				changes.incrementAndGet();
 		} catch (RuntimeException e) {
 			// Reporting never changes what the job does
 		}

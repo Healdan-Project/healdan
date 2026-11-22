@@ -8,6 +8,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.io.StringWriter;
+import java.io.Writer;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -36,6 +37,7 @@ import com.logicaldoc.healdan.admin.AdminEvents;
 import com.logicaldoc.healdan.admin.PersonNames;
 import com.logicaldoc.healdan.matter.Matter;
 import com.logicaldoc.healdan.support.HealdanFixtures;
+import com.logicaldoc.healdan.support.LogCapture;
 import com.logicaldoc.util.spring.Context;
 
 /**
@@ -140,9 +142,9 @@ public class AuditCsvTest extends AbstractHealdanTestCase {
 					Timestamp.from(Instant.parse("2026-11-22T10:00:00Z").plusSeconds(i)), "Client " + i);
 
 		StringWriter all = new StringWriter();
-		assertFalse(AuditCsv.write(AuditFeed.get().prepare(AuditQuery.all(2), admin), 5, all));
+		assertEquals(AuditCsv.End.COMPLETE, AuditCsv.write(AuditFeed.get().prepare(AuditQuery.all(2), admin), 5, all));
 		StringWriter some = new StringWriter();
-		assertTrue(AuditCsv.write(AuditFeed.get().prepare(AuditQuery.all(2), admin), 3, some));
+		assertEquals(AuditCsv.End.AT_MOST, AuditCsv.write(AuditFeed.get().prepare(AuditQuery.all(2), admin), 3, some));
 
 		String text = all.toString();
 		assertTrue(text.startsWith("\uFEFFTime,Who,Kind,What,Detail,From,Changes\r\n"));
@@ -160,6 +162,101 @@ public class AuditCsvTest extends AbstractHealdanTestCase {
 		assertEquals(List.of("Stopped at 3 rows: narrow the filters to export the rest."), stopped.get(4));
 		// It's a cell like any other: quoted only where it must be, as for 100,000, whose comma it holds
 		assertTrue(some.toString().endsWith("\r\nStopped at 3 rows: narrow the filters to export the rest.\r\n"));
+	}
+
+	/**
+	 * The header goes out at once, before any row (ruling P5-R32), and each page as it's written, so the client hears
+	 * from the server however few rows a page keeps
+	 */
+	@Test
+	public void testTheHeaderAndEachPageGoOutAtOnce() throws Exception {
+		rows(5);
+		Flushes out = new Flushes();
+
+		assertEquals(AuditCsv.End.COMPLETE, AuditCsv.open(AuditFeed.get().prepare(AuditQuery.all(2), admin), 10, 2)
+				.writeTo(out));
+
+		String header = "\uFEFF" + AuditCsv.HEADER + "\r\n";
+		assertEquals(header, out.flushed.get(0));
+		// Then two rows a page: three pages, each flushed as it's written
+		assertEquals(4, out.flushed.size());
+		assertEquals(List.of(1, 3, 5, 6), out.flushed.stream().map(text -> text.split("\r\n").length).toList());
+	}
+
+	/** A later page that can't be read ends the file with a last line, logged once at error (ruling P5-R32) */
+	@Test
+	public void testAnExportThatCantFinishSaysSo() throws Exception {
+		rows(5);
+		StringWriter out = new StringWriter();
+		AuditCsv.Export export = AuditCsv.open(AuditFeed.get().prepare(AuditQuery.all(2), admin), 10, 2);
+		AuditTestHooks.failPage(1);
+		AuditCsv.End end;
+		try (LogCapture log = LogCapture.of(AuditCsv.class)) {
+			end = export.writeTo(out);
+			assertEquals(List.of("ERROR The Audit Trail's export stopped before its end:"
+					+ " org.springframework.dao.DataAccessResourceFailureException"), log.lines());
+		} finally {
+			AuditTestHooks.reset();
+		}
+
+		assertEquals(AuditCsv.End.UNREADABLE, end);
+		List<List<String>> lines = parse(out.toString().substring(1));
+		// The header, the first page's two rows, and the last line
+		assertEquals(4, lines.size());
+		assertEquals(List.of(AuditCsv.UNREADABLE), lines.get(3));
+		assertTrue(out.toString().endsWith("\r\n" + AuditCsv.UNREADABLE + "\r\n"));
+	}
+
+	/** Its reader is asked again at each page: one no longer an administrator gets no more rows (ruling P5-R32) */
+	@Test
+	public void testAnExportStopsOnceItsReaderIsNoLongerAnAdministrator() throws Exception {
+		User boss = fx.user("boss", "admin");
+		rows(5);
+		StringWriter out = new StringWriter();
+		AuditCsv.Export export = AuditCsv.open(AuditFeed.get().prepare(AuditQuery.all(2), boss), 10, 2);
+		jdbc.update("delete from ld_usergroup where ld_userid = ? and ld_groupid in (select ld_id from ld_group"
+				+ " where ld_name = 'admin')", boss.getId());
+
+		assertEquals(AuditCsv.End.NOT_ADMIN, export.writeTo(out));
+
+		List<List<String>> lines = parse(out.toString().substring(1));
+		assertEquals(4, lines.size());
+		assertEquals(List.of(AuditCsv.NOT_ADMIN), lines.get(3));
+	}
+
+	/** Only the administration record's rows, five of them, a second apart */
+	private void rows(int count) {
+		jdbc.update("delete from ld_history");
+		jdbc.update("delete from ld_folder_history");
+		jdbc.update("delete from ld_user_history");
+		jdbc.update("delete from hd_admin_event");
+		for (int i = 0; i < count; i++)
+			jdbc.update("insert into hd_admin_event (hd_id, hd_tenantid, hd_date, hd_userid, hd_username, hd_area,"
+					+ " hd_action, hd_targetkind, hd_targetname) values (?, 1, ?, 1, 'admin', 'MATTERS',"
+					+ " 'client.renamed', 'client', ?)", 10 + i,
+					Timestamp.from(Instant.parse("2026-11-22T10:00:00Z").plusSeconds(i)), "Client " + i);
+	}
+
+	/** Text written, as it stood at each flush */
+	private static final class Flushes extends Writer {
+
+		private final StringBuilder text = new StringBuilder();
+
+		final List<String> flushed = new ArrayList<>();
+
+		@Override
+		public void write(char[] buffer, int offset, int length) {
+			text.append(buffer, offset, length);
+		}
+
+		@Override
+		public void flush() {
+			flushed.add(text.toString());
+		}
+
+		@Override
+		public void close() {
+		}
 	}
 
 	@Test
@@ -181,10 +278,11 @@ public class AuditCsvTest extends AbstractHealdanTestCase {
 				+ " ld_tenantid, ld_notified, ld_date, ld_userid, ld_username, ld_event, ld_ip, ld_device, ld_comment)"
 				+ " values (900001, current_timestamp, current_timestamp, 1, 0, 1, 0, current_timestamp, ?, ?,"
 				+ " 'event.user.login', '=1+2', '\tSafari', null)", mallory.getId(), "@mallory");
+		// A change to an account no account has now, by an author no account has: both named as the row kept them
 		jdbc.update("insert into ld_user_history (ld_id, ld_lastmodified, ld_creation, ld_recordversion, ld_deleted,"
-				+ " ld_tenantid, ld_notified, ld_date, ld_userid, ld_username, ld_event, ld_ip, ld_comment)"
+				+ " ld_tenantid, ld_notified, ld_date, ld_userid, ld_username, ld_event, ld_ip, ld_comment, ld_author)"
 				+ " values (900002, current_timestamp, current_timestamp, 1, 0, 1, 0, current_timestamp, 987654,"
-				+ " '-mallory', 'event.user.updated', ?, '+comment')", "\r=cmd");
+				+ " '-mallory', 'event.user.updated', ?, '+comment', '@author')", "\r=cmd");
 		jdbc.update("update ld_folder_history set ld_path = ? where ld_folderid = ?", "+" + formula, folder.getId());
 		// An administration row aimed at a name, from an address, with a changed secret and a hostile field
 		AdminContext.set("@192.0.2.1");
@@ -209,8 +307,8 @@ public class AuditCsvTest extends AbstractHealdanTestCase {
 		assertTrue(cells.toString(), cells.contains("'=1+2"));
 		assertTrue(cells.toString(), cells.contains("'\tSafari"));
 		assertTrue(cells.toString(), cells.contains("'\r=cmd"));
-		assertTrue(cells.toString(), cells.contains("'-mallory"));
-		assertTrue(cells.toString(), cells.contains("'+comment"));
+		assertTrue(cells.toString(), cells.contains("'-mallory: +comment"));
+		assertTrue(cells.toString(), cells.contains("'@author"));
 		assertTrue(cells.toString(), cells.stream().anyMatch(cell -> cell.startsWith("# ")
 				&& cell.contains(", +cmd|' /C calc'!A0.docx, version 1.0")));
 		assertTrue(cells.toString(), cells.contains("'=Due: -1 \u2192 " + formula + "\nsecret: changed"));

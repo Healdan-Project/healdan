@@ -91,8 +91,8 @@ public class LogFiles {
 	static final int MAX_ROLLED = 100;
 
 	/**
-	 * An appender's name as the routes take it (the contract's {@code LogName}): not only dots, with no slash or
-	 * backslash; and with no apostrophe, as {@link LogConfigurator#getFile} finds an appender by its name in quotes
+	 * An appender's name as the routes take it (the contract's {@code LogName}): not only dots, and with no slash,
+	 * backslash or apostrophe
 	 */
 	private static final Pattern NAME = Pattern.compile("[^/\\\\']*[^/\\\\.'][^/\\\\']*");
 

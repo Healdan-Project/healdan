@@ -6,6 +6,7 @@ package com.logicaldoc.healdan.api.admin;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import java.net.URLEncoder;
@@ -19,6 +20,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.junit.After;
 import org.junit.Test;
 import org.springframework.mock.web.MockHttpSession;
 
@@ -33,9 +35,14 @@ import com.logicaldoc.healdan.admin.AdminArea;
 import com.logicaldoc.healdan.admin.AdminEvent;
 import com.logicaldoc.healdan.admin.AdminEvent.Change;
 import com.logicaldoc.healdan.admin.AdminEvents;
+import com.logicaldoc.healdan.admin.audit.AuditCsv;
+import com.logicaldoc.healdan.admin.audit.AuditFeed;
+import com.logicaldoc.healdan.admin.audit.AuditTestHooks;
 import com.logicaldoc.healdan.api.ApiResponse;
 import com.logicaldoc.healdan.api.ApiTestCase;
+import com.logicaldoc.healdan.api.ProblemMapper;
 import com.logicaldoc.healdan.matter.Matter;
+import com.logicaldoc.healdan.support.LogCapture;
 
 /**
  * The Audit Trail's routes (Admin app spec section 8.8; rulings P5-R8 to P5-R15): a page of the one feed and its
@@ -47,6 +54,11 @@ public class AdminAuditResourceTest extends ApiTestCase {
 	private static final String AUDIT = "/api/v1/admin/audit";
 
 	private static final String EXPORT = "/api/v1/admin/audit/export";
+
+	@After
+	public void putBack() {
+		AuditTestHooks.reset();
+	}
 
 	@Test
 	public void testAPage() throws Exception {
@@ -175,18 +187,117 @@ public class AdminAuditResourceTest extends ApiTestCase {
 	public void testWhatIsRefused() throws Exception {
 		MockHttpSession session = signInWeb(fx.user("boss", "admin"));
 		for (String query : List.of("kind=everything", "kind=", "kind=Document", "zone=Mars/Olympus", "from=yesterday",
-				"from=2026-02-30", "to=22/11/2026", "userId=-1", "matterId=-1", "docNumber=-1", "userId=abc",
+				"from=2026-02-30", "to=22/11/2026", "from=0000-01-01", "from=-9999-01-01", "to=%2B999999999-12-31",
+				"to=%2B10000-01-01", "from=2026-1-01", "from=02026-01-01", "userId=-1", "matterId=-1", "docNumber=-1",
+				"userId=abc",
 				"limit=0", "limit=201", "limit=x", "cursor=abc", "cursor=", "cursor=ZDEuZjEudTEuYTEuczE%3D",
 				"cursor=" + "A".repeat(500), "cursor=%27%20or%201%3D1")) {
 			ApiResponse response = get(AUDIT + "?" + query).webSession(session).send();
 			assertEquals(query + ": " + response, 400, response.status());
 			assertEquals(query, "bad-request", response.code());
 		}
-		for (String query : List.of("kind=everything", "zone=Mars/Olympus", "from=yesterday", "userId=-1")) {
+		for (String query : List.of("kind=everything", "zone=Mars/Olympus", "from=yesterday", "userId=-1",
+				"to=%2B999999999-12-31", "from=-9999-01-01")) {
 			ApiResponse response = get(EXPORT + "?" + query).webSession(session).send();
 			assertEquals(query + ": " + response, 400, response.status());
 			assertEquals(query, "bad-request", response.code());
 		}
+	}
+
+	/** The first and the last day a day can be are days like any other, with rows to look through */
+	@Test
+	public void testTheFirstAndTheLastDays() throws Exception {
+		User boss = fx.user("boss", "admin");
+		MockHttpSession session = signInWeb(boss);
+		AdminEvents.get().record(new AdminEvent(AdminArea.MATTERS, "client.renamed", "client", 1L, "Ashcombe", null),
+				boss);
+		for (String route : List.of(AUDIT, EXPORT)) {
+			ApiResponse all = get(route + "?from=0001-01-01&to=9999-12-31&zone=Pacific/Kiritimati").webSession(session)
+					.send();
+			assertEquals(route + ": " + all, 200, all.status());
+			assertTrue(route, (route.equals(AUDIT) ? all.text() : new String(all.body(), StandardCharsets.UTF_8))
+					.contains("Ashcombe"));
+		}
+	}
+
+	/** A first page that can't be read is a problem, as nothing has been sent: never a file of the columns alone */
+	@Test
+	public void testAnExportWhoseFirstPageCantBeReadIsAProblem() throws Exception {
+		MockHttpSession session = signInWeb(fx.user("boss", "admin"));
+		AuditTestHooks.failPage(1);
+
+		try (LogCapture capture = LogCapture.of(ProblemMapper.class)) {
+			ApiResponse response = get(EXPORT).webSession(session).send();
+
+			assertEquals(response.toString(), 500, response.status());
+			assertEquals("server-error", response.code());
+			assertEquals(List.of("ERROR API request failed"), capture.lines());
+		}
+	}
+
+	/** A later page that can't be read ends the file with a last line that says so, logged once */
+	@Test
+	public void testAnExportThatCantFinishSaysSo() throws Exception {
+		MockHttpSession session = signInWeb(fx.user("boss", "admin"));
+		manyRows(1500);
+		AuditTestHooks.failPage(2);
+
+		ApiResponse response;
+		try (LogCapture capture = LogCapture.of(AuditCsv.class)) {
+			response = get(EXPORT + "?kind=administration").webSession(session).send();
+			assertEquals(capture.lines().toString(), 1, capture.lines().size());
+			assertTrue(capture.lines().get(0), capture.lines().get(0).startsWith("ERROR The Audit Trail's export"));
+		}
+
+		assertEquals(response.toString(), 200, response.status());
+		String[] lines = new String(response.body(), StandardCharsets.UTF_8).split("\r\n", -1);
+		// The header, the first page's rows, the last line, and nothing after its line end
+		assertEquals(AuditFeed.MAX_LIMIT + 3, lines.length);
+		assertEquals(AuditCsv.UNREADABLE, lines[AuditFeed.MAX_LIMIT + 1]);
+		assertEquals("", lines[AuditFeed.MAX_LIMIT + 2]);
+	}
+
+	/** Its reader is asked again at each page, and one no longer an administrator gets no more rows */
+	@Test
+	public void testAnExportStopsOnceItsReaderIsNoLongerAnAdministrator() throws Exception {
+		User boss = fx.user("boss", "admin");
+		MockHttpSession session = signInWeb(boss);
+		manyRows(1500);
+		// Taken out of admin while the first page is read: that page goes out, and nothing after it
+		AuditTestHooks.onPage(1, () -> jdbc().update("delete from ld_usergroup where ld_userid = ? and ld_groupid in"
+				+ " (select ld_id from ld_group where ld_name = 'admin')", boss.getId()));
+
+		ApiResponse response = get(EXPORT + "?kind=administration").webSession(session).send();
+
+		assertEquals(response.toString(), 200, response.status());
+		String[] lines = new String(response.body(), StandardCharsets.UTF_8).split("\r\n", -1);
+		assertEquals(AuditFeed.MAX_LIMIT + 3, lines.length);
+		assertEquals(AuditCsv.NOT_ADMIN, lines[AuditFeed.MAX_LIMIT + 1]);
+		assertEquals(1, AuditTestHooks.pages());
+	}
+
+	/** A HEAD answers the headers, and reads no row */
+	@Test
+	public void testAHeadOfTheExportReadsNoRow() throws Exception {
+		MockHttpSession session = signInWeb(fx.user("boss", "admin"));
+		AuditTestHooks.onPage(1, () -> {
+		});
+
+		ApiResponse head = head(EXPORT + "?kind=administration").webSession(session).send();
+
+		assertEquals(head.toString(), 200, head.status());
+		assertEquals(0, head.body().length);
+		assertTrue(head.header("Content-Disposition"), head.header("Content-Disposition").startsWith("attachment"));
+		assertEquals("no-store", head.header("Cache-Control"));
+		assertEquals(0, AuditTestHooks.pages());
+	}
+
+	/** Rows of the administration record, newer than any other test's, a second apart */
+	private void manyRows(int count) {
+		jdbc().update("insert into hd_admin_event (hd_id, hd_tenantid, hd_date, hd_userid, hd_username, hd_area,"
+				+ " hd_action, hd_targetkind, hd_targetname) select 1000000 + n, 1,"
+				+ " current_timestamp + n * interval '1 second', 1, 'admin', 'MATTERS', 'client.renamed', 'client',"
+				+ " 'Client ' || n from generate_series(1, ?) n", count);
 	}
 
 	@Test
@@ -203,6 +314,10 @@ public class AdminAuditResourceTest extends ApiTestCase {
 
 		assertEquals(response.toString(), 200, response.status());
 		assertEquals("text/csv;charset=utf-8", response.header("Content-Type"));
+		assertEquals("no-store", response.header("Cache-Control"));
+		// Nothing keeps the app's download frame from taking it (ruling P5-R38), as nothing keeps the User app's
+		assertNull(response.header("X-Frame-Options"));
+		assertNull(response.header("Content-Security-Policy"));
 		String disposition = response.header("Content-Disposition");
 		assertTrue(disposition, disposition.equals("attachment; filename=\"audit-trail-%s.csv\"".formatted(before))
 				|| disposition.equals("attachment; filename=\"audit-trail-%s.csv\"".formatted(after)));

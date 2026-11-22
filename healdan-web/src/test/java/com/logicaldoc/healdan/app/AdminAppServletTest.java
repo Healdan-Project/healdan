@@ -42,10 +42,11 @@ public class AdminAppServletTest extends AbstractHealdanTestCase {
 
 	/**
 	 * The policy of spec 6.1, as its text, not as the constant the servlet builds it from, so a looser one fails: the
-	 * User app's, with no worker and no frame
+	 * User app's, with no worker, and frames of the server's own alone, which its downloads go through (ruling
+	 * P5-R38)
 	 */
 	private static final String POLICY = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; "
-			+ "font-src 'self' data:; worker-src 'none'; connect-src 'self'; frame-src 'none'; object-src 'none'; "
+			+ "font-src 'self' data:; worker-src 'none'; connect-src 'self'; frame-src 'self'; object-src 'none'; "
 			+ "frame-ancestors 'none'; base-uri 'none'; form-action 'self'";
 
 	/** What the Admin app's fixture index.html says */
@@ -283,7 +284,9 @@ public class AdminAppServletTest extends AbstractHealdanTestCase {
 	@Test
 	public void testPolicyText() throws Exception {
 		assertEquals(POLICY, AdminAppServlet.POLICY);
-		assertTrue(AdminAppServlet.POLICY.contains("worker-src 'none'; connect-src 'self'; frame-src 'none'"));
+		assertTrue(AdminAppServlet.POLICY.contains("worker-src 'none'; connect-src 'self'; frame-src 'self'"));
+		// But for the worker, the User app's own
+		assertEquals(AppServlet.POLICY.replace("worker-src 'self'", "worker-src 'none'"), AdminAppServlet.POLICY);
 		assertHeaders(get("/", admin()));
 		assertHeaders(get("/", clerk()));
 		assertHeaders(get("/", null));

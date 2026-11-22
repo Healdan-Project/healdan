@@ -12,8 +12,9 @@ import com.logicaldoc.healdan.admin.jobs.JobView;
 
 /**
  * {@code openapi-admin.yaml}'s {@code Job}: a background job as {@link JobView} holds it, with its times as the API
- * writes timestamps, its error with the credentials of any URL in it cut out ({@link UrlCredentials}), whether it can
- * be enabled and disabled as {@code switchable}, and whether it's overdue now.
+ * writes timestamps, its error with the credentials {@link UrlCredentials} recognises in its URLs cut out (ruling
+ * P5-R26, which says what it doesn't), whether it can be enabled and disabled as {@code switchable}, and whether it's
+ * overdue now.
  *
  * @param name its name, which its paths take
  * @param label its name as the app shows it
@@ -23,7 +24,8 @@ import com.logicaldoc.healdan.admin.jobs.JobView;
  * @param lastStart when its last run began, null if none has since the server started
  * @param lastEnd when its last run that ended did, null if none
  * @param result how its last run ended, null if it hasn't run
- * @param error what its last run failed with, its URLs' credentials cut out; null unless it failed
+ * @param error what its last run failed with, the credentials {@link UrlCredentials} recognises cut out; null unless
+ *        it failed
  * @param nextRun when it runs next, null when it won't or that isn't known
  * @param overdue whether it's overdue now
  * @param canRun whether Run Now runs it now
