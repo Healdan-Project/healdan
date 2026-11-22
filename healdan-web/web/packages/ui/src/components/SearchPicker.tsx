@@ -86,10 +86,20 @@ function useStopWhileScrolling(box: RefObject<HTMLElement | null>, drawn: boolea
   })
   useLayoutEffect(() => {
     const element = box.current
-    if (!drawn || element === null || typeof ResizeObserver === 'undefined') return
+    if (!drawn || element === null) return
+    // React Aria draws the rows after this render. As they come and go, in the same task, before anything else can look
+    // at the page: a change of size is only told at the next frame, which a check run straight after the rows would beat.
+    const rows = new MutationObserver(() => markStop(element, names))
+    rows.observe(element, { childList: true, subtree: true })
+    if (typeof ResizeObserver === 'undefined') return () => rows.disconnect()
     const observer = new ResizeObserver(() => markStop(element, names))
     observer.observe(element)
-    return () => observer.disconnect()
+    // And the list in it: a box already at its full height keeps its size as the list in it grows
+    if (element.firstElementChild) observer.observe(element.firstElementChild)
+    return () => {
+      rows.disconnect()
+      observer.disconnect()
+    }
   }, [box, drawn, names])
 }
 
