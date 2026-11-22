@@ -4,7 +4,7 @@
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { launch } from '../actions/launch'
+import { launch, launchDownload } from '../actions/launch'
 import { comeBack, settle } from '../test/comeBack'
 import { detailsRoutes } from '../test/details'
 import { children, document, folder, page, type Routes } from '../test/fakeApi'
@@ -18,7 +18,10 @@ const locked = document({ docNumber: 10501, name: 'Secret.docx', canOpen: false 
 const host = window.location.host
 const link = (n: number) => `healdan://open/${n}?server=${host}`
 
-beforeEach(() => vi.mocked(launch).mockClear())
+beforeEach(() => {
+  vi.mocked(launch).mockClear()
+  vi.mocked(launchDownload).mockClear()
+})
 
 const main = () => screen.getByRole('main')
 const row = async (name: RegExp) => within(await within(main()).findByRole('grid')).findByRole('row', { name })
@@ -44,7 +47,7 @@ describe('opening a document from a list', () => {
     expect(launch).toHaveBeenLastCalledWith(link(10431))
 
     enter(await row(/Site Photo/))
-    expect(launch).toHaveBeenLastCalledWith('/api/v1/documents/10500/content', 'Site Photo.png')
+    expect(launchDownload).toHaveBeenLastCalledWith('/api/v1/documents/10500/content', expect.any(Function))
   })
 
   it('opens in the app with a double-click on a folder\'s row', async () => {
@@ -59,6 +62,7 @@ describe('opening a document from a list', () => {
     enter(await row(/Secret/))
     await waitFor(() => expect(router.history.location.search).toBe('?sel=10501'))
     expect(launch).not.toHaveBeenCalled()
+    expect(launchDownload).not.toHaveBeenCalled()
   })
 
   it('opens in the app from Recent Documents', async () => {
@@ -107,7 +111,7 @@ describe("the toolbar's Open, Preview, Download and Check Out", () => {
     await userEvent.click(bar.getByRole('button', { name: 'Open' }))
     expect(launch).toHaveBeenLastCalledWith(link(10431))
     await userEvent.click(bar.getByRole('button', { name: 'Download' }))
-    expect(launch).toHaveBeenLastCalledWith('/api/v1/documents/10431/content', 'Letter to Dunmere Pryce.docx')
+    expect(launchDownload).toHaveBeenLastCalledWith('/api/v1/documents/10431/content', expect.any(Function))
   })
 
   it('checks the selected document out', async () => {

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { expect, test, type APIRequestContext, type Browser, type BrowserContext, type Locator, type Page } from '@playwright/test'
-import { PASSWORD, apiContext, authorized, call, deviceToken, escape, escaped, fileDocument, matterFolders, minimalPdf, signIn, specsFolder, tabTo } from './helpers'
+import { PASSWORD, apiContext, authorized, call, deviceToken, downloadBy, escape, escaped, fileDocument, matterFolders, minimalPdf, signIn, specsFolder, tabTo } from './helpers'
 
 // The User app by keyboard alone (M6 spec section 15.2, rows 3 to 9; section 10.5): after the sign-in page, every step is a
 // key (`page.keyboard`), and where a control is reached it is by Tab (`tabTo`). `focus()` only starts a step at a place the
@@ -408,9 +408,9 @@ test('row 7: Enter opens in the app, Check Out and Release are keys, and Edit ch
 
   const details = page.getByRole('region', { name: 'Details' })
   await expect(details.getByRole('heading', { name: NAMES.pdf })).toBeVisible()
-  // Download, by Tab from the row: the download event is the proof
+  // Download, by Tab from the row: the download, which the server answered with the file, is the proof
   await tabTo(page, details.getByRole('button', { name: 'Download', exact: true }), { from: row(NAMES.pdf) })
-  const [download] = await Promise.all([page.waitForEvent('download'), page.keyboard.press('Enter')])
+  const download = await downloadBy(page, () => page.keyboard.press('Enter'))
   // WebKit suggests underscores for spaces
   expect(download.suggestedFilename().replaceAll('_', ' ')).toBe(NAMES.pdf)
 

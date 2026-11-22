@@ -4,7 +4,7 @@
 // What every app of the workspace needs that asks the server or draws the frame's shared parts. It registers no router
 // and uses no typed Link: each app registers its own router, which one program can't hold twice.
 
-export { ServicesProvider, useApi, useSignedOut } from './services'
+export { ServicesProvider, useApi, useReportSignedOut, useSignedOut } from './services'
 export { createSignedOut, type SignedOutState } from './signedOut'
 export { ASK_ON_RETURN, createQueryClient, listenForReturn, type QueryClientOptions } from './queryClient'
 export type { PageOf } from './pages'

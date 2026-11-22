@@ -26,6 +26,11 @@ export function useApi(): Api {
   return useServices().api
 }
 
+/** Reports a 401 that no request of the API client's saw, such as the answer to a download's navigation. */
+export function useReportSignedOut(): () => void {
+  return useServices().signedOut.mark
+}
+
 /** True once any request has answered 401. */
 export function useSignedOut(): boolean {
   const { signedOut } = useServices()

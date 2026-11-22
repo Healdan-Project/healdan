@@ -41,9 +41,11 @@ such as the Basic credentials a browser sends to a proxy in front of Healdan, si
 let in only when all of these hold:
 
 1. **No Bearer `Authorization` header.**
-2. **`Sec-Fetch-Site: same-origin`.** Browsers send this Fetch Metadata header with every request, and say
+2. **`Sec-Fetch-Site: same-origin`.** Browsers send this Fetch Metadata header with their requests, and say
    `same-origin` only when a page from the same origin made it. A request without the header, from an old browser
-   or from no browser, isn't let in.
+   or from no browser, isn't let in. Nor is the one request WebKit sends without it, Safari's included: a link with
+   the `download` attribute, whose request has the cookie and no Fetch Metadata header at all, so a page downloads
+   another way (see [Working with a Document](../the-web-app/#working-with-a-document)).
 3. **An `Origin`, when there is one, is the server's own.** That's the origin of the public address
    (`LOGICALDOC_PUBLIC_URL`) when Healdan has one it can use (see [Sign-In Pages](#sign-in-pages)), or the scheme
    and `Host` the request came to, so another name for the server, such as its address on the office network, works
@@ -52,7 +54,7 @@ let in only when all of these hold:
 4. **A change sends `X-Healdan-Client: web`.** That's every `POST`, `PATCH`, `PUT` and `DELETE`, in any case. Another site's page
    can't add a header to a request to Healdan without a CORS preflight, and the API never allows one with cookies
    (see [Calling the API from Another Origin](#calling-the-api-from-another-origin)). A `GET` needs no header, so
-   downloads, thumbnails and previews work as plain links and images. The method is the request's own: CXF's
+   downloads, thumbnails and previews work as plain navigations and images. The method is the request's own: CXF's
    `_method` parameter and `X-HTTP-Method-Override` header are off, so a `GET` never becomes a change.
 5. **The HTTP session holds an open web-page session.** Tomcat finds the HTTP session by its `JSESSIONID` cookie,
    which is HttpOnly, and the sign-in page keeps the web-page session's id in it. The API never takes that id from

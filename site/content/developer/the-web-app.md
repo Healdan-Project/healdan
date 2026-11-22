@@ -567,10 +567,23 @@ view.
 
 `actions/` holds what a person does to a document, and every place that offers it goes through it.
 
-- **`launch.ts`** is the one place the page follows an address: it clicks a transient `<a>`, so a `healdan:` link goes
-  to the helper without leaving the page and a file's address downloads under its name. No script reads the bytes, and
-  no blob is made. jsdom can't navigate, so `test/setup.ts` replaces it with a mock for every test, and a test that
-  cares imports `launch` and reads its calls.
+- **`launch.ts`** is the one place the page goes to an address. `launch` clicks a transient `<a>`, so a `healdan:`
+  link goes to the helper without leaving the page. `launchDownload` sends a hidden `<iframe>` to a file's address:
+  a plain navigation the web session carries, which the answer's own `Content-Disposition` makes a download and
+  names. No script reads the bytes, and no blob is made. jsdom can't navigate, so `test/setup.ts` replaces both with
+  mocks for every test, and a test that cares imports them and reads their calls.
+  - **A download is never a link with the `download` attribute.** WebKit, Safari's included, sends such a link's
+    request with the session's cookie but with no `Sec-Fetch-Site`, `Sec-Fetch-Mode` or `Sec-Fetch-Dest` header, so
+    the web session's route refuses it (`401`, see [Two Ways In](../api/#two-ways-in)) and Safari saves the refusal
+    under the file's name.
+    Chromium and Firefox send the headers. Without the attribute a link's navigation carries them in every browser,
+    but a refusal's page would then take the app's place, so the navigation is a hidden frame's
+    (`Sec-Fetch-Dest: iframe`), which `AppServlet`'s policy allows (`frame-src 'self'`).
+  - **A frame is a download's own,** so two started together don't stop each other. It's removed after an hour
+    (`FRAME_KEPT`): a download that has begun doesn't need it, in Chromium, WebKit or Firefox, but taking it away
+    stops one the server hasn't begun to answer, and says nothing, and a cloud file that isn't in the read cache is
+    fetched whole before its first byte is sent. It's sandboxed (`allow-same-origin allow-downloads`), so a page
+    that comes in a file's place runs no script, and the app can still read it.
 - **Open** (`openInApp.ts`, ported from the old UI's `HealdanOpenInApp` with the same cases in its test) builds
   `healdan://open/<doc #>?server=<host>` for the kinds the helper opens, and downloads any other. `OpenInAppProvider`,
   in the frame, shows the notice ("If nothing opened, install the Healdan Helper") as a toast with a link, for 15
@@ -578,11 +591,15 @@ view.
   Open buttons, Quick Look and the lists. It then marks the document and the lists stale, for the return to the window
   to ask again (see [Keeping the Page Up to Date](#keeping-the-page-up-to-date)). Double-click and Enter on a row go through `useOpenKey`, on every list of
   documents, as Space goes through `usePreviewKey`; a document the person can't download (`canOpen`) is only selected.
-- **Download** (`download.ts`) is `launch` on `GET /v1/documents/{n}/content`, with `?version=` for a version. The web
-  session carries it, as it does for an email's attachment chip. A refusal the server makes after the click (a
-  `503 storage-unreachable`, a `500`) is the browser's: it shows a failed download, or some browsers save the small
-  answer as a file, and the app sees none of it. `canOpen` disables the button for the usual refusal, a missing
-  permission or a password.
+- **Download** (`download.ts`) is `launchDownload` on `GET /v1/documents/{n}/content`, with `?version=` for a
+  version. The web session carries it, as it does for an email's attachment chip, and the server names the file. A
+  refusal the server makes after the click (a `503 storage-unreachable`, a `500`, a session that has ended) is a
+  problem, which is a page and no download: Chromium and WebKit load it in the hidden frame, and `launchDownload`
+  then shows the problem's message from the catalogue as a toast, or "Something went wrong." for a page that holds
+  no problem. A `401` goes to the caller's `onSignedOut` instead, which is the signed-out state's `mark`
+  (`useReportSignedOut`), so the app shows its signed-out page as after any request's `401`. Firefox neither saves a
+  file nor tells the frame, so there the person sees nothing. `canOpen` disables the button for the usual refusal, a
+  missing permission or a password.
 - **Check Out, Check In and Release** (`checkout.ts`, `useCheckout.ts`, `CheckoutControls.tsx`) follow the document's
   `hold`. The web session is no device, so the app never takes over a check-out a device holds (`409 held-elsewhere`);
   it only releases the person's own, after a warning (below). `details/HoldInfo.tsx` is the hold's own section above the
@@ -838,7 +855,7 @@ Content-Security-Policy, so the app's (`AppServlet`'s) stays as it is. Pictures 
 until **Show Pictures**, which reloads the frame with `?pictures=true`, for that viewing only (`EmailView` has no
 state that outlives its document: `PreviewBody` keys it on the document). A chip is a button that previews a PDF or a
 picture in place of the body (`/message/parts/{id}?inline=true`, with **Back to Message**) or downloads anything else
-through `launch`. It's no link, and neither is **Download** beside **Back to Message**: a link could be dragged out of
+through `launchDownload`. It's no link, and neither is **Download** beside **Back to Message**: a link could be dragged out of
 the page or saved from its menu, and a download started there can lack the `Sec-Fetch-Site` the web session needs, so
 the refusal would be saved under the file's name. **Save to Matter** posts to
 `/message/attachments/{id}/file`, is greyed out when the email's folder has `canFile: false` (asked only while an
