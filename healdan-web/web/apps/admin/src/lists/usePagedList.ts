@@ -6,8 +6,8 @@ import { useMemo } from 'react'
 import { ASK_ON_RETURN, useApi } from '@healdan/shell'
 import { adminKey, type AdminAnswer } from '../queries'
 
-/** The lists that come a page at a time, each with when their figures were worked out */
-export type PagedPath = '/v1/admin/clients' | '/v1/admin/matters'
+/** The lists that come a page at a time: clients and matters, each with when their figures were worked out, and people */
+export type PagedPath = '/v1/admin/clients' | '/v1/admin/matters' | '/v1/admin/users'
 
 /** Which way a list's server sorts it */
 export type SortOrder = 'asc' | 'desc'
@@ -20,7 +20,7 @@ export interface PagedListing<T> {
   items: T[]
   /** How many match, loaded or not */
   total?: number
-  /** When the summary that gives the list's figures was worked out; null until it has been */
+  /** When the summary that gives the list's figures was worked out; null until it has been; undefined for a list with none */
   figuresAt?: string | null
   /** Loads the next page; undefined once every row is loaded, and while the rows are an older question's */
   loadMore?: () => void
@@ -34,7 +34,7 @@ export interface PagedListing<T> {
 }
 
 /**
- * A list of the Admin app's, paged (spec 7.2, 8.2, 8.3): TanStack Query's infinite query over the route, `pageSize` rows
+ * A list of the Admin app's, paged (spec 7.2, 8.2, 8.3, 8.7): TanStack Query's infinite query over the route, `pageSize` rows
  * at a time from an offset, the last question's rows kept while a new one loads, and asked again on each return to the
  * window, as the User app's lists are. `query` is the list's filters and order; it never holds an offset or a limit.
  */
@@ -58,7 +58,7 @@ export function usePagedList<P extends PagedPath>(path: P, query: object, pageSi
   return {
     items,
     total: last?.total ?? undefined,
-    figuresAt: last?.figuresAt,
+    figuresAt: last !== undefined && 'figuresAt' in last ? last.figuresAt : undefined,
     // Asked again while a page is coming, it waits for that one rather than asking twice
     loadMore: asked.hasNextPage && !asked.isPlaceholderData ? () => void asked.fetchNextPage({ cancelRefetch: false }) : undefined,
     isLoadingMore: asked.isFetchingNextPage,

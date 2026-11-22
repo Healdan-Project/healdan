@@ -736,6 +736,259 @@ export function workspaceRoutes(): Routes {
   }
 }
 
+// People (Phase 4): the firm's people, as the Users list and a person's page give them, the groups they're in, the options
+// New User and Edit offer, and a person's devices and check-outs.
+
+/** The groups a person can be in, besides Everyone, Partners and Trainees: `admin`, `guest`, and one a provider maps */
+export const adminGroup: A['Group'] = group(1, 'admin', 'Administrators', { members: 2, fixed: true, admin: true })
+export const guestGroup: A['Group'] = group(7, 'guest', 'Read-only access', { members: 1, fixed: true })
+export const feeEarners: A['Group'] = group(8, 'Fee Earners', null, { members: 3, mappedBy: ['Authentik'] })
+
+/** GET /v1/admin/groups as a person's groups and the Users list's Group filter see it: every group, by name */
+export function peopleGroups(query?: Record<string, unknown>): A['GroupList'] {
+  const q = String(query?.q ?? '').trim().toLowerCase()
+  const all = [adminGroup, everyone, feeEarners, guestGroup, partners, trainees]
+  const items = all.filter((one) => one.name.toLowerCase().includes(q))
+  return { items, offset: 0, limit: Number(query?.limit ?? 50), total: items.length }
+}
+
+const groupBrief = (one: A['Group']): A['GroupBrief'] => ({ id: one.id, name: one.name })
+
+/** The sign-in provider the firm's people sign in through */
+export const authentik: A['ProviderBrief'] = { id: 'authentik', label: 'Authentik' }
+
+/** A person as the Users list gives them: Priya, who signs in with a password, unless `over` says otherwise */
+export function userRow(over: Partial<A['UserRow']> = {}): A['UserRow'] {
+  return {
+    id: 7,
+    username: 'priya',
+    name: 'Priya Nair',
+    firstName: 'Priya',
+    lastName: 'Nair',
+    email: 'priya.nair@example.test',
+    groups: [groupBrief(everyone), groupBrief(trainees)],
+    signsInWith: { kind: 'password', provider: null },
+    status: 'active',
+    blockedUntil: null,
+    lastSignIn: '2026-11-19T10:39:00Z',
+    devices: 1,
+    readOnly: false,
+    admin: false,
+    ...over,
+  }
+}
+
+/** The server would refuse none of a person's page's actions */
+export const noRefusals: A['UserRefusals'] = { disable: null, enable: null, resetPassword: null, leaveAdmin: null }
+
+/** A person, for their page, from their row: a password set on 3 October, unless `over` says otherwise */
+export function userOf(row: A['UserRow'] = userRow(), over: Partial<A['User']> = {}): A['User'] {
+  const provider = row.signsInWith.kind === 'provider'
+  return {
+    ...row,
+    language: 'en',
+    timeZone: 'Europe/London',
+    created: '2026-10-01T09:00:00Z',
+    passwordChanged: provider ? null : '2026-10-03T09:00:00Z',
+    mustChangePassword: false,
+    checkedOut: 0,
+    mattersOwned: 0,
+    refusals: provider ? { ...noRefusals, resetPassword: 'An account that signs in through a sign-in provider has no password here.' } : noRefusals,
+    ...over,
+  }
+}
+
+export const priyaRow = userRow()
+export const helenRow = userRow({
+  id: 5,
+  username: 'helen',
+  name: 'Helen Ashcombe',
+  firstName: 'Helen',
+  lastName: 'Ashcombe',
+  email: 'helen@example.test',
+  groups: [groupBrief(everyone), groupBrief(feeEarners), groupBrief(partners)],
+  signsInWith: { kind: 'provider', provider: authentik },
+  lastSignIn: '2026-11-19T09:02:00Z',
+  devices: 2,
+})
+export const jamieRow = userRow({
+  id: 12,
+  username: 'jclarke',
+  name: 'Jamie Clarke',
+  firstName: 'Jamie',
+  lastName: 'Clarke',
+  email: null,
+  status: 'blocked',
+  blockedUntil: '2026-11-19T11:15:00Z',
+  lastSignIn: '2026-11-18T16:20:00Z',
+})
+export const sallyRow = userRow({
+  id: 8,
+  username: 'sally.old',
+  name: 'Sally Oldham',
+  firstName: 'Sally',
+  lastName: 'Oldham',
+  email: 'sally@example.test',
+  status: 'disabled',
+  lastSignIn: '2026-09-30T17:00:00Z',
+  devices: 0,
+})
+export const samRow = userRow({
+  id: 10,
+  username: 'sam',
+  name: 'Sam Okafor',
+  firstName: 'Sam',
+  lastName: 'Okafor',
+  email: 'sam@example.test',
+  groups: [groupBrief(adminGroup), groupBrief(everyone)],
+  lastSignIn: '2026-11-19T08:30:00Z',
+  devices: 0,
+  admin: true,
+})
+/** The `admin` account, which is the caller's own (me) */
+export const adminRow = userRow({
+  id: me.id,
+  username: 'admin',
+  name: 'Alex Morgan',
+  firstName: 'Alex',
+  lastName: 'Morgan',
+  email: 'alex@example.test',
+  groups: [groupBrief(adminGroup), groupBrief(everyone)],
+  lastSignIn: '2026-11-19T10:41:00Z',
+  devices: 0,
+  admin: true,
+})
+/** A read-only account, which has never signed in */
+export const ronnieRow = userRow({
+  id: 13,
+  username: 'rhale',
+  name: 'Ronnie Hale',
+  firstName: 'Ronnie',
+  lastName: 'Hale',
+  email: 'ronnie@example.test',
+  groups: [groupBrief(guestGroup)],
+  lastSignIn: null,
+  devices: 0,
+  readOnly: true,
+})
+
+/** The firm's people, by name, as GET /v1/admin/users gives them unless asked otherwise */
+export const userRows: A['UserRow'][] = [adminRow, helenRow, jamieRow, priyaRow, ronnieRow, samRow, sallyRow]
+
+/** The refusals the server gives the caller's own account, the `admin` account */
+export const ownRefusals: A['UserRefusals'] = {
+  disable: "The admin account can't be disabled.",
+  enable: null,
+  resetPassword: 'Change your own password from your person menu.',
+  leaveAdmin: "The admin account is always in admin.",
+}
+
+/** Each person, as their page gives them */
+export const users: Record<number, A['User']> = {
+  [adminRow.id]: userOf(adminRow, { refusals: ownRefusals }),
+  [helenRow.id]: userOf(helenRow, { checkedOut: 1, mattersOwned: 3, timeZone: null }),
+  [jamieRow.id]: userOf(jamieRow),
+  [priyaRow.id]: userOf(priyaRow, { checkedOut: 2 }),
+  [ronnieRow.id]: userOf(ronnieRow, { mustChangePassword: true }),
+  [samRow.id]: userOf(samRow),
+  [sallyRow.id]: userOf(sallyRow),
+}
+
+/** GET /v1/admin/users: the rows `q`, `groupId` and `status` keep, in the order `sort` and `order` ask, a page from `offset` */
+export function userList(query?: Record<string, unknown>, rows: A['UserRow'][] = userRows): A['UserList'] {
+  const q = String(query?.q ?? '').trim().toLowerCase()
+  const groupId = query?.groupId === undefined ? undefined : Number(query.groupId)
+  const kept = rows.filter(
+    (row) =>
+      (q === '' || [row.username, row.email ?? '', row.name].some((text) => text.toLowerCase().includes(q))) &&
+      (groupId === undefined || row.groups.some((one) => one.id === groupId)) &&
+      (query?.status === undefined || row.status === query.status),
+  )
+  const sort = String(query?.sort ?? 'name')
+  const key = (row: A['UserRow']) => (sort === 'username' ? row.username.toLowerCase() : sort === 'lastSignIn' ? (row.lastSignIn ?? '') : row.name.toLowerCase())
+  const sorted = [...kept].sort((a, b) => key(a).localeCompare(key(b)))
+  if (query?.order === 'desc') sorted.reverse()
+  // Someone who has never signed in comes last whichever the order
+  const ordered = sort === 'lastSignIn' ? [...sorted.filter((row) => row.lastSignIn !== null), ...sorted.filter((row) => row.lastSignIn === null)] : sorted
+  const offset = Number(query?.offset ?? 0)
+  const limit = Number(query?.limit ?? 100)
+  return { items: ordered.slice(offset, offset + limit), offset, limit, total: ordered.length }
+}
+
+/** GET /v1/admin/users/options: three languages, a few time zones, no sign-in provider on, and outgoing email set up */
+export function userOptions(over: Partial<A['UserOptions']> = {}): A['UserOptions'] {
+  return {
+    languages: [
+      { code: 'en', name: 'English' },
+      { code: 'en_US', name: 'English (United States)' },
+      { code: 'de', name: 'German' },
+    ],
+    defaultLanguage: 'en',
+    timeZones: ['America/New_York', 'Asia/Tokyo', 'Europe/Berlin', 'Europe/London', 'Europe/Paris'],
+    providers: [],
+    outgoingEmail: true,
+    ...over,
+  }
+}
+
+/** A device a person is signed in on: the Healdan Helper on Helen's MacBook, unless `over` says otherwise */
+export function userDevice(over: Partial<A['UserDevice']> = {}): A['UserDevice'] {
+  return {
+    id: 501,
+    name: 'Healdan Helper on MacBook',
+    device: 'mac-7f3a',
+    provider: authentik,
+    created: '2026-11-02T08:00:00Z',
+    lastUsed: '2026-11-19T10:33:00Z',
+    expires: '2027-02-02T08:00:00Z',
+    ...over,
+  }
+}
+
+/** A check-out as the contract gives it once its file version is `fileVersion`, as the public DocumentView names it */
+export type CheckoutFixture = Omit<A['UserCheckout'], 'version' | 'fileVersion'> & { fileVersion: string }
+
+/** A document a person has checked out: Heads of Terms, in 1001.1, on Helen's MacBook in Word, unless `over` says otherwise */
+export function userCheckout(over: Partial<CheckoutFixture> = {}): CheckoutFixture {
+  return {
+    docNumber: 10388,
+    fileVersion: '2.1',
+    title: 'Heads of Terms.docx',
+    matter: { id: 11, number: '1001.1', name: 'Charter Dispute' },
+    since: '2026-11-18T14:05:00Z',
+    device: 'Healdan Helper on MacBook',
+    app: 'Word',
+    ...over,
+  }
+}
+
+/** Each person's devices and check-outs, as their page lists them */
+export const userDevices: Record<number, A['UserDevice'][]> = {
+  [helenRow.id]: [userDevice(), userDevice({ id: 502, name: 'Healdan Helper on Office PC', device: 'win-22c1', lastUsed: '2026-11-18T17:10:00Z' })],
+  [priyaRow.id]: [userDevice({ id: 503, name: 'Healdan Helper on ThinkPad', device: 'linux-9e0b', provider: null })],
+  [jamieRow.id]: [userDevice({ id: 504, name: 'Healdan Helper on iMac', device: null, provider: null })],
+}
+export const userCheckouts: Record<number, CheckoutFixture[]> = {
+  [helenRow.id]: [userCheckout()],
+  [priyaRow.id]: [
+    userCheckout({ docNumber: 10412, title: 'Witness Statement.docx', fileVersion: '1.3', device: 'Healdan Helper on ThinkPad', app: 'LibreOffice', since: '2026-11-19T09:00:00Z' }),
+    userCheckout({ docNumber: 10398, title: 'Board Minutes.xlsx', fileVersion: '1.0', matter: null, device: null, app: null, since: null }),
+  ],
+}
+
+/** What the Users list and a person's page read, to spread over the defaults: the people, their options, devices and check-outs, and every group */
+export function peopleRoutes(): Routes {
+  return {
+    'GET /v1/admin/users': ({ query }: { query?: Record<string, unknown> }) => userList(query),
+    'GET /v1/admin/users/*': ({ params }: { params: string[] }) => users[Number(params[0])] ?? notFound(),
+    // After the person's route, which it matches too: of two routes that match, the later wins
+    'GET /v1/admin/users/options': userOptions(),
+    'GET /v1/admin/users/*/devices': ({ params }: { params: string[] }) => (users[Number(params[0])] ? (userDevices[Number(params[0])] ?? []) : notFound()),
+    'GET /v1/admin/users/*/checkouts': ({ params }: { params: string[] }) => (users[Number(params[0])] ? (userCheckouts[Number(params[0])] ?? []) : notFound()),
+    'GET /v1/admin/groups': ({ query }: { query?: Record<string, unknown> }) => peopleGroups(query),
+  }
+}
+
 export interface Call {
   method: string
   path: string

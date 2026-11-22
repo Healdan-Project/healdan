@@ -54,6 +54,11 @@ export function templateHref(id: number): string {
   return `${ADMIN_BASE}/templates/${encodeURIComponent(String(id))}`
 }
 
+/** A person's page, with ADMIN_BASE: the user's id, as one segment */
+export function userHref(id: number): string {
+  return `${ADMIN_BASE}/users/${encodeURIComponent(String(id))}`
+}
+
 /** A folder in the User app, as Open in Healdan opens a matter's (spec 6.4): its folder's id, as one segment */
 export function userAppFolderHref(folderId: number): string {
   return `/app/folders/${encodeURIComponent(String(folderId))}`

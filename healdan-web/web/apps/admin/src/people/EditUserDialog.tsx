@@ -1,0 +1,122 @@
+// SPDX-FileCopyrightText: 2026 The Healdan Project
+// SPDX-License-Identifier: LGPL-3.0-only
+
+import { useQueryClient } from '@tanstack/react-query'
+import { useState } from 'react'
+import { apiPath, type adminComponents } from '@healdan/api'
+import { useApi } from '@healdan/shell'
+import { Button, Dialog, toast } from '@healdan/ui'
+import { Refusal } from '../forms/Refusal'
+import { t } from '../strings'
+import { useRefusalFor } from '../strings/refusals'
+import formStyles from '../forms/Form.module.css'
+import { draftProblems, draftReady, PersonFields, serverProblems, type PersonDraft, type PersonField } from './PersonFields'
+import { peopleChanged, useUserOptions } from './queries'
+import { providerOf } from './text'
+
+type A = adminComponents['schemas']
+
+/** The fields the form shows, which a `422 validation` can name beside them */
+const SHOWN: readonly PersonField[] = ['firstName', 'lastName', 'email', 'language', 'timeZone']
+
+function draftOf(person: A['User']): PersonDraft {
+  return { firstName: person.firstName ?? '', lastName: person.lastName ?? '', email: person.email ?? '', language: person.language, timeZone: person.timeZone ?? '' }
+}
+
+/** What Save sends: each field that changed, trimmed, and nothing else, as a member left out stays as it is */
+function changesOf(before: PersonDraft, after: PersonDraft): A['UserChange'] {
+  const change: A['UserChange'] = {}
+  if (after.firstName.trim() !== before.firstName.trim()) change.firstName = after.firstName.trim()
+  if (after.lastName.trim() !== before.lastName.trim()) change.lastName = after.lastName.trim()
+  if (after.email.trim() !== before.email.trim()) change.email = after.email.trim() === '' ? null : after.email.trim()
+  if (after.language !== before.language) change.language = after.language
+  if (after.timeZone !== before.timeZone) change.timeZone = after.timeZone === '' ? null : after.timeZone
+  return change
+}
+
+/**
+ * Edit (spec 8.7; P4-R11): a person's names, email, language and time zone; their username never changes. Save sends only
+ * what changed, so a language or a time zone the options don't list stays as it is unless another is chosen. For an
+ * account linked to a sign-in provider, the form says the provider may set the names and email again at its next
+ * sign-in. The server's refusal of a field is said beside it, and the rest above the buttons; while Save is on its way,
+ * the dialog holds. Once saved, the person's page has the answer, and the lists, the find and the matters' rows, which
+ * name their owners, ask again.
+ */
+export function EditUserDialog({ person, onClose }: { person: A['User']; onClose: () => void }) {
+  const api = useApi()
+  const queryClient = useQueryClient()
+  const refusalFor = useRefusalFor()
+  const options = useUserOptions().data
+  const before = draftOf(person)
+  const [draft, setDraft] = useState(before)
+  const [failure, setFailure] = useState<unknown>()
+  const [busy, setBusy] = useState(false)
+
+  const server = serverProblems(failure)
+  const own = draftProblems(draft)
+  const errors: Partial<Record<PersonField, string>> = {
+    firstName: own.firstName ?? server.get('firstName'),
+    lastName: own.lastName ?? server.get('lastName'),
+    email: own.email ?? server.get('email'),
+    language: server.get('language'),
+    timeZone: server.get('timeZone'),
+  }
+  const refusal = failure !== undefined && !SHOWN.some((field) => server.has(field)) ? refusalFor(failure) : undefined
+  const change = changesOf(before, draft)
+  const ready = draftReady(draft) && Object.keys(change).length > 0
+  const provider = providerOf(person)
+
+  async function save() {
+    setBusy(true)
+    setFailure(undefined)
+    try {
+      const saved = await api.send<A['User']>('PATCH', apiPath`/v1/admin/users/${person.id}`, change)
+      peopleChanged(queryClient, saved, { matters: true })
+      toast(t('admin.editUser.saved', { name: saved.name }))
+      // Not through the dialog's own close, which is held while busy
+      onClose()
+    } catch (error) {
+      setFailure(error)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Dialog title={t('admin.editUser.title', { name: person.name })} isOpen onOpenChange={(open) => !open && !busy && onClose()}>
+      {(close) => (
+        <form
+          className={formStyles.form}
+          onSubmit={(event) => {
+            event.preventDefault()
+            if (ready && !busy) void save()
+          }}
+        >
+          {provider !== undefined && <p className={formStyles.note}>{t('admin.editUser.provider', { provider: provider.label })}</p>}
+          <fieldset disabled={busy} className={formStyles.hold}>
+            <PersonFields
+              draft={draft}
+              options={options}
+              errors={errors}
+              autoFocus
+              onChange={(next) => {
+                setDraft(next)
+                // A change takes the last refusal away
+                setFailure(undefined)
+              }}
+            />
+          </fieldset>
+          <Refusal>{refusal}</Refusal>
+          <div className={formStyles.buttons}>
+            <Button onPress={close} isDisabled={busy}>
+              {t('common.cancel')}
+            </Button>
+            <Button type="submit" variant="default" isDisabled={!ready} isPending={busy}>
+              {t('admin.editUser.save')}
+            </Button>
+          </div>
+        </form>
+      )}
+    </Dialog>
+  )
+}

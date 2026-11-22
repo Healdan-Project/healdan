@@ -790,6 +790,203 @@ export const adminEnUS = {
   'admin.switchBackend.confirm': 'Change Backend',
   'admin.switchBackend.done': '{store} now keeps its files on {backend}',
 
+  // The Users list (spec 8.7): each person with their groups, how they sign in, their status, last sign-in and devices
+  'admin.nav.users': 'Users',
+  'admin.users.title': 'Users',
+  'admin.users.new': 'New User',
+  'admin.users.filters': 'Filter Users',
+  'admin.users.text': 'Name, Username or Email',
+  'admin.users.group': 'Group',
+  'admin.users.status': 'Status',
+  'admin.users.allStatuses': 'All',
+  'admin.users.clear': 'Clear Filters',
+  'admin.users.column.name': 'Name',
+  'admin.users.column.username': 'Username',
+  'admin.users.column.groups': 'Groups',
+  'admin.users.column.signsInWith': 'Signs In With',
+  'admin.users.column.status': 'Status',
+  'admin.users.column.lastSignIn': 'Last Sign-In',
+  'admin.users.column.devices': 'Devices',
+  'admin.users.none': 'Nobody has an account yet.',
+  'admin.users.noneMatch': 'Nobody matches these filters.',
+  // After a read-only account's name
+  'admin.users.readOnly': 'Read-Only',
+  // How someone signs in who isn't linked to a sign-in provider
+  'admin.users.password': 'Password',
+  // The last sign-in of someone who has never signed in
+  'admin.users.never': 'Never',
+
+  // A person's status, in words beside its dot
+  'admin.user.status.active': 'Active',
+  'admin.user.status.disabled': 'Disabled',
+  'admin.user.status.blocked': 'Blocked',
+  'admin.user.blockedUntil': 'Blocked until {when}',
+
+  // A page of the Users screens whose last answer stays while a new read fails (P4-R15)
+  'admin.people.stale': "Couldn't refresh this, so it shows what was read last.",
+
+  // A person's page (spec 8.7): their details, groups, devices and what they hold, and the actions at its top
+  'admin.user.edit': 'Edit',
+  'admin.user.resetPassword': 'Reset Password',
+  'admin.user.signOut': 'Sign Out Everywhere',
+  'admin.user.clearBlock': 'Clear Sign-In Block',
+  'admin.user.disable': 'Disable',
+  'admin.user.enable': 'Enable',
+  'admin.user.details': 'Details',
+  'admin.user.username': 'Username',
+  'admin.user.email': 'Email',
+  'admin.user.signsInWith': 'Signs In With',
+  'admin.user.language': 'Language',
+  'admin.user.timeZone': 'Time Zone',
+  'admin.user.created': 'Account Made',
+  'admin.user.lastSignIn': 'Last Sign-In',
+  // A detail the person has none of
+  'admin.user.none': 'None',
+  'admin.user.passwordSet': 'Password, set {when}',
+  'admin.user.mustChange': 'Password, which they must change at their next sign-in',
+  'admin.user.readOnly': "A read-only account: it can read what it's let in to, and is in no group but its own and guest.",
+  'admin.user.isAdmin': 'A member of admin: they can use Healdan Admin and read every document.',
+  'admin.user.groups': 'Groups',
+  'admin.user.devices': 'Signed-In Devices',
+  'admin.user.holds': 'What They Hold',
+  'admin.user.ownsNone': 'They own no {matterLower}.',
+  // A link to the Matters list, filtered by the person as owner: "Owner of 3 matters"
+  'admin.user.owns': 'Owner of {matters}',
+  // Enable and Clear Sign-In Block, which ask nothing, as they take nothing away
+  'admin.user.enabled': 'Enabled {name}',
+  'admin.user.blockCleared': 'Cleared the sign-in block of {name}',
+  'admin.user.notFound.title': 'Person Not Found',
+  'admin.user.notFound.message': "There's no such person, or their account has been deleted.",
+  'admin.user.notFound.users': 'Go to Users',
+
+  // Disable, which asks first and names what it ends (spec 8.7)
+  'admin.disableUser.title': 'Disable {name}?',
+  'admin.disableUser.line': "They can't sign in until their account is enabled again. What they've filed stays theirs.",
+  'admin.disableUser.noDevices': 'It signs them out everywhere: their open sessions close.',
+  'admin.disableUser.confirm': 'Disable',
+  'admin.disableUser.done': 'Disabled {name}',
+
+  // Sign Out Everywhere, which asks first
+  'admin.signOutUser.title': 'Sign {name} Out Everywhere?',
+  'admin.signOutUser.line': 'Their open sessions close and their device tokens are revoked, so every app and device signed in as them signs in again.',
+  'admin.signOutUser.yourself': 'This is your own account, so it signs you out here too.',
+  'admin.signOutUser.confirm': 'Sign Out Everywhere',
+  'admin.signOutUser.nothing': '{name} was signed in nowhere',
+  // What was signed out: "Signed Helen out: 2 sessions closed, 1 device signed out"
+  'admin.signOutUser.done': 'Signed {name} out: {sessions}, {devices}',
+
+  // Reset Password (P4-R8): a temporary password, emailed or shown once, which must be changed at the next sign-in
+  'admin.resetPassword.title': 'Reset the Password of {name}?',
+  'admin.resetPassword.line': 'They get a temporary password, which they must change at their next sign-in.',
+  'admin.resetPassword.signsOut': 'Their open sessions close and their device tokens are revoked: they sign in again everywhere, with the temporary password.',
+  'admin.resetPassword.confirm': 'Reset Password',
+  'admin.resetPassword.doneTitle': 'New Password for {name}',
+
+  // A temporary password, shown once (P4-R7), or emailed
+  'admin.password.email': 'Email It to Them',
+  'admin.password.emailTo': "To {email}. Otherwise it's shown here once, for you to give them.",
+  'admin.password.notSetUp': "Outgoing email isn't set up, so the temporary password is shown here once, for you to give them.",
+  'admin.password.noEmail': 'With no email address, the temporary password is shown here once, for you to give them.',
+  'admin.password.label': 'Temporary Password',
+  'admin.password.copy': 'Copy',
+  'admin.password.copied': 'Copied the temporary password',
+  'admin.password.copyFailed': "Couldn't copy the temporary password. Select it and copy it, or write it down.",
+  'admin.password.give': 'Give {name} this temporary password. They change it when they sign in with it.',
+  'admin.password.onlyHere': "It isn't shown again: once this closes, it's gone.",
+  'admin.password.emailed': 'Emailed {name} a temporary password, at {email}. They change it when they sign in with it.',
+  // Asked to email it, and it couldn't go: why, then the password shown
+  'admin.password.notEmailed': "Couldn't email the temporary password: {reason}. Give it to {name} yourself.",
+  'admin.password.reasonNotSetUp': "outgoing email isn't set up",
+  'admin.password.reasonNoEmail': 'they have no email address',
+  'admin.password.reasonTimedOut': "the mail server didn't take it in time",
+  'admin.password.done': 'Done',
+
+  // New User (spec 8.7): a password account
+  'admin.newUser.title': 'New User',
+  'admin.newUser.username': 'Username',
+  'admin.newUser.usernameNote': 'What they sign in with. It never changes once the account is made.',
+  'admin.newUser.usernameInvalid': "A username can't hold > or a control character.",
+  'admin.newUser.usernameTaken': 'Another account has this username.',
+  'admin.newUser.usernameTakenBy': '{name} has this username.',
+  'admin.newUser.firstName': 'First Name',
+  'admin.newUser.lastName': 'Last Name',
+  'admin.newUser.email': 'Email',
+  'admin.newUser.emailInvalid': "That isn't an email address.",
+  'admin.newUser.language': 'Language',
+  'admin.newUser.timeZone': 'Time Zone',
+  'admin.newUser.groups': 'Groups',
+  'admin.newUser.noGroups': 'In no other group yet.',
+  'admin.newUser.hint': 'Find a group by its name. They can use what each group added can.',
+  'admin.newUser.everyone': "They're in Everyone too, as every account is.",
+  // While a sign-in provider is on: those who sign in through one needn't be added
+  'admin.newUser.providers': "People who sign in through {providers} needn't be added here: their account is made at their first sign-in, with the groups the provider's group map gives them. Where a provider links accounts by email, an account made here with the same email is linked to theirs at that sign-in.",
+  'admin.newUser.create': 'Create User',
+  'admin.newUser.created': 'Added {name}',
+  // Their name, while none is typed
+  'admin.newUser.them': 'this person',
+
+  // Adding someone to admin, which asks first (spec 5, 8.7)
+  'admin.addAdmin.title': 'Add {name} to admin?',
+  'admin.addAdmin.line': 'Members of admin can use Healdan Admin and read every document, in every {matterLower} and Store.',
+  'admin.addAdmin.everyday': "If they also work on the firm's documents, give them a separate everyday account for that.",
+  'admin.addAdmin.confirm': 'Add to admin',
+
+  // Edit, which changes the names, the email, the language and the time zone
+  'admin.editUser.title': 'Edit {name}',
+  'admin.editUser.provider': '{provider} may set the names and the email again at their next sign-in through it.',
+  'admin.editUser.save': 'Save',
+  'admin.editUser.saved': 'Saved {name}',
+
+  // A person's groups: what's fixed in them, and what a sign-in provider's group map sets
+  'admin.userGroups.list': 'Groups of {name}',
+  'admin.userGroups.none': 'In no group.',
+  'admin.userGroups.hint': 'Find a group by its name. They can use what each group added can.',
+  'admin.userGroups.everyone': 'Everyone but a read-only account is in Everyone.',
+  'admin.userGroups.guest': 'A read-only account is always in guest.',
+  'admin.userGroups.readOnly': 'A read-only account is in no group but its own and guest.',
+  // After admin's name, as a warning of what it gives
+  'admin.userGroups.readsEverything': 'Reads Every Document',
+  'admin.userGroups.mapped': "Set by {provider}'s group map at each sign-in through it.",
+  'admin.userGroups.provider': '{name} signs in through {provider}: in a group its group map names, a change made here is set again at their next sign-in.',
+  'admin.userGroups.save': 'Save',
+  'admin.userGroups.discard': 'Discard Changes',
+  'admin.userGroups.saved': 'Saved the groups of {name}',
+
+  // A person's devices, with Revoke, which asks first
+  'admin.userDevices.list': 'Signed-In Devices of {name}',
+  'admin.userDevices.none': 'Signed in on no device.',
+  'admin.userDevices.about': "Each sign-in of an app on a computer, such as the Healdan Helper, that still works. The web page's own sign-in isn't listed: Sign Out Everywhere ends it.",
+  'admin.userDevices.name': 'Device',
+  'admin.userDevices.through': 'Signed In With',
+  'admin.userDevices.created': 'Signed In',
+  'admin.userDevices.lastUsed': 'Last Used',
+  'admin.userDevices.expires': 'Expires',
+  'admin.userDevices.actions': 'Actions',
+  'admin.userDevices.revoke': 'Revoke',
+  'admin.userDevices.revokeName': 'Revoke {name}',
+  'admin.userDevices.revokeTitle': 'Revoke {name}?',
+  'admin.userDevices.revokeLine': "That device is signed out at its next request, and signs in again to go on. {name}'s other devices stay signed in.",
+  'admin.userDevices.revoked': 'Revoked {name}',
+
+  // What a person has checked out, with Release, which asks first
+  'admin.userCheckouts.list': 'Checked Out by {name}',
+  'admin.userCheckouts.none': 'Nothing checked out.',
+  'admin.userCheckouts.docNumber': 'Doc #',
+  'admin.userCheckouts.document': 'Document',
+  'admin.userCheckouts.version': 'Version',
+  'admin.userCheckouts.matter': '{matter}',
+  'admin.userCheckouts.since': 'Since',
+  'admin.userCheckouts.computer': 'Computer',
+  'admin.userCheckouts.app': 'App',
+  'admin.userCheckouts.actions': 'Actions',
+  'admin.userCheckouts.release': 'Release',
+  'admin.userCheckouts.releaseName': 'Release {title}',
+  'admin.userCheckouts.releaseTitle': 'Release {title}?',
+  'admin.userCheckouts.releaseOn': "{name}'s check-out ends. What they haven't saved to Healdan from {computer} is lost, and {computer} can't save to it again.",
+  'admin.userCheckouts.releaseLine': "{name}'s check-out ends. What they haven't saved to Healdan is lost.",
+  'admin.userCheckouts.releaseConfirm': 'Release',
+  'admin.userCheckouts.released': 'Released {title}',
+
   // The problems only the admin API answers, which the shared catalogue doesn't hold
   'problems.storage-unavailable': "This server doesn't have Healdan's storage module.",
   'problems.secret-key-missing': "Healdan's secret key file is missing.",
@@ -816,6 +1013,16 @@ export const adminPlurals = {
   'admin.usage.filed': { one: '{n} filed', other: '{n} filed' },
   // Beside the Clients list's title
   'admin.clients.count': { one: '{n} Client', other: '{n} Clients' },
+  // Beside the Users list's title
+  'admin.users.count': { one: '{n} Person', other: '{n} People' },
+  // What Sign Out Everywhere closed and revoked
+  'admin.signOutUser.sessions': { one: '{n} session closed', other: '{n} sessions closed' },
+  'admin.signOutUser.devices': { one: '{n} device signed out', other: '{n} devices signed out' },
+  // How many devices Disable signs out: said in its question
+  'admin.disableUser.devices': {
+    one: 'It signs them out everywhere: their {n} device is signed out, and their open sessions close.',
+    other: 'It signs them out everywhere: their {n} devices are signed out, and their open sessions close.',
+  },
   // Beside the Stores list's title
   'admin.stores.count': { one: '{n} Store', other: '{n} Stores' },
   // A matter's Overview: what's stuck or failing in it

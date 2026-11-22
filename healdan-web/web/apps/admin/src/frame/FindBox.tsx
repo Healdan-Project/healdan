@@ -5,11 +5,10 @@ import { useMemo, useRef, useState } from 'react'
 import type { adminComponents } from '@healdan/api'
 import { useMessageFor } from '@healdan/shell'
 import { ComboBox, Icon, type ComboBoxSection } from '@healdan/ui'
-import { clientHref, matterHref } from '../addresses'
+import { clientHref, matterHref, userHref } from '../addresses'
 import { useDebounced } from '../pickers/typing'
 import { useAdminQuery } from '../queries'
 import { t } from '../strings'
-import { CLASSIC } from './LeftPane'
 import { useFollow } from './ServerLink'
 import styles from './FindBox.module.css'
 
@@ -22,14 +21,14 @@ export const FIND_MAX = 100
 export type Found = { kind: 'client'; client: A['FoundClient'] } | { kind: 'matter'; matter: A['FoundMatter'] } | { kind: 'person'; person: A['FoundPerson'] }
 
 /**
- * Where a find opens what it found, by its kind: a client's or a matter's page here (Phase 2), by its id, inside the app;
- * a person in the Classic Interface, where people are managed until Users ships (Phase 4). A matter doesn't open in the
- * User app: the find gives the matter's id, and the User app's addresses need its folder's.
+ * Where a find opens what it found, by its kind: a client's, a matter's or a person's page here, by its id, inside the app
+ * (P4-R18). A matter doesn't open in the User app: the find gives the matter's id, and the User app's addresses need its
+ * folder's.
  */
 const DESTINATIONS: { [K in Found['kind']]: (found: Extract<Found, { kind: K }>) => string } = {
   client: (found) => clientHref(found.client.id),
   matter: (found) => matterHref(found.matter.id),
-  person: () => CLASSIC,
+  person: (found) => userHref(found.person.id),
 }
 
 export function destinationOf(found: Found): string {

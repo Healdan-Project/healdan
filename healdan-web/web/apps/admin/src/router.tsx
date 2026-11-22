@@ -17,6 +17,8 @@ import { StoresView } from './views/StoresView'
 import { StoreView, storeSearch } from './views/StoreView'
 import { TemplatesView } from './views/TemplatesView'
 import { TemplateView } from './views/TemplateView'
+import { UsersView, usersSearch } from './views/UsersView'
+import { UserView } from './views/UserView'
 import { NotFoundView } from './views/NotFoundView'
 
 // The frame holds every page, and an address no page has is said in the frame, in the app's own words. A page reads only
@@ -101,7 +103,40 @@ const backendRoute = createRoute({
   },
 })
 
-const routeTree = rootRoute.addChildren([dashboardRoute, clientsRoute, clientRoute, mattersRoute, matterRoute, templatesRoute, templateRoute, storesRoute, storeRoute, backendsRoute, backendRoute])
+// /users: every person, their filters and order in the address (UsersView); /users/$id, a person's page (UserView), which
+// says itself when the id names nobody
+const usersRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: routes.users,
+  validateSearch: usersSearch,
+  component: function UsersRoute() {
+    return <UsersView search={usersRoute.useSearch()} />
+  },
+})
+
+const userRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: routes.user,
+  component: function UserRoute() {
+    return <UserView id={userRoute.useParams().id} />
+  },
+})
+
+const routeTree = rootRoute.addChildren([
+  dashboardRoute,
+  clientsRoute,
+  clientRoute,
+  mattersRoute,
+  matterRoute,
+  templatesRoute,
+  templateRoute,
+  usersRoute,
+  userRoute,
+  storesRoute,
+  storeRoute,
+  backendsRoute,
+  backendRoute,
+])
 
 /**
  * A view that failed as it drew: the catalogue's short message and Try Again, which asks the server again for what the

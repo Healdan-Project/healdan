@@ -48,7 +48,7 @@ export const NAV: readonly NavGroup[] = [
     ],
   },
   // Users and Groups, in Phase 4
-  { group: 'admin.nav.people', items: [] },
+  { group: 'admin.nav.people', items: [{ label: 'admin.nav.users', route: routes.users, icon: 'user' }] },
   // Stores and Backends, in Phase 3: a backend that can't be reached, or is failing, needs attention
   {
     group: 'admin.nav.storage',

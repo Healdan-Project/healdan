@@ -35,7 +35,7 @@ async function renderPane(nav: readonly NavGroup[], routes: Routes = {}) {
 }
 
 describe('The left pane', () => {
-  it('shows only the screens that have shipped: the Dashboard, Clients, Matters and Workspace Templates under Firm, Stores and Backends under Storage, and the Classic Interface at its foot', async () => {
+  it('shows only the screens that have shipped: the Dashboard, Clients, Matters and Workspace Templates under Firm, Users under People, Stores and Backends under Storage, and the Classic Interface at its foot', async () => {
     const { view } = await renderApp('/')
     const links = within(pane()).getAllByRole('link')
     expect(links.map((link) => [link.textContent, link.getAttribute('href')])).toEqual([
@@ -43,13 +43,15 @@ describe('The left pane', () => {
       ['Clients', '/admin/clients'],
       ['Matters', '/admin/matters'],
       ['Workspace Templates', '/admin/templates'],
+      ['Users', '/admin/users'],
       ['Stores', '/admin/stores'],
       ['Backends', '/admin/backends'],
       ['Classic Interface', '/frontend.jsp'],
     ])
-    // Only Firm and Storage have a shipped screen yet, so only their groups are drawn
-    expect(within(pane()).getAllByRole('heading').map((heading) => heading.textContent)).toEqual(['Firm', 'Storage'])
+    // Only Firm, People and Storage have a shipped screen yet, so only their groups are drawn
+    expect(within(pane()).getAllByRole('heading').map((heading) => heading.textContent)).toEqual(['Firm', 'People', 'Storage'])
     expect(within(pane()).getByRole('region', { name: 'Firm' })).toBeTruthy()
+    expect(within(pane()).getByRole('region', { name: 'People' })).toBeTruthy()
     expect(within(pane()).getByRole('region', { name: 'Storage' })).toBeTruthy()
     await expectNoAxeViolations(view.container)
   })
