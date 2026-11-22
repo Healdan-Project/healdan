@@ -272,6 +272,66 @@ describe('SearchPicker', () => {
     expect(status.textContent).toBe('Something went wrong.')
   })
 
+  it('makes the box its rows scroll in a stop of its own while they need scrolling, and only then', async () => {
+    const user = userEvent.setup()
+    // jsdom has no ResizeObserver, and lays nothing out: the box is given its heights, and its observers are called back by
+    // hand, as a browser calls them when the box changes size (its height follows the window's)
+    const observers: (() => void)[] = []
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        constructor(callback: () => void) {
+          observers.push(callback)
+        }
+        observe() {}
+        disconnect() {}
+      },
+    )
+    try {
+      const { search } = controlled()
+      render(
+        <>
+          <Example search={search} initial={[series, charter, charity, lease]} />
+          <button type="button">After</button>
+        </>,
+      )
+      const after = screen.getByRole('button', { name: 'After' })
+      const box = screen.getByRole('listbox', { name: 'Recent Matters' }).parentElement!
+      const lay = (holds: number) => {
+        Object.defineProperty(box, 'clientHeight', { configurable: true, value: 200 })
+        Object.defineProperty(box, 'scrollHeight', { configurable: true, value: holds })
+        act(() => observers.forEach((observer) => observer()))
+      }
+
+      // Every row fits: Tab goes from the field to what follows, as the arrow keys in the field reach every row
+      lay(200)
+      await user.click(field())
+      await user.tab()
+      expect(document.activeElement).toBe(after)
+
+      // More rows than the box shows: Tab stops at the box, which the arrow keys then scroll, then goes on
+      lay(400)
+      expect(box.getAttribute('tabindex')).toBe('0')
+      await user.click(field())
+      await user.tab()
+      expect(document.activeElement).toBe(box)
+      await user.tab()
+      expect(document.activeElement).toBe(after)
+
+      // The window grew and they fit again: no stop
+      lay(200)
+      expect(box.hasAttribute('tabindex')).toBe(false)
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('draws the focus on the box its rows scroll in, with the shared outline', () => {
+    const css = pickerCss.replace(/\/\*[\s\S]*?\*\//g, '')
+    expect(css).toMatch(/\.scroll:focus-visible\s*\{(?=[^}]*outline:\s*var\(--hd-focus-outline\))(?=[^}]*outline-offset:\s*var\(--hd-focus-offset\))/)
+    expect(css).toMatch(/\.scroll\s*\{(?=[^}]*max-height:\s*30dvh)(?=[^}]*overflow:\s*auto)/)
+  })
+
   it('shows which row is picked, to a screen reader too', async () => {
     const { search } = controlled()
     const { container } = render(<Example search={search} selectedId="11" />)

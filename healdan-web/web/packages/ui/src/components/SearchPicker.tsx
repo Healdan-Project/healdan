@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { isValidElement, useEffect, useRef, useState, type ReactNode, type Ref } from 'react'
+import { isValidElement, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type Ref, type RefObject } from 'react'
 import { Autocomplete, Input, Label, ListBox, ListBoxItem, Text, TextField as AriaTextField, type Selection } from 'react-aria-components'
 import { Icon } from '../icons'
 import { plural, t } from '../strings'
@@ -58,6 +58,30 @@ function useDebounced<V>(value: V, delay: number): V {
   return settled
 }
 
+/** A stop of its own (tabindex 0) while the box holds more than its height shows, so it scrolls; none otherwise */
+function markStop(box: HTMLElement) {
+  if (box.scrollHeight > box.clientHeight) box.tabIndex = 0
+  else box.removeAttribute('tabindex')
+}
+
+/**
+ * Makes the box a stop of its own while it scrolls: looked at after each render, as rows come and go, and whenever the
+ * box's own size changes, as its height follows the window's. It's set on the element, which React draws with no
+ * tabindex, as it's what the browser has laid out.
+ */
+function useStopWhileScrolling(box: RefObject<HTMLElement | null>, drawn: boolean) {
+  useLayoutEffect(() => {
+    if (box.current) markStop(box.current)
+  })
+  useLayoutEffect(() => {
+    const element = box.current
+    if (!drawn || element === null || typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(() => markStop(element))
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [box, drawn])
+}
+
 /** The characters a regular expression would read as its own, which a query's words are taken without */
 const special = /[\^$\\.*+?()[\]{}|/]/g
 
@@ -98,6 +122,7 @@ export function SearchPicker<T>({ label, placeholder, hint, initialHeading, init
   const wanted = searchable(text)
   const settled = useDebounced(wanted, SEARCH_DELAY_MS)
   const [answer, setAnswer] = useState<Answer<T>>()
+  const scroller = useRef<HTMLDivElement>(null)
 
   // The caller's search is read when it is asked, so one made afresh at each render doesn't ask again
   const searchRef = useRef(search)
@@ -124,6 +149,7 @@ export function SearchPicker<T>({ label, placeholder, hint, initialHeading, init
   const query = shown?.q ?? ''
   const heading = rows.length === 0 ? undefined : wanted === undefined ? initialHeading : plural('searchPicker.results', rows.length)
   const note = shown === undefined ? '' : 'failed' in shown ? t('problems.unknown') : found.length === 0 ? t('search.empty') : ''
+  useStopWhileScrolling(scroller, rows.length > 0)
 
   function choose(keys: Selection) {
     if (keys === 'all') return
@@ -146,32 +172,44 @@ export function SearchPicker<T>({ label, placeholder, hint, initialHeading, init
         </AriaTextField>
         {heading && <h3 className={styles.heading}>{heading}</h3>}
         {rows.length > 0 && (
-          <ListBox
-            // Named as its heading says, in place of Autocomplete's own "Suggestions"
-            aria-label={heading}
-            className={styles.list}
-            items={rows}
-            dependencies={[query, render, id]}
-            selectionMode="single"
-            // Picking the row that is picked changes nothing
-            disallowEmptySelection
-            selectedKeys={selectedId === undefined ? [] : [selectedId]}
-            onSelectionChange={choose}
-          >
-            {(item) => {
-              const content = render(item, query)
-              return (
-                <ListBoxItem id={id(item)} textValue={textOf(content).trim() || id(item)} className={styles.option}>
-                  {({ isSelected }) => (
-                    <>
-                      {content}
-                      {isSelected && <Icon name="check" className={styles.check} />}
-                    </>
-                  )}
-                </ListBoxItem>
-              )
+          // The box the rows scroll in. The arrow keys in the field reach every row and scroll it into view, as the focus
+          // stays in the field (virtual focus), but what a list longer than its box holds below would show only to a
+          // pointer: so while it scrolls, the box is a stop of its own, which Tab reaches after the field and the arrow
+          // keys then scroll (WCAG 2.1.1). A press on its scrollbar leaves the focus where it is, as the list's own does.
+          <div
+            ref={scroller}
+            className={styles.scroll}
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget) event.preventDefault()
             }}
-          </ListBox>
+          >
+            <ListBox
+              // Named as its heading says, in place of Autocomplete's own "Suggestions"
+              aria-label={heading}
+              className={styles.list}
+              items={rows}
+              dependencies={[query, render, id]}
+              selectionMode="single"
+              // Picking the row that is picked changes nothing
+              disallowEmptySelection
+              selectedKeys={selectedId === undefined ? [] : [selectedId]}
+              onSelectionChange={choose}
+            >
+              {(item) => {
+                const content = render(item, query)
+                return (
+                  <ListBoxItem id={id(item)} textValue={textOf(content).trim() || id(item)} className={styles.option}>
+                    {({ isSelected }) => (
+                      <>
+                        {content}
+                        {isSelected && <Icon name="check" className={styles.check} />}
+                      </>
+                    )}
+                  </ListBoxItem>
+                )
+              }}
+            </ListBox>
+          </div>
         )}
         {/* There before it has words, so a screen reader says them as they come */}
         <p role="status" className={styles.note}>

@@ -99,7 +99,9 @@ under `/api/v1/admin` (see the [API](../api/#the-admin-apps-routes)).
   count, such as "212 of 412", is what a screen reader hears), `StatusDot` (a status always said in words, the dot
   only decoration), `GroupChip`, and `SearchPicker`, a field with rows under it: starting rows, then the server's
   answer once the typing pauses, from two characters, with the words it matched marked as text and an older answer
-  dropped. `TextField` takes `multiline`, a `PickField` option an `icon` and `meta` (secondary text that is part of
+  dropped. The arrow keys in its field reach every row, as the focus stays there, and while the rows hold more than
+  their box shows, the box is a stop of its own, which Tab reaches after the field and the arrow keys scroll, so what
+  it holds below isn't for a pointer alone (axe's `scrollable-region-focusable`). `TextField` takes `multiline`, a `PickField` option an `icon` and `meta` (secondary text that is part of
   its name), and `Table` `selectionMode="none"`, for a list whose rows lead to a page: a click or Enter opens a row,
   and none draws as selected.
 - **To test it,** `test/renderApp.tsx` renders the whole app at an address under `/admin`, answering from a small
