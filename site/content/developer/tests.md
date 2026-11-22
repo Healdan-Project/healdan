@@ -230,10 +230,10 @@ and `ResourceServiceImplTest#testMoveFolder` (WebDAV's move). `RpcPermissionGaps
 ### The Admin App's Server Tests
 
 The administration record's, the error capture's, the job status's, the Dashboard's, and the clients', matters', folder
-access's, Stores', workspaces', templates' and people's tests are in `healdan-core` (`com.logicaldoc.healdan.admin` and
-the packages under it), `healdan-api` and `healdan-storage`. No test makes a real start, so they call
-`ErrorWriter.drainOnce()` and `UsageSummary.refreshNow()` themselves, and the tests of the threads start them;
-`DashboardServiceTest` calls `forget()`, which drops what the Dashboard keeps, before it reads again.
+access's, Stores', workspaces', templates', people's and Monitoring's tests are in `healdan-core`
+(`com.logicaldoc.healdan.admin` and the packages under it), `healdan-api` and `healdan-storage`. No test makes a real
+start, so they call `ErrorWriter.drainOnce()` and `UsageSummary.refreshNow()` themselves, and the tests of the threads
+start them; `DashboardServiceTest` calls `forget()`, which drops what the Dashboard keeps, before it reads again.
 
 - **`AdminEventsTest`** checks the record: who, what, when and from where, the detail's fields in the order of their
   names, no address outside an admin request, the record rolled back with its change and committed with it, a failed
@@ -260,21 +260,26 @@ the packages under it), `healdan-api` and `healdan-storage`. No test makes a rea
   and message, capped; reporting that never throws; a first run known before it's made; Healdan's jobs first, in their
   order, then LogicalDOC's six tasks; a Healdan job that says it doesn't run here switched off; the email index `done`
   once its setting says so; a task's error, the latest its logger logged since its start, `Task.run`'s stop not a
-  failure, and two tasks failing alike each with their own; and overdue, never while running or switched off.
+  failure, and two tasks failing alike each with their own; overdue, never while running or switched off; Run Now
+  offered for a Healdan job that runs now only while it's switched on and idle; a task's schedule, simple or cron,
+  and an interval under a second answered as a second.
   `PreviewWorkerTest`, `EmailIndexWorkerTest` and `TrashStartupTest` check that their jobs report, and
   `StorageJobsTest`, in `healdan-storage`, that the storage jobs are listed after `healdan-core`'s, switched off where
   LogicalDOC's Store isn't `HealdanStorage`, and that the mover, the purge and the retests report under their names, a
   purge that fails saying why.
 - **`DashboardServiceTest`** checks Needs Attention and Server Health over fakes of each source: each attention code,
-  several backends and Stores, the ten tiles in order and those that need attention, a part that fails leaving the rest
-  whole, a source that can't be read unchecked, a slow one still being worked out, storage backends off, the database's
-  tile on PostgreSQL, Sign-In and Outgoing Email, and a second read coming from what's kept. `DashboardScreensTest` pins
-  where the links go: each shipped screen's Admin address, the Dashboard, Clients, Matters, Workspace Templates, Stores,
-  Backends and Users, the Classic Interface for every other, and stuck files linking to Stores, or to Backends when only
-  files with no Store are stuck, as `DashboardServiceTest` does too. `CachedTest` checks what's kept: one ask per period
-  however many read, the last answer while it's asked again, none older than two periods, a failure kept like an answer,
-  `forget()` and a clock set back. `WordsTest` checks the tiles' words, and `ProviderClientTest` that `answers` fetches
-  a provider's discovery document afresh and remembers a failure for 30 seconds.
+  several backends and Stores, the ten tiles in order and those that need attention, a part that fails leaving the
+  rest whole, a source that can't be read unchecked, a slow one still being worked out, storage backends off, the
+  database's tile on PostgreSQL, Sign-In and Outgoing Email, a fault marked resolved, or unresolved again, counted at
+  the next read with no `forget()` (`testAFaultMarkedResolvedIsCountedAtTheNextRead`), and a second read coming from
+  what's kept. `DashboardScreensTest` pins where the links go: each shipped screen's Admin address, the Dashboard,
+  Clients, Matters, Workspace Templates, Stores, Backends, Users, Errors, Server Log, Audit Trail and Background Jobs,
+  the Classic Interface for every other, and stuck files linking to Stores, or to Backends when only files with no
+  Store are stuck, as `DashboardServiceTest` does too. `CachedTest` checks what's kept: one ask per period however
+  many read, the last answer while it's asked again, none older than two periods, a failure kept like an answer,
+  `forget()`, a change it's told of read at the next ask, and a clock set back. `WordsTest` checks the tiles' words,
+  and `ProviderClientTest` that `answers` fetches a provider's discovery document afresh and remembers a failure for
+  30 seconds.
 - **`UsageSummaryTest`** checks the Usage: nothing before the first summary, the totals, 30 days of documents,
   storage by Store with the backends the storage port names and a port that fails, the busiest matters, each matter's
   figures, the stamps read trimmed, the people signed in, reading the summary running no query (counted on a
@@ -421,6 +426,99 @@ the packages under it), `healdan-api` and `healdan-storage`. No test makes a rea
   email that `POST` wouldn't take; the device tokens signed out and the sessions closed; and the refusals of a
   non-administrator and of a device token on every People route. A `FieldRefusal` answered `409` rather than `422`,
   or a password logged, fails them.
+- **`DocumentViewsTest`** checks the views: an older file recorded under the version that made it, entries past the
+  half hour dropped, the memory held to its cap (20,001 claims), a failed write warned of (the line pinned with
+  `LogCapture`) and not remembered, and a real statement failing inside the write leaving the caller's transaction to
+  go on and commit. `PreviewResourceTest` and `MessageResourceTest`, in `healdan-api`, check the routes: a preview
+  served records one row, with its user, document, folder, path, version, session and address, once per person and
+  document in half an hour, to the nanosecond at the window's edge; a `202`, a `404 no-preview`, a `403`, a `404`, an
+  unknown version, a `HEAD` and a `503` record none; the thumbnail, the properties, the versions, the document and a
+  folder's list record none, and `/content` is a download; the preview is served while the history store fails; and an
+  email's body, `pictures=true` and an attachment shown in place are one view of the email, while a part downloaded is
+  still a download. `DocumentViewsTestHooks`, in `healdan-core`'s test-jar, stops the views' clock (`stopTime`), so
+  only the test moves it (`passTime`), makes the writes fail (`failWrites`), and puts both back (`reset`).
+- **`UrlCredentialsTest`** checks the cut: a user with and without a password, an email address outside a URL and an
+  `@` in a path or query kept, several URLs in a line, schemes, a password with a colon and escapes, an IPv6 host, the
+  last `@` ending the user part, what ends an authority, and long lines of schemes and of `@`s.
+- **`ErrorReviewTest`** checks resolving and reopening: who is recorded; a fault already in the state asked for changed
+  and recorded nothing; no such fault; the record named by the message with its credentials cut, fitted to its column;
+  a non-administrator refused first; and the change and its record one transaction, a record that can't be written
+  rolling the change back. `ErrorStoreTest` adds the list's count of the errors on every page, and whether a resolve or
+  a reopen changed the fault. `AdminErrorsResourceTest`, in `healdan-api`, checks the routes: the windows counted from
+  the hours (the last hour leaving out an error of the same fault five hours old), the filters and paging, the `400`s,
+  the credentials cut in the list, the details, the stack and the record, a fault's documents and its log, `404`s,
+  resolve and reopen recorded with who and from where, and every route for administrators on the web session only.
+- **`LogFilesTest`** checks the Server Log over the test `log.xml` (below): the list's order and labels, sizes with the
+  rolled-over files, the `_WEB` copies and the empty logs left out, and the main log with no file; a name only ever one
+  of the logs'; the newest entries and those before; forward over more than 200, with a level and without, and a
+  follow; a last line not yet ended; a stack's lines joining their entry both ways; lines that start no entry; the
+  level and text filters; a 1 MB line cut, the read going on; credentials cut; the 5 MiB budget back and forward, the
+  50,000-line bound, and a forward read stopped by them leaving the entry it was reading whole
+  (`testAForwardReadStoppedByWhatItLooksThroughLeavesTheEntryItWasReadingWhole`); a file that shrinks while it's read;
+  back across the rolled-over files, ordered by their numbers under either `fileIndex`, whatever their files' times; a
+  carriage return or a line separator in a message; following across a roll-over; a `before` whose file rolled over or
+  has gone; a position's file found by what it holds, not its name; a file that can't be read; the zip, its name, and
+  nothing left open after it; and the log a logger writes to, and none when the configuration can't be read.
+  `LogPositionTest` checks a position's one spelling. `AdminLogsResourceTest`, in `healdan-api`, checks the routes:
+  back and forward, the `400`s, a name only ever one of the logs' (a path, an encoded `..`, a NUL, the file's own name
+  and `DMS_WEB` among those refused), the download's headers, a `HEAD` writing no body and opening nothing, a file that
+  can't be read answered `500` with one error line, and every route for administrators on the web session only.
+- **The Server Log's tests read a `log.xml` of their own.** `healdan-core`'s `src/test/resources/log.xml` is a small
+  configuration of the shipped kind (`DMS`, a task's log, CMIS's rolling over with `fileIndex="min"`, the `_WEB`
+  copies, loggers that pass their lines up and loggers that don't): Log4j itself reads `log4j2.xml` in the tests, so
+  nothing writes these files but the tests. `LogConfigurator` reads it as a file, so `healdan-api`'s POM copies it into
+  its test classes, as it does `context.properties`; another module whose tests read the Server Log needs the same
+  copy. `LogTestHooks`, in `healdan-core`'s test-jar, sets what `LogFiles` reads through its two seams: the logging
+  configuration (`useNewFolder`, the test `log.xml` with its root in a folder of the test's own under `target/`, or
+  `useConfiguration`) and what opens the files (`refuseToOpen`, `shrinkAfterOpening`, a file cut on disk under a read
+  that still sees its old size, and `keepOpened`, to count what's left open); `reset()` puts both back and deletes the
+  folder.
+- **`AuditFeedTest`** checks the feed on the test database: the five sources merged newest first; paging with no
+  repeat and no gap while rows arrive in every source; a source no page has reached keeping its place; the real
+  writers' rows (a filing, a folder's, a sign-in with a device and an address, administration records with a secret,
+  storage rows); each kind and the split of sign-ins from the rest; the person, matter (a folder in the Trash, a
+  search folder, a document moved out keeping its earlier rows), doc # and text filters; a date range becoming an id
+  range with a full scan's rows, with rows up to 45 minutes out of step and a row at each edge, and the days in three
+  zones; a page reading only so far into each source, and short reads keeping the order across the sources; a doc #'s
+  and a person's rows coming in one page through their indexes behind more rows than the window; `who` read now; a
+  secret's change with no value; a detail that isn't JSON, its warning pinned; a recovery key shown through the Admin
+  app as one row; another tenant's rows; a non-administrator refused; `forEach`'s most; and a destroyed document's
+  administration rows and Trash record. Its plans are PostgreSQL's own.
+  `testTheUnfilteredPageUsesEachTablesPrimaryKey` explains each source's unfiltered first page on 2,000 rows a table
+  with sequential scans off, and finds the table's key read backwards with no sort. Another puts a person's, a
+  matter's and a doc #'s rows among the oldest 1% of 40,000 a table, takes each statement a page sends from the `sent`
+  seam, the window's end included, and runs it twice with `explain (analyze)`, once as it's sent, under a custom plan,
+  and once prepared on one connection under `plan_cache_mode = force_generic_plan`: under both, the rows its filters
+  removed are no more than a window for each window it reads and the value's own rows, and each read uses its index
+  (39,600 of 40,000 were removed before the read had two steps). `scanPerSource` is a seam a test sets low.
+  `AuditCsvTest` checks each guarded character, guarding before quoting, quotes and new lines, the Changes column, the
+  stopped line, the whole file, and hostile text from real records in every column, parsed back as a spreadsheet
+  would, no cell starting a formula. `AuditWordsTest` and `AuditCursorTest` check the words and the cursor's one
+  spelling. `AdminAuditResourceTest`, in `healdan-api`, checks a page against the contract, paging by `nextCursor`,
+  every filter through the route, a day's rows in `Asia/Tokyo`, the `400`s, the export's headers, byte order mark,
+  line ends, guarding and quoting, that reading and exporting record nothing, 100,001 rows stopping at 100,000 with
+  the last line, and the refusals of a non-administrator and of a device token.
+- **`JobControlTest`** checks the five actions: a task's Run Now off the caller's thread, a second refused while the
+  first one's thread is starting, and none while scheduled tasks are off; a disabled task refused; Stop; Healdan's jobs
+  neither stopped, switched nor scheduled, and a job that runs by itself refused; the Trash destroyer's Run Now
+  reporting as a scheduled run, its next run as it was; Enable and Disable; simple and cron schedules, saved and
+  recorded, the same again recording nothing, and each field's `422`; a save that fails changing nothing
+  (`testAFailedSaveChangesNothing`, through the `saver` seam); an unknown job; and a non-administrator refused every
+  action first. `JobRunsTest` checks a run asked for now on a daemon thread of its own, none beside another or beside a
+  scheduled run, a scheduled run waiting for one asked for now, one interrupted while it waits running nothing, and
+  `stop()`. `TrashStartupTest` and `StorageJobsTest` check the Trash destroyer's and the storage jobs' Run Now,
+  reporting as their scheduled runs do, off the caller's thread, a failure saying why, a scheduled run of each waiting
+  for a Run Now (`testEachScheduledRunWaitsForARunNow`), the mover only while its coordinator runs, and none where
+  storage isn't in use. `AdminJobsResourceTest`, in `healdan-api`, checks the routes: the list against the contract, a
+  job's error without a URL's credentials, Run Now and Stop of a task, none while scheduled tasks are off, the Trash
+  destroyer's Run Now, what Healdan's jobs don't allow, Enable and Disable, the schedule and what's refused of it, an
+  unknown job, and a non-administrator's refusal. Every test that changes Index Optimizer's schedule or its enabled
+  flag puts it back after, and those that switch scheduled tasks off put the run level back, in memory only.
+- **A task of the tests' own.** `HeldTask`, in `healdan-core`'s test-jar, is a scheduled task run by LogicalDOC's
+  `Task.run` as any task is, which waits until the test releases it (`release`), so a test can see it running and stop
+  it, and which can hold the thread that runs it before its run begins (`holdTheStart`, `letStart`), so the task stays
+  idle; it's enabled, every hour, in memory only. `JobsTestHooks.list(task)` lists it after LogicalDOC's tasks through
+  `Jobs`' seam, and `reset()` puts the list back.
 
 ### The Storage Tests
 

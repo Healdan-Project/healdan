@@ -37,7 +37,8 @@ what it showed, with "Couldn't refresh this, so it shows what was read last." an
 ### After a Restart
 
 What the list knows of each job's runs is kept in the server's memory, so it starts afresh with the server: after a
-restart, a job shows no last run until it has run again.
+restart, a job shows no last run until it has run again. The Email Index's **Done** stays, as Healdan keeps in its
+database that the first pass has ended.
 
 ## The Jobs
 
@@ -107,7 +108,8 @@ are set there, and so does whether it's enabled.
 
 ## What Healdan Records
 
-Each action is recorded in the [Audit Trail](../audit-trail/), with who did it and when, named by the job: Run Now and
-Stop as asked for, Enable and Disable, and a new schedule, with the schedule before and after, such as
-`every 1800 seconds` and `cron 0 0 3 * * ?`. Enabling a task that's enabled already, disabling one that's disabled, or
-saving the schedule it has changes nothing, and isn't recorded.
+Each action is recorded in the [Audit Trail](../audit-trail/), with who did it and when, its Detail the job's name on
+the server, such as `IndexerTask` or `trash-destroyer`: Run Now as "Ran a job" and Stop as "Stopped a job", once
+asked for, "Enabled a job", "Disabled a job", and "Changed a job's schedule", with the schedule before and after, such
+as `every 1800 seconds` and `cron 0 0 3 * * ?`. Enabling a task that's enabled already, disabling one that's disabled,
+or saving the schedule it has changes nothing, and isn't recorded.

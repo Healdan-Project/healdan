@@ -35,14 +35,22 @@ The Time column gives the date and the time to the minute.
 The list comes 100 rows at a time, the next as you reach the end of the list, or with **Show More** under it. There's
 no count of the rows: the list reads back as far as you go, and at the end it says "No older rows."
 
-Some filters find old rows straight away, and the rest go back a stretch at a time:
+How far each read goes depends on the filters:
 
-- **Straight away, however old:** a doc #'s rows; a person's, but for what they did to folders; and a matter's
-  folder and administration rows.
-- **A stretch at a time:** the rest, such as the words or the dates alone, and a matter's document rows. Each read
-  looks through only so much, so a page can hold few rows, or none, while there's more to read. The list then reads on
-  by itself a few times, and then waits for **Show More**. While it has found nothing, it says "Nothing found yet in
-  what has been read. Show More reads further back."
+- **A doc #'s rows** come straight away, however old.
+- **A person's or a matter's rows** are found through the database's indexes, wherever they lie, but for a person's
+  Folder rows and a matter's Document rows, which no index serves. Those are read back a stretch at a time, and the
+  list keeps to the order of time, so the rest of the person's or the matter's rows older than that stretch wait for
+  the next read. To find someone's old rows straight away, tick the kinds you want without **Folder**, such as
+  **Document** alone; for a matter's, tick **Folder** and **Administration**.
+- **The rest,** such as the words or the dates alone, are read back a stretch at a time.
+
+Each stretch looks through only so much, so a page can hold few rows, or none, while there's more to read. The list
+then reads on by itself a few times, and then waits for **Show More**. While it has found nothing, it says "Nothing
+found yet in what has been read. Show More reads further back."
+
+The list keeps its place in each of the records it reads, so a row written while you read further back doesn't
+repeat or move what's shown: it's at the top the next time the list starts from the newest.
 
 ### A Row's Details
 
@@ -89,8 +97,8 @@ The filters above the list all apply together:
 
 The page's address keeps the filters, so a reload or a copied link shows the same list. A link that names a person or
 a matter Healdan can't name any more, such as a deleted account, shows them by number, as "Person 7", with the filter
-still set. With the dates set, a row whose time is more than an hour out of step with the rows written around it, as
-after the server's clock was put back, may be left out.
+still set, so a deleted account's rows still show. With the dates set, a row whose time is more than an hour out of
+step with the rows written around it, as after the server's clock was put back, may be left out.
 
 The list is asked for again each time you come back to the window. If Healdan can't be read then, the list keeps what
 it showed, with "Couldn't refresh this, so it shows what was read last." and **Try Again**.
@@ -121,7 +129,8 @@ Reading a document is recorded, as a Document row. Checking that it's the right 
 A view is recorded once per person, per document, per half hour, so going through a list twice with the arrow keys, or
 reloading the page, doesn't fill the trail. Healdan remembers the half hour in the server's memory, so a restart can
 record one more. A preview still being made records nothing until it's shown, a refusal records nothing, and a view
-that fails to be recorded never stops the document being read.
+that fails to be recorded never stops the document being read. A view's **From** is the address the person's session
+signed in from, so a device's views carry where the device signed in.
 
 Views make a server's history grow faster, and nothing trims it.
 
@@ -134,7 +143,7 @@ with these columns:
 | Column | What it holds |
 |---|---|
 | Time | when, in UTC, in ISO 8601, such as `2026-11-22T10:44:07.120Z` |
-| Who, What, Detail, From | as the list shows them |
+| Who, What, Detail, From | as a row's details show them |
 | Kind | Sign-In, Document, Folder, User or Administration |
 | Changes | an administration row's changed fields, each on a line of its own, as `name: before → after` |
 

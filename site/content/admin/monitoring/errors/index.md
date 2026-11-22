@@ -92,14 +92,16 @@ for 90 days."
 **Mark Resolved** marks the fault resolved, by you, now. It changes nothing on the server but that mark: use it once
 you've dealt with the cause, or found the fault harmless. The button becomes **Reopen**, the fault's row shows
 **Resolved**, and, with **Unresolved Only** ticked, it leaves the list at once. The Dashboard's Needs Attention, the
-left pane's count and, for an error sending email, the Dashboard's **Outgoing Email** tile follow as the Dashboard's
-figures do: see [Counts in the Left Pane](../#counts-in-the-left-pane).
+left pane's count and, for an error sending email, the Dashboard's **Outgoing Email** tile follow at once: the server
+counts the change the next time they're read, which the Errors screen asks for straight away (see
+[Counts in the Left Pane](../#counts-in-the-left-pane)).
 
 A resolved fault that happens again is unresolved again, of itself, so nothing that recurs stays hidden. **Reopen**
 marks a resolved fault unresolved again, and forgets who resolved it and when.
 
-Resolving and reopening are recorded in the [Audit Trail](../audit-trail/), with who did it and when, named by the
-fault's message. Resolving a fault that's resolved already, or reopening one that isn't, changes and records nothing.
+Resolving and reopening are recorded in the [Audit Trail](../audit-trail/), with who did it and when, as "Marked an
+error resolved" and "Marked an error unresolved", the fault's message, as this screen shows it, in the row's Detail.
+Resolving a fault that's resolved already, or reopening one that isn't, changes and records nothing.
 
 ## Show in Server Log
 
