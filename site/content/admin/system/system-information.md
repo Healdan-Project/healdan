@@ -51,8 +51,13 @@ under some other name. Look through the zip before you send it.
 
 ## Signing Someone Out
 
-On the **Sessions** tab, right-click a session and choose **Kill**. Its person is signed out of it at once. That
-doesn't sign out a device signed in through Healdan's API: see
+To sign someone out of everything, use **Sign Out Everywhere** on their page in the Admin app, under **Users**. It
+closes every session they have open, those on the **Sessions** tab among them, and signs out every device signed in
+through Healdan's API, such as their Healdan Helper. They can sign in again straight away: to keep them out, disable
+them there. See [Sign Out Everywhere](../../users-and-groups/#sign-out-everywhere).
+
+To end one session alone, right-click it on the **Sessions** tab and choose **Kill**. Its person is signed out of it at
+once. That doesn't sign out a device signed in through Healdan's API: see
 [Healdan Settings](../../healdan-settings/#device-sign-ins) for that.
 
 ## Updates and Patches

@@ -147,17 +147,24 @@ tags:
         a group's member, so nothing here changes it.
       - New User makes a password account. An account linked to a sign-in
         provider (`signsInWith`) signs in there and has no password, so
-        Reset Password is refused for it; it's made at the person's first
-        sign-in there, with the groups the provider's group map gives them.
-        Its names and email, and its membership of each group the
-        provider's map names (`Group.mappedBy`), may be set again from the
-        provider at its next sign-in there.
-      - A read-only account (`readOnly`) is in no group but its own and
-        `guest`: adding it to any other group is refused. This app makes no
-        read-only account, and changes no account's kind.
-      - Every account but a read-only one is in Everyone: a list of a
-        person's groups keeps it whether or not it names it, and taking
-        someone out of it is refused.
+        Reset Password is refused for it. It's made, or a password account
+        with the same email linked to it when the provider links by email,
+        at the person's first sign-in there, with the groups the provider's
+        group map gives them. Its names and email, and its membership of
+        each group the provider's map names (`Group.mappedBy`), may be set
+        again from the provider at its next sign-in there.
+      - A read-only account (`readOnly`) is always in its own group and
+        `guest`, and in no other: a list of its groups keeps `guest` whether
+        or not it names it, taking it out of `guest` is refused, and so is
+        adding it to any other group. This app makes no read-only account,
+        and changes no account's kind.
+      - Every account but a read-only one is always in Everyone: a list of
+        its groups keeps Everyone whether or not it names it, and taking it
+        out of Everyone is refused.
+      - A change that would change nothing, such as disabling an account
+        that's disabled, is answered as it is, before any refusal below, and
+        isn't recorded; `refusals` agree, refusing no action that would
+        change nothing.
       - So that someone can always administer Healdan, each of these is
         `409 refused` with a sentence that says why: disabling the `admin`
         account, or taking it out of the `admin` group; disabling yourself,
@@ -3236,10 +3243,14 @@ paths:
         made either way. The password is in this answer only: never in
         another answer, a problem, the administration record or a log line.
 
+        Adding someone to `admin` lets them use this app and read every
+        document: the app asks first.
+
         While a sign-in provider is on (`providers` in the options), people
-        who sign in through it needn't be added here: their account is made
-        at their first sign-in there, with the groups the provider's group
-        map gives them.
+        who sign in through it needn't be added here: their account is made,
+        or a password account with the same email linked to it when the
+        provider links by email, at their first sign-in there, with the
+        groups the provider's group map gives them.
 
         - `400 bad-request` for a `groupIds` that names a group twice or
           holds a null.
@@ -3365,8 +3376,11 @@ paths:
         (`UserAdministration.update`), and answers the person (Admin app
         spec section 8.7). A member left out stays as it is. An `email` or
         `timeZone` of null, or blank, takes it away; a `language` of null,
-        or blank, gives the person the options' `defaultLanguage`. The names
-        and the email have the whitespace at either end taken off. For an
+        or blank, gives the person the options' `defaultLanguage`. The
+        person's current `language` and `timeZone` are accepted as they are,
+        even when the options don't offer them, so an Edit that sends back
+        what it was given saves. The names and the email have the whitespace
+        at either end taken off. For an
         account linked to a sign-in provider (`signsInWith`), the names and
         the email may be set again from the provider at its next sign-in
         there.
@@ -3375,7 +3389,8 @@ paths:
         - `422 validation` for `username` (`not-editable`): a username never
           changes here. For `firstName` or `lastName` null or blank
           (`required`); and for `adminCreateUser`'s `too-long` and `invalid`,
-          each by its field.
+          each by its field, but for a `language` or `timeZone` that's the
+          person's current one.
         - `409 refused` for what Healdan's rules refuse.
 
         Recorded as `user.changed`, with each field whose value changed,
@@ -3421,7 +3436,8 @@ paths:
         has committed their open sessions on this server close, so every app
         and device signed in as them is signed out at its next request.
         Answers the person. Takes no body. An account already disabled is
-        answered as it is, and nothing is recorded.
+        answered as it is, before the refusals below, and nothing is
+        recorded.
 
         - `404 not-found` as `adminGetUser` answers.
         - `409 refused`, as `refusals.disable` says beforehand: for the
@@ -3459,8 +3475,8 @@ paths:
         Enables a disabled account, so the person can sign in again (Admin
         app spec section 8.7). The device tokens its disable revoked stay
         revoked, so each device signs in again. Answers the person. Takes no
-        body. An account already enabled is answered as it is, and nothing
-        is recorded.
+        body. An account already enabled is answered as it is, before the
+        refusals below, and nothing is recorded.
 
         - `404 not-found` as `adminGetUser` answers.
         - `409 refused`, as `refusals.enable` says beforehand, for what
@@ -3621,9 +3637,11 @@ paths:
         Sets the groups the person is in to those `groupIds` names, in one
         transaction (`UserAdministration.setGroups`), and answers the person
         (Admin app spec section 8.7). Their own group, which isn't listed,
-        stays; so does Everyone, for an account that isn't read-only,
-        whether or not the list names it. An empty list leaves them in no
-        other group. For an account linked to a sign-in provider, its
+        stays; so does Everyone, for an account that isn't read-only, and
+        `guest`, for a read-only one, whether or not the list names it. An
+        empty list leaves them in no other group. A list that changes
+        nothing is answered as it is, before the refusals below. For an
+        account linked to a sign-in provider, its
         membership of each group the provider's group map names
         (`Group.mappedBy`) may be set again from the provider at its next
         sign-in there. Adding someone to `admin` lets them use this app and
@@ -3741,9 +3759,9 @@ paths:
       description: |
         The documents the person has checked out, the latest check-out
         first, the whole list, as `GET /v1/me/checkouts` reads the caller's
-        own (Admin app spec section 8.7): each with its doc # and version,
-        its title and matter, when it was checked out and, when a device
-        holds the check-out, the computer and app it's held on, so an
+        own (Admin app spec section 8.7): each with its doc # and file
+        version, its title and matter, when it was checked out and, when a
+        device holds the check-out, the computer and app it's held on, so an
         administrator can say where to check it in. Documents they've only
         locked aren't listed.
 
@@ -3828,7 +3846,7 @@ paths:
         at either end taken off; a null or blank description is none.
 
         - `422 validation`, each by its field: a name missing, null or blank
-          (`required`); a name or a description over 255 characters
+          (`required`); a name over 200 characters, or a description over 255
           (`too-long`); a name that starts with `_user_`, as a person's own
           group's does (`invalid`); and a name another group has, in any
           case (`taken`).
@@ -3963,7 +3981,9 @@ paths:
         - `409 refused` for a fixed group (`fixed`), with a sentence that
           says it's never deleted; for a group a sign-in provider's group map
           names (`mappedBy`), with a sentence that says to take it out of the
-          map first; and for what Healdan's rules refuse.
+          map first; for a group whose name, given elsewhere, is too long to
+          keep with its id once deleted, with a sentence that says to shorten
+          it first; and for what Healdan's rules refuse.
 
         Recorded as `group.deleted`, with its name.
       tags: [People]
@@ -3993,9 +4013,9 @@ paths:
         list lists them. A page of `limit` from `offset`, with the total once
         `q` has filtered them. `q` is read as the Users list's is.
 
-        - `404 not-found` as `adminGetGroup` answers.
         - A negative `offset` or a `limit` outside 1 to 200 is
           `400 bad-request`.
+        - `404 not-found` as `adminGetGroup` answers.
       tags: [People]
       parameters:
         - $ref: '#/components/parameters/GroupPath'
@@ -4030,8 +4050,8 @@ paths:
       summary: Add a person to a group
       description: |
         Adds the person to the group, and answers `204` (Admin app spec
-        section 8.7). Someone already in it changes nothing, and nothing is
-        recorded. Adding someone to `admin` lets them use this app and read
+        section 8.7). Someone already in it changes nothing, before the
+        refusals below, and nothing is recorded. Adding someone to `admin` lets them use this app and read
         every document: the app asks first. For an account linked to a
         sign-in provider, its membership of a group the provider's group map
         names (`mappedBy`) may be set again from the provider at its next
@@ -4066,15 +4086,17 @@ paths:
       summary: Take a person out of a group
       description: |
         Takes the person out of the group, and answers `204` (Admin app spec
-        section 8.7). Someone not in it changes nothing, and nothing is
-        recorded. For an account linked to a sign-in provider, its
+        section 8.7). Someone not in it changes nothing, before the refusals
+        below, and nothing is recorded. For an account linked to a sign-in provider, its
         membership of a group the provider's group map names (`mappedBy`)
         may be set again from the provider at its next sign-in there.
 
         - `404 not-found` as `adminGetGroup` answers for the group, and as
           `adminGetUser` answers for `userId`.
         - `409 refused` for Everyone, which every account but a read-only
-          one is in; for taking the `admin` account, or the caller, out of
+          one is always in, and for `guest` and a read-only account, which
+          is always in it, each with a sentence that says so; for taking the
+          `admin` account, or the caller, out of
           `admin`, as the person's `refusals.leaveAdmin` says beforehand; for
           a change that would leave no enabled administrator, counted once
           any other such change at the same moment has committed; and for
@@ -6561,7 +6583,11 @@ components:
         lastSignIn:
           type: [string, 'null']
           format: date-time
-          description: When they last signed in, on any route; null when they never have
+          description: |
+            When they last signed in, on any route; null when they never
+            have. An app on a device signs in again, with its token, each
+            time its last session has timed out, so a device in use keeps it
+            recent
         devices:
           type: integer
           format: int64
@@ -6572,9 +6598,9 @@ components:
         readOnly:
           type: boolean
           description: |
-            A read-only account, which is in no group but its own and
-            `guest`, and which this app neither makes nor changes into
-            another kind
+            A read-only account, which is always in its own group and
+            `guest`, and in no other, and which this app neither makes nor
+            changes into another kind
         admin:
           type: boolean
           description: A member of `admin`, who can use this app and read every document
@@ -6645,13 +6671,17 @@ components:
         language:
           type: string
           description: |
-            The code of the language Healdan speaks to them in, one of the
-            options' `languages`; their `defaultLanguage` when the account
-            has none
+            The code of the language Healdan speaks to them in; the options'
+            `defaultLanguage` when the account has none. It may be one the
+            options don't offer, given elsewhere or since turned off, which
+            Edit accepts as it is
           examples: [en]
         timeZone:
           type: [string, 'null']
-          description: Their IANA time zone; null for none
+          description: |
+            Their time zone; null for none. It may be one the options'
+            `timeZones` leave out, given elsewhere, which Edit accepts as it
+            is
           examples: [Europe/London]
         created:
           type: string
@@ -6666,9 +6696,11 @@ components:
         mustChangePassword:
           type: boolean
           description: |
-            True while the password set for it, such as a temporary one, must
-            be changed at its next sign-in; false for an account linked to a
-            sign-in provider
+            True while its password must be changed at its next sign-in, as
+            the sign-in page asks for: a password marked so, as New User's and
+            Reset Password's temporary ones are, or one that has expired by
+            age under the server's password settings. False for an account
+            linked to a sign-in provider
         checkedOut:
           type: integer
           format: int64
@@ -6690,9 +6722,10 @@ components:
       description: |
         The sentence the server would refuse each of a person's page's
         actions with, read at the request, so the page can say why before
-        it's tried; null when the server wouldn't refuse it, whether or not
-        it would change anything. A change made meanwhile can make an action
-        refused all the same, with its sentence.
+        it's tried; null when the server wouldn't refuse it, as for an
+        action that would change nothing, which is answered as it is. A
+        change made meanwhile can make an action refused all the same, with
+        its sentence.
       additionalProperties: false
       required: [disable, enable, resetPassword, leaveAdmin]
       properties:
@@ -6732,7 +6765,10 @@ components:
           examples: [en]
         timeZones:
           type: array
-          description: Every time zone the server knows, by its IANA name, sorted
+          description: |
+            The time zones a person can be given: the IANA region names the
+            server knows, as `Europe/London`, sorted, leaving out older forms
+            such as `PST` and the `SystemV/` names
           items:
             type: string
             examples: [Europe/London]
@@ -6784,7 +6820,7 @@ components:
           type: [string, 'null']
           description: |
             One of the options' `languages`, by its code; null, blank or left
-            out for their `defaultLanguage`
+            out for the options' `defaultLanguage`
         timeZone:
           type: [string, 'null']
           description: One of the options' `timeZones`; null, blank or left out for none
@@ -6792,7 +6828,10 @@ components:
           type: array
           description: |
             The groups they're in besides Everyone, which every account but a
-            read-only one is in; left out for none
+            read-only one is in; left out for none. Adding someone to `admin`
+            lets them use this app and read every document: the app asks
+            first
+          uniqueItems: true
           items:
             type: integer
             format: int64
@@ -6839,10 +6878,12 @@ components:
           description: At most 255 characters; null or blank for none
         language:
           type: [string, 'null']
-          description: One of the options' `languages`, by its code; null or blank for their `defaultLanguage`
+          description: |
+            One of the options' `languages`, by its code, or the person's
+            current one; null or blank for the options' `defaultLanguage`
         timeZone:
           type: [string, 'null']
-          description: One of the options' `timeZones`; null or blank for none
+          description: One of the options' `timeZones`, or the person's current one; null or blank for none
     PasswordReset:
       type: object
       description: How a reset's temporary password reaches the person
@@ -6892,8 +6933,9 @@ components:
           type: array
           description: |
             Every group they're to be in, as `GET /v1/admin/groups` lists
-            them; Everyone is kept for an account that isn't read-only, named
-            or not
+            them; Everyone is kept for an account that isn't read-only, and
+            `guest` for a read-only one, named or not
+          uniqueItems: true
           items:
             type: integer
             format: int64
@@ -6955,13 +6997,13 @@ components:
       type: object
       description: A document a person has checked out
       additionalProperties: false
-      required: [docNumber, version, title, matter, since, device, app]
+      required: [docNumber, fileVersion, title, matter, since, device, app]
       properties:
         docNumber:
           type: integer
           format: int64
           description: The document's number, which the User app's links take
-        version:
+        fileVersion:
           type: string
           description: |
             The version its file was last saved as, as the User app's Version
@@ -7090,7 +7132,7 @@ components:
       properties:
         name:
           type: string
-          description: At most 255 characters
+          description: At most 200 characters
         description:
           type: [string, 'null']
           description: At most 255 characters; null, blank or left out for none
@@ -7101,7 +7143,7 @@ components:
       properties:
         name:
           type: string
-          description: At most 255 characters; null or blank is `422 validation` (`required`)
+          description: At most 200 characters; null or blank is `422 validation` (`required`)
         description:
           type: [string, 'null']
           description: At most 255 characters; null or blank for none

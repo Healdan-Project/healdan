@@ -40,22 +40,30 @@ The choices for Class and Subclass belong to the Healdan profile's attribute set
 A device that signs in through the API, such as Healdan Helper on a Mac, keeps a token instead of the password. (The
 Office add-ins and the LibreOffice extension hold no token: they work through the helper.) The token works only in the
 API: LogicalDOC's web services refuse it. A person's own **Signed-in Devices**, in their menu in the User app, lists
-their sign-ins and revokes each one. To sign out every device a person has signed in on, change their password or
-disable them. Deleting a person stops their devices at once too.
+their sign-ins and revokes each one. An administrator sees the same list on the person's page in the Admin app, under
+**Users**, and revokes any of them with **Revoke**: see [Devices](../users-and-groups/#devices).
 
-**A lost device.** If the person can still sign in, they can revoke its row in their **Signed-in Devices**, which
-signs out that device alone. Otherwise, or to be sure, change their password, which signs out every device. Then have
-them delete any LogicalDOC
-API keys they don't recognise: under the person icon in the top bar, **Security → API Keys**, right-click a key and
-choose **Delete**. Only a key's owner can delete it, an administrator included. A device token can't make a key, but whoever had the device may have had the web page too, and a
-key outlasts a password change. Last, end the person's open sessions: under **Administration → System → General**,
-open the **Sessions** tab, right-click each of their sessions and choose **Kill**. Neither a new password, a deleted
-key nor disabling the person closes a web page or key session that's already open.
+To sign out every device a person has signed in on, use **Sign Out Everywhere** on their page, which also closes
+every session they have open: see [Sign Out Everywhere](../users-and-groups/#sign-out-everywhere). **Reset Password**
+and **Disable** there sign them out everywhere too. A new password set any other way, or disabling them in the Classic
+Interface, signs out every device but leaves their open sessions: close those with **Sign Out Everywhere**. Deleting a
+person stops their devices at once too.
 
-An account that [signs in through a provider](#sign-in-providers) has no password to change: **Change Password** answers that
-the password is wrong. Disable the account and enable it again instead, under **Administration → Access Control →
-Users**, which signs out every device. Its API keys
-never sign in, so there are none to delete. Then end its open sessions in the same way.
+**A lost device.**
+
+1. **Sign it out.** If the person can still sign in, they can revoke its row in their **Signed-in Devices**, or you
+   can revoke it on their page, which signs out that device alone. Otherwise, or to be sure, use
+   **Sign Out Everywhere** on their page, which signs out every device and closes every session open as them, and
+   leaves their password as it is. If whoever has the device may also know the password, use **Reset Password**
+   instead, which does the same and gives them a temporary one.
+2. **Their API keys.** Have them delete any LogicalDOC API keys they don't recognise: under the person icon in the
+   top bar, **Security → API Keys**, right-click a key and choose **Delete**. Only a key's owner can delete it, an
+   administrator included. A device token can't make a key, but whoever had the device may have had the web page too,
+   and a key outlasts a new password.
+3. **Then Sign Out Everywhere again,** once the keys have gone, which closes any session a key opened meanwhile.
+
+An account that [signs in through a provider](#sign-in-providers) has no password in Healdan, so **Reset Password** is
+refused for it: use **Sign Out Everywhere**. Its API keys never sign in, so there are none to delete.
 
 ## The Sign-In Throttle
 
@@ -73,10 +81,14 @@ services.
   your password?**, or once a password has expired, signing in with it asks for a new one. Typed right, that clears
   the count as a successful sign-in does. Typed wrong, it counts like any other wrong password. The same goes for a
   sign-in that asks the person to confirm legal documents first.
-- **A new password lifts its username's block.** When an account gets a new password, by your **Change Password**,
-  the person's own or **Lost your password?**, its username's count is cleared, and a block it's in lifts at once.
-  The wrong passwords were for a password the account no longer has. The address's count stays, as the address may
-  be shared.
+- **A new password lifts its username's block.** When an account gets a new password, by the Admin app's
+  **Reset Password**, your **Change Password** in the Classic Interface, the person's own or **Lost your password?**,
+  its username's count is cleared, and a block it's in lifts at once. The wrong passwords were for a password the
+  account no longer has. The address's count stays, as the address may be shared.
+- **An administrator can lift a username's block.** In the Admin app, a person whose username is blocked shows
+  **Blocked** under **Users**, with when the block ends. **Clear Sign-In Block**, on their page, clears their
+  username's count, so they can sign in again at once, and leaves the address's. See
+  [Clear Sign-In Block](../users-and-groups/#clear-sign-in-block).
 - **The account is never disabled,** so nobody has to unlock it.
 - **People see** "Your username is temporarily blocked. Try after 15 minutes." on the sign-in page, or "Your IP is
   temporarily blocked. Try after 15 minutes." for a blocked address. The API answers `429 too-many-attempts`.
@@ -238,6 +250,10 @@ selected row. Save the window to keep them.
   personal group can't be mapped, and the picker doesn't offer one.
 - **Renaming a Healdan group keeps its rows.** A deleted group's rows are ignored, show as deleted, and go when the
   window is next saved.
+- **The Admin app shows a mapped group.** Its page under **Groups** names the providers whose map names it, and says
+  that a member who signs in through one is put in it or taken out at each sign-in there. The Admin app refuses to
+  delete a group while a map names it. See
+  [A Group a Sign-In Provider Maps](../users-and-groups/#a-group-a-sign-in-provider-maps).
 
 ### Which Account a Sign-In Is
 
@@ -259,13 +275,19 @@ be linked to whichever account has the email they type.
 
 At every sign-in, the account's names and email follow the provider's. Its username never changes.
 
+In the Admin app, **Users** shows the provider a linked account signs in with, and its page adjusts it as any other
+person's: see [Users and Groups](../users-and-groups/). To have an account ready before someone's first sign-in,
+make it with **New User**: see
+[Adding Someone Before Their First Provider Sign-In](../users-and-groups/#adding-someone-before-their-first-provider-sign-in).
+
 ### What Linking Changes
 
 Linking an account, or making one, turns it into a provider account:
 
 - **It has no password.** Healdan removes it, and refuses to store one by any route: Change Password, **Lost your
-  password?**, the user editor and LogicalDOC's web services. So no password signs it in: not the sign-in page's
-  form, WebDAV, CMIS or the web services. See [Known Limitations](../../install/known-limitations/).
+  password?**, the user editor, the Admin app's **Reset Password** and LogicalDOC's web services. So no password
+  signs it in: not the sign-in page's form, WebDAV, CMIS or the web services. See
+  [Known Limitations](../../install/known-limitations/).
 - **Its LogicalDOC API keys are deleted,** as a key would let it in without the provider. A key made afterwards,
   under the person icon's **Security → API Keys**, never signs in.
 - **Its open sessions are closed,** in the web page, WebDAV, CMIS and the web services, however they were opened:
@@ -276,18 +298,11 @@ Linking an account, or making one, turns it into a provider account:
 - **Everything else stays:** its user id, and with it its documents, check-outs, history, My Matters, favourites
   and grants.
 
-### Readying an Account Before a First Sign-In
-
-To have someone's account ready before their first sign-in, with its grants or matters set up, make it by hand
-under **Administration → Access Control → Users**, with a password and their email exactly as the provider has it.
-With the provider's **Link by Email** on, their first sign-in through it links the account, and removes the
-password. Their provider groups must still map to a Healdan group, or that sign-in is refused. Groups the map
-doesn't name stay as you set them.
-
 ### Linked Accounts
 
 A provider's window lists the accounts linked to it: each one's username and name, how it was linked (**Email**, or
-**New Account** for one the provider's sign-in made), when, and its last sign-in through the provider.
+**New Account** for one the provider's sign-in made), when, and its last sign-in through the provider. Accounts are
+unlinked here: the Admin app shows which provider an account signs in with, but doesn't unlink it.
 
 - **Unlink**, on an account's row, unlinks it after you confirm.
 - **Unlink Everyone** unlinks every account linked to the provider, after a confirmation that says how many.
@@ -300,7 +315,8 @@ Unlinking an account:
   them when [outgoing email is set up](../system/outgoing-email/#when-email-counts-as-set-up) and the account has an
   email address. Otherwise, or if the email can't be sent or the mail server doesn't take it within 15 seconds, the
   window shows it once, for you to pass on: nothing shows it again. Unlink Everyone lists each password it couldn't
-  email, beside its username. You can also give an unlinked account a password of your own in the user editor;
+  email, beside its username. You can also give an unlinked account a new temporary password with
+  **Reset Password** on its page in the Admin app, or one of your own in the Classic Interface's user editor;
 - **signs out its Healdan Helpers,** and deletes its LogicalDOC API keys;
 - **keeps the link as a record,** marked unlinked, with when and by whom.
 

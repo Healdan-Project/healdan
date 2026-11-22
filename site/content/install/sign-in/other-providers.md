@@ -109,7 +109,8 @@ and secret there, and shows the redirect address to compare with the one you reg
 
 ### Try It
 
-Sign in with a test person in a private window, then look at the account Healdan made or linked and the groups it has.
+Sign in with a test person in a private window, then look at the account Healdan made or linked, and the groups it
+has, on its page under **Users** in the Admin app.
 If a helper is asked to sign in again soon after it did, check that refreshed ID tokens carry the groups claim, and
 see the note above on refresh tokens.
 
