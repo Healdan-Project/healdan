@@ -129,10 +129,10 @@ takes Esc first).
 - **The find** (`FindBox.tsx`) is `@healdan/ui`'s `ComboBox`, as the User app's search box is. It asks
   `GET /v1/admin/find` once the typing has paused for 150 ms (`FIND_DELAY_MS`), from two characters, or a number of any
   length, as a client's is, sending at most 100 (`FIND_MAX`), and keeps the last answer on screen while the next comes.
-  What's chosen opens where `DESTINATIONS` says for its kind: a client's page at `/admin/clients/{id}` and a
-  matter's at `/admin/matters/{id}`, by the ids `FoundClient` and `FoundMatter` carry, inside the app with the router
-  (`ServerLink.tsx`'s `useFollow`), and a person the Classic Interface (`/frontend.jsp`), with a page load, until
-  Phase 4's screens ship. A hidden `role="status"` says "Nothing found." or the error.
+  What's chosen opens where `DESTINATIONS` says for its kind: a client's page at `/admin/clients/{id}`, a matter's at
+  `/admin/matters/{id}` and a person's at `/admin/users/{id}`, by the ids `FoundClient`, `FoundMatter` and
+  `FoundPerson` carry, inside the app with the router (`ServerLink.tsx`'s `useFollow`). A hidden `role="status"` says
+  "Nothing found." or the error.
 - **An address no route has** is `views/NotFoundView.tsx`, in the frame, with **Go to the Dashboard**. A view that
   fails as it draws is `RouteError` (`router.tsx`): the catalogue's message and Try Again, never the error's own text.
 
@@ -140,8 +140,8 @@ takes Esc first).
 
 `NAV`, in `frame/LeftPane.tsx`, is the left pane: the Dashboard, then the spec's groups in its order (Firm, People,
 Storage, Search and Monitoring), each a heading from the catalogue and its `NavItem`s. A group with no items isn't
-drawn, so the pane shows only the groups a shipped screen is in: Firm, with Clients, Matters and Workspace Templates,
-and Storage, with Stores and Backends, so far. **Classic Interface** is at the pane's foot, apart from `NAV`. A screen
+drawn, so the pane shows only the groups a shipped screen is in: Firm, with Clients, Matters and Workspace Templates;
+People, with Users and Groups; and Storage, with Stores and Backends, so far. **Classic Interface** is at the pane's foot, apart from `NAV`. A screen
 joins when its phase ships:
 
 1. Write the view in `views/`. Take its data through `useAdminQuery` (below), and its pieces from `@healdan/ui`.
@@ -157,9 +157,9 @@ joins when its phase ships:
    the Dashboard at `/` only, and any other at its address and the pages under it.
 4. Point what led to the Classic Interface at it: the Dashboard's links, which the server gives (`AttentionItem.link`
    and `HealthTile.link`, from `healdan-core`'s `DashboardService.Screen`, `/frontend.jsp` until the screen ships; Phase
-   2 gave Clients, Matters and Workspace Templates theirs, which no row or tile links to yet, and Phase 3 Stores, which
+   2 gave Clients, Matters and Workspace Templates theirs, which no row or tile links to yet, Phase 3 Stores, which
    stuck files link to, and Backends, which a backend that can't be reached, a disk nearly full and the Storage Backends
-   and Disk tiles link to), and the find's `DESTINATIONS`. The Dashboard's rows and tiles draw their links with
+   and Disk tiles link to, and Phase 4 Users, which none links to yet), and the find's `DESTINATIONS`. The Dashboard's rows and tiles draw their links with
    `frame/ServerLink.tsx`: a plain click on a link to one of the app's own addresses (`appAddressOf`) opens it with the
    router, without a page load, and the Classic Interface, another origin, a click with a modifier or another button and
    a link with a `target` stay the browser's. An attention row's link takes its label from `NAV` by its path
@@ -212,23 +212,36 @@ What the screens from Phase 2 on share (the spec's section 7.2):
   sentence, which Healdan writes to be shown as it is, when the refusal carries one (a `409 refused`'s `detail`, or the
   `message` of a problem a check found, `MatterProblem` or `TemplateProblem`), drawn as text; otherwise the catalogue's
   message for the problem's code. Nothing else the server says is shown, and an ordinary `Error`'s message never is. A
-  `422 validation` names its fields, which the form shows beside them (the shell's `fieldErrors`).
+  `422 validation` names its fields, which the form shows beside them (the shell's `fieldErrors`). `forms/Refusal.tsx`
+  draws one, as an alert, from a `failure` (`useRefusalFor`) or from a sentence the screen has itself, and nothing when
+  there's none: every form, dialog and question draws its refusal with it. `forms/Problems.tsx` draws the problems a
+  screen finds before its button is pressed, or a test finds, each after the warning sign, with an optional line above
+  them and what can put each right under it, and `framed` puts each in a box of its own, as New Matter's check does;
+  a person's and a group's page draw with it the sentences of the actions the server would refuse.
 - **A dialog holds while its change is on its way.** A dialog that makes or changes something greys out **Cancel**, and
   takes no Esc or click outside, until the answer comes: then it closes, or stays with the reason, so nothing is made
   that someone thought they had cancelled. `dialogs/Confirm.tsx`, the question with the warning sign that a delete,
   Follow Parent, Apply to Subfolders and the Leave question use, does it, and so do the forms, such as `ClientDialog`,
   New Matter and the Workspace Editor's `FolderDialogs`.
-- **Paged lists.** `lists/usePagedList(path, query, pageSize)` is a list that comes a page at a time, the Clients and
-  Matters lists: TanStack Query's infinite query over the route by `offset`, which keeps the last question's rows while
+- **Paged lists.** `lists/usePagedList(path, query, pageSize, ids)` is a list that comes a page at a time, the
+  Clients, Matters, Users and Groups lists and a group's members (whose `{id}` segment `ids` fills, the key holding the
+  id as a number, so the members are under the group's own key): TanStack Query's infinite query over the route by `offset`, which keeps the last question's rows while
   a new filter or order loads and asks again at each return to the window (`ASK_ON_RETURN`), with the summary's
   `figuresAt`. `lists/useWords(q, send)` is such a list's words field: what's typed shows at once and goes into the
   address, trimmed, once the typing pauses (`TYPING_DELAY_MS`, 150 ms, in `pickers/typing.ts`), and the field follows
-  the address when something else changes it, as the left pane's entry does.
+  the address when something else changes it, as the left pane's entry does. `lists/useChosen(id)` holds what was
+  picked for a filter, shown at once while the address, which names it by id, follows a moment later, so a picker
+  doesn't wait for the address with its list open: the Matters list's Client and Owner and the Users list's Group.
 - **Pickers.** Anything that can grow long is a search, `@healdan/ui`'s `PickField` asking as it's typed:
   `pickers/ClientPicker.tsx`, by a client's number or name (`useClientSearch`), and `pickers/PersonPicker.tsx`, whose
   `accounts` each caller chooses. `enabled` offers the people who can sign in, from `GET /v1/users`, for a field that
   makes someone an owner; `all` the admin find's people, those whose accounts are disabled marked **Disabled**, for a
-  filter, as their matters stay theirs. Stores and templates are plain menus.
+  filter, as their matters stay theirs. `pickers/GroupPicker.tsx` finds one group, for the Users list's Group filter.
+  `pickers/GroupsField.tsx` is a list of groups that more are added to from a search (**Add a Group**, through
+  `pickers/useGroupPicker`) and each removed from, the focus moving to the next Remove, or to the field after the
+  last: New Store, a Store's **Who Can See It**, New User and a person's groups use it. An item can be `locked`, its
+  reason said in place of its Remove, carry a `tag` or a `note`, and be `linked` to the group's page; `adding={false}`
+  offers no group to add, as to a read-only account. Stores and templates are plain menus.
 - **The Workspace Editor** is `workspace/`: `WorkspaceEditor.tsx` (the tree, the chosen folder's panels, the dialogs and
   the questions), `FolderTree.tsx`, `AccessPanel.tsx` with `AddPersonOrGroup.tsx`, `EveryPermission.tsx`, `levels.ts`
   and `grants.ts`, `PropertiesPanel.tsx`, `SearchFolderPanel.tsx` and `FolderDialogs.tsx`, beside `queries.ts`
@@ -248,12 +261,12 @@ What the screens from Phase 2 on share (the spec's section 7.2):
   and a `beforeunload` handler has the browser ask before a reload or closing the tab, as `FilingProvider` does for
   uploads. Unsaved, it offers **Discard Changes**; saving, **Leave Page**. A page's own delete navigates with
   `ignoreBlocker: true`, as the change goes with what it deletes.
-- **A page starts afresh.** A client's, a matter's, a template's, a Store's and a backend's page are keyed by its id,
-  so Back or Forward between two pages of one route carries no dialog, tab or chosen folder over.
+- **A page starts afresh.** A client's, a matter's, a template's, a Store's, a backend's, a person's and a group's page
+  are keyed by its id, so Back or Forward between two pages of one route carries no dialog, tab or chosen folder over.
 - **Stores** are `stores/`: `NewStoreDialog` (its **Backend** menu, the `offered` backends from `useBackends`, Original
   first, and a note that the Store will be made on Original when that read fails with anything but
   `503 storage-unavailable`), `RenameStoreDialog`, `StoreAccessPanel` (groups only, from `useGroupPicker`, which New
-  Store shares; a person's row already there is kept and can be removed; the rows that grant something but not Read,
+  Store shares, through `pickers/GroupsField`; a person's row already there is kept and can be removed; the rows that grant something but not Read,
   which it doesn't list, named under the list, as Save removes them) and `StoreStoragePanel`, beside `queries.ts`
   (`storeKeys`, under `['admin', 'stores']`, and `useStore`, `useStoreAccess`, `useStoreStorage`, `useDeletedStores`
   and `useSwitchPreview`) and `text.ts`. After a change, `storesChanged` asks for the Stores again (the list, the
@@ -281,6 +294,32 @@ What the screens from Phase 2 on share (the spec's section 7.2):
   `storesInTrash`, `inUse`), so its **Remove** opens, while anything does, a dialog that says what and how to free it,
   with only **Close**, and the question with **Remove** only when nothing does; the server's refusal still shows in
   that question, for a change made meanwhile. A Store's delete question names its backend when it isn't Original.
+- **People** are `people/`, with `views/UsersView.tsx`, `UserView.tsx`, `GroupsView.tsx` and `GroupView.tsx`:
+  `NewUserDialog`, `EditUserDialog` and `PersonFields` (the fields they share, a time zone found as it's typed among
+  the options' `timeZones`, and a language or time zone the options don't offer kept as it is), `ResetPasswordDialog`
+  and `TemporaryPassword.tsx` (`PasswordShown`: the password once, with **Copy**, or that it was emailed, or why it
+  wasn't), `GroupsEditor` (a person's groups, which reports through `useEditState`, so the page's Leave question
+  covers it), `DevicesPanel`, `CheckoutsPanel` (whose **Release** is the public `DELETE /v1/documents/{n}/checkout`),
+  `MembersPanel`, `AddMemberDialog` and `GroupDialogs` (New Group, Rename and Edit Description), beside `queries.ts`
+  (`peopleKeys`, under `['admin', 'users']`, `peopleChanged` and `personChanged`), `groupQueries.ts` (`groupKeys`,
+  under `['admin', 'groups']`, `groupChanged`, which asks every admin answer again as a group's name is in many, and
+  `membersChanged`), `text.ts`, `groupText.ts` (the name checks and what a group's page and its members refuse,
+  worked out as the server would) and `columns.tsx`. A temporary password lives only in its dialog's state, never in
+  the query cache, the address or the browser's storage, and goes as the dialog closes. Adding someone to `admin`
+  asks as the change is sent, at **Create User**, a person's groups' **Save** and Add Member's **Add**
+  (`AddAdminQuestion`), not as the group is picked: a question at the pick left React Aria's autocomplete pointing at
+  an option that had gone (P4-R26). An action the server would refuse is greyed out, from the person's `refusals` or
+  the group's facts, with the sentence under the actions, and the server's own refusal still shows for a change made
+  meanwhile.
+- **The last good answer stays.** The Users and Groups lists, a person's page, a group's page and the panels on them
+  keep their last answer while a new read fails, with `people/StaleNote.tsx`, "Couldn't refresh this, so it shows what
+  was read last." and **Try Again**, in place of the error that would take the page, and any dialog open on it, away
+  (P4-R15); only a read that has never answered shows `ErrorPanel`. A `404` on a new read still shows the page's Not
+  Found. The older screens don't do this yet.
+- **A group's id has a sign.** LogicalDOC's own groups have negative ids, `publisher`'s `-10000`, so the Admin app reads
+  a group's id from an address with `groupIdFrom` (`addresses.ts`), which takes a minus sign, for a group's page, the
+  Groups list's rows and the Users list's `group` parameter, and `groupHref` writes one as one segment. The shell's
+  `idFrom`, which the User app shares, stays digits only.
 - **One way to draw a fact and a count.** `facts/Fact.tsx`'s `Fact` draws a page's facts (a term and its value, in the
   page's `<dl>`), and `@healdan/ui`'s `formatCount` (in `format.ts`, which its `plural` uses too) writes every count,
   as "3,902", rather than an `Intl.NumberFormat` of the screen's own.
@@ -289,7 +328,9 @@ What the screens from Phase 2 on share (the spec's section 7.2):
   body (`focusLost()`, which a screen can ask itself), so focus the person has moved stays. After a Retry that leaves
   nothing stuck, it goes to the Files with No Store heading, or to a Store's Stuck Files heading, whose section then
   stays, saying none are stuck; after a Restore in Deleted Stores, to the next row's **Restore**, or the section's
-  heading after the last. **Discard Changes** in Who Can See It puts the focus on **Add a Group**.
+  heading after the last. **Discard Changes** in Who Can See It and in a person's groups puts the focus on **Add a
+  Group**. Once a device revoked, a check-out released or a member taken out has gone from its list, the focus goes to
+  the list's heading.
 - **A link the server gives,** such as the Dashboard's, goes through `frame/ServerLink.tsx` (see
   [Adding a Screen](#adding-a-screen)).
 

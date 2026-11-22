@@ -4,7 +4,7 @@
 - **Written:** 2026-10-23, for the [M2 design](../superpowers/specs/2026-10-23-m2-api-foundation-design.md) (§12), from the code at `808d5395b`.
 - **Kept current:** each milestone that adds endpoints updates its entries' tags and endpoints in the same pull request.
 - **After M6**, the User app's later phases add their endpoints to §0.3, each marked "built after M6", and their old calls move from `Later` to `M6`: a favourite's name and renaming folders (2026-11-14), and moving and deleting folders and the Trash (2026-11-17, the [folders and Trash spec](../superpowers/specs/2026-11-16-folders-and-trash-design.md) §6).
-- **The Admin app's Phase 1 built** its endpoints on 2026-11-19 (§0.5), in pull request `Admin app: the foundation and the Dashboard` ([Admin app spec](../superpowers/specs/2026-11-18-admin-app-design.md) §10). Its later phases add theirs to §0.5: Phase 2 built its clients', matters', workspaces', templates', Stores' and groups' on 2026-11-20, in pull request `Admin app: clients, matters and workspaces` (Healdan-Project/healdan#287), and Phase 3 its Stores' and storage's on 2026-11-21, in pull request `Admin app: Stores and Backends` (Healdan-Project/healdan#294). Of the corrections the spec's §10 names, Healdan's storage service (`HealdanStorageService`, the Classic Interface's Storage tab, `/frontend/healdanstorage`), which §1 doesn't list and §0's totals don't count, has each of its calls mapped in §0.5, as Phase 3 replaces it whole; the sign-in methods M4 added to `HealdanSettingsService`, which this file doesn't list yet, wait for Stage 2, which replaces them.
+- **The Admin app's Phase 1 built** its endpoints on 2026-11-19 (§0.5), in pull request `Admin app: the foundation and the Dashboard` ([Admin app spec](../superpowers/specs/2026-11-18-admin-app-design.md) §10). Its later phases add theirs to §0.5: Phase 2 built its clients', matters', workspaces', templates', Stores' and groups' on 2026-11-20, in pull request `Admin app: clients, matters and workspaces` (Healdan-Project/healdan#287), Phase 3 its Stores' and storage's on 2026-11-21, in pull request `Admin app: Stores and Backends` (Healdan-Project/healdan#294), and Phase 4 its users' and groups' on 2026-11-21, in pull request `Admin app: Users and Groups`. Of the corrections the spec's §10 names, Healdan's storage service (`HealdanStorageService`, the Classic Interface's Storage tab, `/frontend/healdanstorage`), which §1 doesn't list and §0's totals don't count, has each of its calls mapped in §0.5, as Phase 3 replaces it whole; the sign-in methods M4 added to `HealdanSettingsService`, which this file doesn't list yet, wait for Stage 2, which replaces them.
 - **M6 built** its endpoints on 2026-11-10 to 2026-11-12 (§0.3), and its design left the rest of the old calls it weighed to later phases of the User app (`Later`) or to none (M6 spec §4, §16).
 - **M3 built** its endpoints on 2026-10-24 (§0.2): the bookmarks, `FolderService.create` and `/thumbnail` moved from M6 to M3, and the rest of M3's additions have no old call behind them.
 - **M2 built** every `M2` endpoint named here on 2026-10-23 and 2026-10-24 (§0.1). Its `openapi.yaml` (`healdan-api/src/main/resources/healdan/api/openapi.yaml`) is the reference for what they do; this file only maps the old calls to them.
@@ -171,9 +171,9 @@ M6 built every endpoint in this table, for the User app ([M6 spec](../superpower
 | SetupService | 2 |  |  |  |  |  |  |  | 2 |
 | DropboxService | 6 |  |  |  |  |  |  |  | 6 |
 
-### 0.5 What the Admin app adds (Phases 1 to 3 built)
+### 0.5 What the Admin app adds (Phases 1 to 4 built)
 
-Phase 1 built the first three endpoints in this table, for the Admin app's Dashboard and its find (Admin app spec §8.1, §10), Phase 2 those from `listClients` to `/data/groups.xml`, for its clients, its matters, their workspaces, the workspace templates, and the Stores and groups a first matter needs (§8.2 to §8.6, §14), and Phase 3 the rest so far, for the Stores and the storage backends (§8.6, §9.7), which do everything the Classic Interface's Storage tab does, through `HealdanStorageService`'s calls. They're under `/api/v1/admin`, described in `openapi-admin.yaml`, not `openapi.yaml`, and answer administrators' web sessions only. The rows marked "(none: …)" have no old call behind them.
+Phase 1 built the first three endpoints in this table, for the Admin app's Dashboard and its find (Admin app spec §8.1, §10), Phase 2 those from `listClients` to `/data/groups.xml`, for its clients, its matters, their workspaces, the workspace templates, and the Stores and groups a first matter needs (§8.2 to §8.6, §14), Phase 3 those from `HealdanMatterService.listStores` with each Store's backend to `HealdanStorageService.saveSettings`, for the Stores and the storage backends (§8.6, §9.7), which do everything the Classic Interface's Storage tab does, through `HealdanStorageService`'s calls, and Phase 4 the rest so far, for the users and groups (§8.7), through LogicalDOC's user and group DAOs, none of `SecurityService`'s calls, which stay the Classic Interface's. They're under `/api/v1/admin`, described in `openapi-admin.yaml`, not `openapi.yaml`, and answer administrators' web sessions only. The rows marked "(none: …)" have no old call behind them.
 
 | Old call | Admin endpoint |
 |---|---|
@@ -230,6 +230,24 @@ Phase 1 built the first three endpoints in this table, for the Admin app's Dashb
 | `HealdanStorageService.setStoreBackend` | `PUT /admin/stores/{id}/backend`, and `backendId` on `POST /admin/stores` |
 | `HealdanStorageService.stuckFiles`, `retry` | `GET /admin/stores/{id}/stuck-files` and `POST …/retry` for a Store's; `GET /admin/storage/stuck-files` and `POST …/retry` for the files with no Store |
 | `HealdanStorageService.saveSettings` | `PUT /admin/storage/settings`, `422 out-of-range` against the limits |
+| `/data/users.xml`, the Users screen's grid | `GET /admin/users`, with each person's groups, how they sign in, status (`blocked` from the sign-in throttle), last sign-in and devices, system and deleted accounts left out |
+| (none: what New User and Edit offer is new) | `GET /admin/users/options`: the languages, the default, the time zones, the sign-in providers on, and whether outgoing email is set up |
+| `SecurityService.saveUser` of a new account, with `generatePassword` | `POST /admin/users`, a password account with a temporary password, emailed or answered once |
+| `SecurityService.getUser`, for an administrator | `GET /admin/users/{id}`, with the actions the server would refuse (`refusals`) |
+| `SecurityService.saveUser` of an account's names, email, language and time zone | `PATCH /admin/users/{id}` |
+| `SecurityService.changeStatus` | `POST /admin/users/{id}/disable`, `/enable`, Disable revoking the devices and closing the sessions |
+| `SecurityService.changePassword` by an administrator | `POST /admin/users/{id}/reset-password`, a temporary password only, emailed or answered once |
+| `SecurityService.kill`, of every session of one person | `POST /admin/users/{id}/sign-out`, every session and device token; one session's `kill` and the Sessions list stay Stage 2's (spec §11) |
+| `SecurityService.loadBlockedEntities`, `removeBlockedEntities`, for a username | `POST /admin/users/{id}/clear-block`, the username's count only; the users list's `status` says who's blocked |
+| `SecurityService.saveUser`'s groups, `addUserToGroup`, `removeFromGroup` | `PUT /admin/users/{id}/groups`, a person's whole set, and `PUT`, `DELETE /admin/groups/{id}/members/{userId}`, one at a time |
+| (none: an administrator's view of a person's device tokens is new) | `GET /admin/users/{id}/devices`, `DELETE /admin/users/{id}/devices/{tokenId}` |
+| `/data/lockeddocs.xml?userId=`, for an administrator | `GET /admin/users/{id}/checkouts`, check-outs only, as `GET /me/checkouts` reads one's own; released through `DELETE /documents/{docNumber}/checkout` |
+| `/data/groups.xml`, the Groups screen's grid | `GET /admin/groups`, each row with `members`, `fixed`, `admin` and `mappedBy` (grown from Phase 2's `id`, `name` and `description`) |
+| `SecurityService.saveGroup` of a new group | `POST /admin/groups` |
+| `SecurityService.getGroup` | `GET /admin/groups/{id}`, with `folders`, how many folders grant it |
+| `SecurityService.saveGroup` of a group's name and description | `PATCH /admin/groups/{id}` (the fixed groups' names refused) |
+| `SecurityService.deleteGroup` | `DELETE /admin/groups/{id}` (fixed groups, and groups a sign-in provider's map names, refused) |
+| `/data/users.xml?groupId=` | `GET /admin/groups/{id}/members`, paged, with `q` |
 
 ## 1. GWT-RPC services
 
@@ -254,7 +272,7 @@ Transport: each interface is bound to a servlet by `@RemoteServiceRelativePath`;
 - Interface: `gui/common/client/services/SecurityService.java`; RPC URL `/frontend/security` (`@RemoteServiceRelativePath("security")`)
 - Server impl: **SecurityServiceImpl**
 - Methods: 44 (M2 4, Later 14, Admin 26)
-- Lands in: `/me`, `/auth/tokens`, `/users` (M2); `/session` for the User app's sign-out (M6); `/me/profile`, `/me/password`, `/auth/tokens` for API keys and devices (Later); `/admin/users`, `/admin/groups`, `/admin/security` (Admin)
+- Lands in: `/me`, `/auth/tokens`, `/users` (M2); `/session` for the User app's sign-out (M6); `/me/profile`, `/me/password`, `/auth/tokens` for API keys and devices (Later); `/admin/users`, `/admin/groups` (Admin, built in the Admin app's Phase 4, §0.5), `/admin/security` (Admin)
 
 | Method(s) | Purpose | First needed by |
 |---|---|---|
@@ -266,13 +284,13 @@ Transport: each interface is bound to a servlet by `@RemoteServiceRelativePath`;
 | `trustDevice`, `updateDeviceLabel`, `isTrustedDevice`, `deleteTrustedDevices` | Trusted-device list for 2FA (own account). | Later |
 | `addImpersonifier`, `deleteImpersonifiers` | Users allowed to impersonate me. | Later |
 | `searchUsers` | Find users by username and/or group (user pickers in permissions, share, messages). Also needed by M7. | M2 |
-| `saveUser`, `deleteUser`, `changeStatus`, `replicateUsersSettings`, `cloneWorkTimes`, `createAccessTicket` | User CRUD, enable/disable, copy settings/work times, one-time access tickets. | Admin |
-| `getGroup`, `saveGroup`, `deleteGroup`, `removeFromGroup`, `addUserToGroup` | Group CRUD and membership. | Admin |
-| `generatePassword`, `generatePassword2`, `validatePassword` | Generate/validate a password against policy. | Admin |
+| `saveUser`, `deleteUser`, `changeStatus`, `replicateUsersSettings`, `cloneWorkTimes`, `createAccessTicket` | User CRUD, enable/disable, copy settings/work times, one-time access tickets. | Admin (`saveUser` and `changeStatus` in `/admin/users`, §0.5; the Admin app deletes no account) |
+| `getGroup`, `saveGroup`, `deleteGroup`, `removeFromGroup`, `addUserToGroup` | Group CRUD and membership. | Admin (`/admin/groups` and a person's `/admin/users/{id}/groups`, §0.5) |
+| `generatePassword`, `generatePassword2`, `validatePassword` | Generate/validate a password against policy. | Admin (a temporary password made on the server, in `/admin/users`' New User and Reset Password, §0.5) |
 | `loadSettings`, `saveSettings` | Security settings (password policy, lockout, SSO flags). | Admin |
-| `kill` | Terminate a session by sid. | Admin |
+| `kill` | Terminate a session by sid. | Admin (every session of one person: `/admin/users/{id}/sign-out`, §0.5; one session, Stage 2) |
 | `getMenu`, `getMenus`, `saveMenus`, `saveMenu`, `deleteMenu`, `saveACL` | Menu tree and menu ACLs (what admin screens a group may open). | Admin |
-| `loadBlockedEntities`, `removeBlockedEntities`, `syncGeolocationDB` | Blocked IPs/users, geolocation DB sync. | Admin |
+| `loadBlockedEntities`, `removeBlockedEntities`, `syncGeolocationDB` | Blocked IPs/users, geolocation DB sync. | Admin (a username's block: `/admin/users/{id}/clear-block`, §0.5) |
 
 ### HealdanLookupService
 
@@ -869,7 +887,7 @@ All extend `AbstractDataServlet`: GET only, require a session (`isAuthenticated(
 | `/data/templates.xml` | TemplatesDataServlet | type, templateId, withempty | Templates (Healdan: profiles) available for documents or folders. Healdan has one profile, so the API's form doesn't need it. | Admin | `/admin/profile` |
 | `/data/attributes.xml` | AttributesDataServlet | templateId, context, sections, extOnly | Attributes of a template (or all attribute-set attributes): name, type, mandatory, defaults, options-set. | M2 | `/folders/{id}/form`, `/documents/{docNumber}/properties` |
 | `/data/attributeoptions.xml` | AttributeOptionsDataServlet | setId, attribute, category, withempty | Option values for a dropdown/preset attribute. | M2 | the `options` of each form field |
-| `/data/lockeddocs.xml` | LockedDocsDataServlet | userId | Documents locked/checked out (by a user). "My checked-out documents". **Broken upstream:** its SQL is missing a comma, and it checks no permission (capability map §6). | M2 | `/me/checkouts` (built on `DocumentDAO.findByLockUserAndStatus` instead) |
+| `/data/lockeddocs.xml` | LockedDocsDataServlet | userId | Documents locked/checked out (by a user). "My checked-out documents". **Broken upstream:** its SQL is missing a comma, and it checks no permission (capability map §6). | M2 | `/me/checkouts` (built on `DocumentDAO.findByLockUserAndStatus` instead); a person's, for an administrator: `/admin/users/{id}/checkouts` (§0.5) |
 | `/data/versions.xml` | VersionsDataServlet | docId, archiveId | Version history of a document (or versions of an Import/Export archive). | M2 | `/documents/{docNumber}/versions` |
 | `/data/documenthistory.xml` | DocumentHistoryDataServlet | docId (plus max, locale) | Audit events for one document (author, event, version, date, comment). Possible source for "recent documents". | Later | `/documents/{docNumber}/history` |
 | `/data/folderhistory.xml` | FolderHistoryDataServlet | id | Audit events for one folder. | Later | `/folders/{id}/history` |
@@ -884,8 +902,8 @@ All extend `AbstractDataServlet`: GET only, require a session (`isAuthenticated(
 | `/data/deleteddocs.xml` | DeletedDocsDataServlet | folderId, userId | Documents in the trash (Healdan checks the menu right). | M6 | `GET /trash?view=everyone` and `removed`, one row per delete (built after M6: the folders and Trash spec, 2026-11-17) |
 | `/data/deletedfolders.xml` | DeletedFoldersDataServlet | parentId, userId | Folders in the trash. | M6 | `GET /trash?view=everyone` and `removed`, a folder one row with what it took (built after M6: the same) |
 | `/data/garbage.xml` | GarbageDataServlet | (none) | Mixed latest 100 deleted docs/folders for the user (trash dashlet). | M6 | `GET /trash` (`view=mine`, paged; built after M6: the same) |
-| `/data/users.xml` | UsersDataServlet | groupId, required, skipdisabled, impersonifiers | Users (optionally of a group), for pickers and admin grid. Needed by permission UIs (Later) and Walls (M7) too. | M6 | `GET /users?q=` (built in M2; the User app's Author and Typist pickers use it) |
-| `/data/groups.xml` | GroupsDataServlet | (none) | Groups (name, description, source). | Later | `/groups` (the Admin app's search: `/admin/groups`, §0.5) |
+| `/data/users.xml` | UsersDataServlet | groupId, required, skipdisabled, impersonifiers | Users (optionally of a group), for pickers and admin grid. Needed by permission UIs (Later) and Walls (M7) too. | M6 | `GET /users?q=` (built in M2; the User app's Author and Typist pickers use it); the Admin app's Users list and a group's members: `/admin/users`, `/admin/groups/{id}/members` (§0.5) |
+| `/data/groups.xml` | GroupsDataServlet | (none) | Groups (name, description, source). | Later | `/groups` (the Admin app's search and Groups list: `/admin/groups`, §0.5) |
 | `/data/dashlets.xml` | DashletsDataServlet | (none) | Defined dashlets. | none | – (the User app has no dashlets, M6 spec §4) |
 | `/data/languages.xml` | LanguagesDataServlet | gui (only GUI-enabled languages) | Active languages. | Later | `/server` |
 | `/data/timezones.xml` | TimeZonesDataServlet | (none) | Time zones for the profile form. | Later | `/server` |

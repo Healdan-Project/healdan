@@ -255,6 +255,19 @@ see [Building from Source](../building-from-source/#running-the-war-outside-dock
     `deleteMatter`'s checks and delete, without the refusal of a matter's own folder, each refusing for itself a folder
     its route doesn't take (`404` outside the workspace scope, or for anything but a template's own folder, and
     `409 refused` for a workspace's top folder through the folder route), and answering the Trash item.
+  - **The people routes** are `AdminUsersResource` (`/v1/admin/users`) and `AdminGroupsResource` (`/v1/admin/groups`),
+    both `PEOPLE`, over `healdan-core`'s `UserAdministration` and `GroupAdministration` (see the Admin app's records,
+    below), which check every change's fields and rules themselves and record it. `PeopleRequests.run` answers what
+    they refuse as the contract has it: a `FieldRefusal`, the form's fields each with its code and sentence, as
+    `422 validation`; an `IllegalArgumentException` as `400 bad-request`, logged at error, as the routes check what a
+    service would find malformed before they call it, so one is a fault; and a rule's `HealdanRuleException` is left to
+    `ProblemMapper`'s `409 refused`. The routes check a body's members before the path (`checkGroupIds`, for a null
+    or a group named twice, and a `PATCH` member of the wrong type), answer the path's `404` with the services' cheap
+    `isPerson` and `isGroup`, and open no transaction, as each change runs its own. A `PATCH` fills the members it
+    isn't sent from the person or the group as read, and sends the service the whole. A person's id in a path is
+    digits (`{id: [0-9]+}`), and a group's may carry a minus (`{id: -?[0-9]+}`), as LogicalDOC's `publisher` group is
+    `-10000`. `PeopleView` holds the contract's records, and its `CreatedUser` and `TemporaryPassword` leave the
+    password out of their `toString()`.
 - **`healdan-storage`** keeps documents' files on [storage backends](../../admin/storage-backends/), and is a plugin
   of its own that requires `healdan-core`. Its code is under `com.logicaldoc.healdan.storage`, where `healdan-core`'s
   Spring scan finds its beans.
@@ -638,6 +651,69 @@ see [Building from Source](../building-from-source/#running-the-war-outside-dock
     `AclMath.effective` grants more than its parent's, and `store-unreadable` for each live Store and each group
     `PermissionRules.p2Failures` finds for the template's permissions, the owner left aside, by Store name and then
     group name. A group is named as `MatterCheck` names it (`GroupNames`).
+  - **People** are `UserAdministration` and `GroupAdministration` (`com.logicaldoc.healdan.admin.people`), the Users
+    and Groups screens' reads and changes, on LogicalDOC's `UserDAO` and `GroupDAO`, never its RPC services, so its
+    listeners and Healdan's run as on every route: `TokenUserListener` revokes a person's device tokens when a new
+    password or a disable is stored, `ThrottleUserListener` clears their username's count once a new password commits,
+    and `EveryoneUserListener` keeps every person but a read-only one in Everyone. A person is an account of the
+    reader's tenant that isn't deleted or a system account, and a system account is never changed, as LogicalDOC's
+    store would make it an ordinary one; a read-only account belongs only to its own group and `guest`, which
+    LogicalDOC's store puts back. A group is a live ordinary group of the tenant that isn't a person's own (`_user_…`),
+    and `admin`, `guest`, `publisher` and Everyone are fixed. The Users list reads the accounts, their groups, provider
+    links, throttle counts and device tokens in one go (`PeopleReads`), then filters, sorts and pages in Java, as a
+    firm has hundreds of people. A person's Last Sign-In is when LogicalDOC last opened a session for them: `Session`
+    writes `ld_lastlogin` and an `event.user.login` history row for every new session, a device token's included once
+    its bound session has timed out, and an account with no such row has never signed in.
+  - **Each change runs a transaction of its own,** a `TransactionTemplate` rather than `@Transactional`, and refuses
+    to run inside a caller's (`IllegalStateException`), so a guarded change commits before it lets go of its lock, and
+    what follows a commit follows a real one: closing sessions, emailing a temporary password and `recordAfter`. Each
+    refuses anyone but an administrator first, then what isn't a person or a group, then a form's fields
+    (`admin.FieldRefusal`, each field with its code and sentence, in the form's order), then a group id in the request
+    that names no group, then a change that would change nothing, answered as it is and not recorded, and last
+    Healdan's rules, each a `HealdanRuleException` with its sentence (public constants, such as
+    `UserAdministration.LAST_ADMIN`). A refusal changes nothing. A person's `refusals`, on their page, are those
+    sentences, worked out at the read.
+  - **The guards and the locks.** The `admin` account is never disabled or taken out of the `admin` group, nobody
+    disables or takes themselves out of it, and no change leaves the tenant without an enabled administrator (an
+    enabled account in `admin`, not a system account). A change that could lower their count, a disable or a
+    membership change that touches `admin`, holds `UserAdministration.ADMIN_CHANGES`, counts them after its write,
+    inside its transaction, and commits before it lets go, so of two administrators taking each other out at the same
+    moment the second counts what the first left, and is refused. New User holds `NEW_USERNAMES`, and New Group and a
+    rename `GroupAdministration.GROUP_NAMES`, so a name's check in any case and its insert can't interleave with
+    another's; a unique index's refusal (SQLState `23505`) is checked again after the transaction, as `NumberRaces`
+    does, and answered `taken` only when the name is taken now. Each lock is taken outside its transaction, and
+    nothing after a commit runs under one.
+  - **Signing a person out** is `PersonSessions` (`admin.people`): `closeAll(userId)` closes every open LogicalDOC
+    session of the account on this server, however it was opened (the web page's, the Classic Interface's, WebDAV's,
+    CMIS's, the web services', an API key's or a device token's), each by its id with `SessionManager.kill`, never
+    through the request that asks, and each on its own, so one that fails leaves the others closed all the same. It
+    holds the session manager's lock, which LogicalDOC holds while it signs someone in, so a sign-in that read the
+    account before the commit has its session in the pool by then. It never throws. Disable and Reset Password call it
+    once they've committed, and Sign Out Everywhere once it has revoked the device tokens. M4's account linking
+    (`SignInAccounts`) closes an account's sessions, and those its API keys opened, through it too.
+  - **Temporary passwords** are `TemporaryPasswords` (`com.logicaldoc.healdan.signin`), which New User, Reset Password
+    and unlinking an account from its sign-in provider (`SignInAdmin`) share. `make` makes one the tenant's password
+    rules accept, before the change's transaction, with a second try, as LogicalDOC's generator can make one its rules
+    refuse; `email` sends each in LogicalDOC's credentials email (`psw.rec1`) once the change has committed, waits 15
+    seconds at most for the mail server to take it, and says what became of it (`EMAILED`, `NOT_SET_UP`, `NO_EMAIL` or
+    `NOT_TAKEN`). A reset stores the password with the must-change flag and the history LogicalDOC writes for a new
+    password, through `UserDAO.store`, so the listeners revoke the person's device tokens and lift their username's
+    block. The password is in New User's and Reset Password's result, once, when it wasn't emailed, and in no record,
+    log line, exception or `toString()`.
+  - **The other changes.** Clear Sign-In Block clears the username's count through `HealdanThrottle.passwordSet`'s
+    logic, never an address's. A person's groups are set as a whole, their own group, and Everyone or `guest`, kept
+    whatever is sent. A group's delete takes each member who's a person out through `UserDAO.store`, so the listeners
+    run, and any other account's membership, such as a system account's, by its `ld_usergroup` row alone, never storing
+    that account, then deletes the group, all in one transaction. A group's name is at most 200 characters, as
+    LogicalDOC renames a deleted group `<name>.<id>` within 255, and a longer one given elsewhere is refused a delete
+    until it's renamed.
+  - **Recording.** Each change is in the administration record, in the People area, a person named as
+    `Ann Lee (alee)` (`PersonNames.recorded`) and a group by its name: `user.created` (every field set, the groups by
+    name, and `password` as a secret), `user.changed`, `user.disabled`, `user.enabled`, `user.groups-changed` (the
+    groups before and after, by name), `user.block-cleared`, `group.created`, `group.changed`, `group.deleted`,
+    `group.member-added` and `group.member-removed` inside the change's transaction, and `user.password-reset`
+    (`password` as a secret, and `emailed`), `user.signed-out` (the sessions and devices) and `user.device-revoked`
+    (the device's name) straight after it, with `recordAfter`.
   - **`hd_error` and `hd_error_hour`** (`V12__admin.sql` too) hold the errors the server logged, by fault. `hd_error`
     has a row for each fingerprint: the level, the area, the logger, the latest message, its stack and the documents
     it names (the ids a message names as `doc 10412` or `document id 10412`), how many times it was seen, when first
@@ -752,7 +828,8 @@ see [Building from Source](../building-from-source/#running-the-war-outside-dock
     `attention` for status, and the rest are whole; the failure is logged at warn with its class only, its stack at
     debug. Each item's and tile's link is the screen that fixes it, from `DashboardService.Screen`, a table of the
     Admin app's addresses that is the Classic Interface's, `/frontend.jsp`, until each screen ships. Phase 2 gave
-    Clients, Matters and Workspace Templates theirs, and Phase 3 Stores and Backends (`DashboardScreensTest`):
+    Clients, Matters and Workspace Templates theirs, Phase 3 Stores and Backends, and Phase 4 Users, `/admin/users`,
+    which no item or tile links to yet (`DashboardScreensTest`):
     `files-stuck` links to Stores, or to Backends when only files with no Store are stuck (the item's own screen, in
     `Found`), and `backend-unreachable`, `disk-low`, the Storage Backends tile and the Disk tile to Backends; where
     storage backends are off, `disk-low` and the Disk tile link to the Classic Interface, as Backends has nothing

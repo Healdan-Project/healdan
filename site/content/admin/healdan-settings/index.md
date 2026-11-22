@@ -46,8 +46,7 @@ their sign-ins and revokes each one. An administrator sees the same list on the 
 To sign out every device a person has signed in on, use **Sign Out Everywhere** on their page, which also closes
 every session they have open: see [Sign Out Everywhere](../users-and-groups/#sign-out-everywhere). **Reset Password**
 and **Disable** there sign them out everywhere too. A new password set any other way, or disabling them in the Classic
-Interface, signs out every device but leaves their open sessions: close those with **Sign Out Everywhere**. Deleting a
-person stops their devices at once too.
+Interface, signs out every device. Deleting a person stops their devices at once too.
 
 **A lost device.**
 
@@ -86,8 +85,8 @@ services.
   its username's count is cleared, and a block it's in lifts at once. The wrong passwords were for a password the
   account no longer has. The address's count stays, as the address may be shared.
 - **An administrator can lift a username's block.** In the Admin app, a person whose username is blocked shows
-  **Blocked** under **Users**, with when the block ends. **Clear Sign-In Block**, on their page, clears their
-  username's count, so they can sign in again at once, and leaves the address's. See
+  **Blocked** under **Users**, and their page says when the block ends. **Clear Sign-In Block**, on their page,
+  clears their username's count, so they can sign in again at once, and leaves the address's. See
   [Clear Sign-In Block](../users-and-groups/#clear-sign-in-block).
 - **The account is never disabled,** so nobody has to unlock it.
 - **People see** "Your username is temporarily blocked. Try after 15 minutes." on the sign-in page, or "Your IP is

@@ -624,7 +624,7 @@ The calls:
   `404`. A Store's item, which only an administrator makes, is `409 refused`, with or without `folderId`, before
   anything is written, as no folder a client could send would change where it goes: "A Store is restored from Deleted
   Stores on the Admin app's Stores page, or in the Classic Interface." (`POST /v1/admin/stores/{id}/restore`, see
-  [Stores and Groups](#stores-and-groups)).
+  [Stores](#stores)).
   A restore brings back only what that delete took, queues the documents for indexing, and never brings back what was
   removed since.
 - **`DELETE /trash/{id}`** removes an item, moving it and what it holds from the Trash to Removed, and answers `204`.
@@ -1301,7 +1301,7 @@ through the routes above, and its name is checked as a folder's is (`FolderName`
   that could read a matter made from the template but can't read that Store, by Store name and then group name; the
   owner, not known yet, is left aside. Empty for a clean template.
 
-### Stores and Groups
+### Stores
 
 A Store is a workspace directly under the root that holds matters: LogicalDOC's Default workspace and the Templates
 Store aren't Stores, and nor is the root. The Stores routes are the `STORES` area's; a Store's backend and files are
@@ -1376,9 +1376,6 @@ as a name taken, `409 refused` with the same sentence.
   puts it right goes through. New Matter's **Let Everyone Read the Store** sends the groups whose rows have `read`, with
   the problem's group added, so the `PUT` takes away a `custom` row without `read`, which lets nobody see a Store.
   The Admin app adds groups only; a person's row already there is sent back by its `groupId`, their own group.
-- **`GET /v1/admin/groups?q=`**: a page of live groups, by name, ignoring case, without people's own groups, each with
-  its `id`, `name` and `description` (null for none). `q`, read trimmed, in any case, with `%` and `_` taken as they
-  are, keeps the groups whose name contains it; without it, every group.
 
 ### Storage
 
@@ -1462,6 +1459,134 @@ The routes:
   `min` (1) and `max` from the server. **`PUT`** takes all three, and answers them as saved: a value that isn't a whole
   number is `400`, a missing one `422` `required`, and one outside its limits `422` `out-of-range`, on its field,
   before anything is saved.
+
+### Users and Groups
+
+The People area's routes, for the Users and Groups screens. A *person* is an account of the caller's tenant that
+isn't deleted or a system account, such as `_system`: anything else is `404 not-found` on every
+`/v1/admin/users/{id}` path, and as the `{userId}` of a group's members routes. A *group* is a live ordinary group of
+the caller's tenant that isn't a person's own (`_user_…`): anything else is `404` on every `/v1/admin/groups/{id}`
+path. LogicalDOC's own groups have negative ids, `publisher`'s `-10000`, so a group's id in a path or in `groupId` may
+carry a minus sign. A group id in a body that names no group is `409 refused`, as any id in a body that names nothing
+is.
+
+- **The checks come in the order above:** `400` for a body that isn't the JSON expected, and for `groupIds` with a
+  null or a group named twice; `404`; `422 validation`, with each field's `required`, `too-long`, `invalid`, `taken`
+  or `not-editable`; then `409 refused`, with the rule's sentence.
+- **A change that would change nothing is answered as it is,** before any refusal, and isn't recorded: a Disable of a
+  disabled account, the `admin` account's included, an Enable of an enabled one, a `PUT …/groups` of the groups they're
+  in, a Clear Sign-In Block with nothing counted, a Sign Out Everywhere with nothing to close
+  (`{ "sessions": 0, "devices": 0 }`), and a member's add when they're in the group and remove when they're not (`204`
+  both). A person's `refusals` agree: an action that would change nothing isn't refused.
+- **The guards,** each `409 refused` with its sentence: disabling the `admin` account or yourself; taking the `admin`
+  account out of the `admin` group, or yourself; and any change that would leave the tenant with no enabled
+  administrator, an enabled account in `admin` that isn't a system account. That's counted after the change and before
+  it commits, under a lock every such change holds, so of two administrators taking each other out at the same moment,
+  the second is refused. They bind Disable, `PUT …/groups` and a member's `DELETE`.
+- **Everyone and `guest`.** Every person but a read-only one is always in Everyone, and a read-only one always in its
+  own group and `guest`, and in no other. `PUT …/groups` keeps them whether it names them or not, so the answer's
+  `groups` has them. Naming any other group for a read-only account, Everyone included, a member's `PUT` of one into
+  any group but `guest`, taking anyone out of Everyone and taking a read-only account out of `guest` are each
+  `409 refused`.
+- **The temporary password** is in two answers only, `POST /v1/admin/users`' `CreatedUser` and `reset-password`'s
+  `TemporaryPassword`, and only when it wasn't emailed: never in another answer, a problem, the administration record
+  or a log line. `emailed` says whether the mail server took it, within 15 seconds; an answer doesn't say why it
+  wasn't, which the Admin app works out from the options' `outgoingEmail` and the person's `email`.
+- **Signing out.** Disable and Reset Password revoke the person's device tokens in their transaction, and once it has
+  committed close every session open as the person on the server, however it was opened; Sign Out Everywhere does
+  both. A session is closed by its id, never through the request that asks, so the caller's own stays open unless
+  it's the person's: signing yourself out is allowed, and your next request is `401`.
+- **Each change is recorded** in the People area, inside its transaction, or straight after it for one with steps
+  after its commit: `user.created`, `user.changed`, `user.disabled`, `user.enabled`, `user.password-reset` (`password`
+  as a secret, with no value, and `emailed`), `user.signed-out` (the counts), `user.block-cleared`,
+  `user.groups-changed`, `user.device-revoked` (the device's name), `group.created`, `group.changed`,
+  `group.deleted`, `group.member-added` and `group.member-removed`, a person named as `Ann Lee (alee)`.
+
+The routes:
+
+- **`GET /v1/admin/users`**: a page of people (`UserRow`): `id`, `username`, `name` (their first and last name, or the
+  username when both are blank), `firstName`, `lastName` and `email` (null for blank), `groups` (their ordinary
+  groups as `{ "id", "name" }`, by name, Everyone among them, never a person's own), `signsInWith`
+  (`{ "kind", "provider" }`: `password` with no provider, or `provider` with the provider an account is linked to, as
+  `{ "id", "label" }`), `status` (`active`, `disabled` or `blocked`, disabled winning over blocked), `blockedUntil`
+  (when a block ends, else null), `lastSignIn`, `devices` (how many usable device tokens), `readOnly` and `admin`.
+  `lastSignIn` is null for an account with no sign-in in its history, and otherwise when a session was last opened
+  for the person, by any route: a device token's request opens one once its last has timed out, so a device in steady
+  use keeps it recent. Filters, all together: `q`, read trimmed, in any case, with `%` and `_` taken as they are, on the
+  username, the email, the first name, the last name and the two together; `groupId`, a group's members, by an id as
+  `GET /v1/admin/groups` gives it, keeping nobody for one that names no group; and `status`. `sort` is `name` (the
+  default), `username` or `lastSignIn`, and `order` `asc` or `desc`. Ties go by username, and someone who never signed
+  in comes last by `lastSignIn` either way. Any other value is `400`.
+- **`GET /v1/admin/users/options`**, beyond the spec's list, is what New User and Edit offer: `languages`
+  (`{ "code", "name" }`, those the tenant's interface offers, by name), `defaultLanguage`, `timeZones` (the IANA
+  region names, sorted, without three-letter ids such as `PST` and `SystemV/` names), `providers` (the sign-in
+  providers that are on, as `{ "id", "label" }`, in their buttons' order) and `outgoingEmail`, whether outgoing email
+  counts as set up.
+- **`POST /v1/admin/users`** with `{ "username", "firstName", "lastName", "email", "language", "timeZone",
+  "groupIds", "emailPassword" }` makes a password account, an ordinary one, never read-only, in Everyone and the
+  groups named, with a temporary password to change at its first sign-in, and answers `201` with `CreatedUser`,
+  `{ "user", "temporaryPassword", "emailed" }`, and its `Location`. `username`, `firstName`, `lastName` and
+  `emailPassword` are needed; text is read trimmed, a blank email is none, a language left out the default, and a time
+  zone left out none. `422` is `required`; `too-long` past 255 characters; `invalid` for a username with `>` or a
+  control character, an email that isn't an address, and a language or time zone the options don't offer; and `taken`
+  for a username another account has, in any case, a deleted or a system account's included, and for the second of
+  two creates of one username at the same moment.
+- **`GET /v1/admin/users/{id}`** is a person's page, `User`: the row, with `language` (never null), `timeZone`,
+  `created`, `passwordChanged` (null for a provider account), `mustChangePassword` (a temporary password, or one that
+  has expired by age), `checkedOut`, `mattersOwned` (their live matters) and `refusals`: `disable`, `enable`,
+  `resetPassword` and `leaveAdmin`, each the sentence that action's route would refuse with at that moment, or null.
+- **`PATCH /v1/admin/users/{id}`** changes `firstName`, `lastName`, `email`, `language` and `timeZone`, and answers the
+  person. A member left out stays; `email` or `timeZone` null or blank takes it away, and `language` null or blank is
+  the default. A `username`, even as null, is `422 not-editable`. A first or last name null or blank is `422 required`
+  over a name that isn't blank, and one that's blank now, as a provider account's can be, may stay blank. A language
+  or time zone equal to the person's own is taken as it is, offered or not. A provider account's names and email may
+  be set again at its next sign-in through the provider.
+- **`POST /v1/admin/users/{id}/disable`** and **`/enable`** answer the person. Disable revokes the device tokens and
+  closes the sessions; Enable gives no token back.
+- **`POST /v1/admin/users/{id}/reset-password`** with `{ "emailPassword" }`, `422 required` without it, gives the
+  person a temporary password, revokes their device tokens, closes their sessions and clears the wrong passwords
+  counted against their username, and answers `TemporaryPassword`, `{ "temporaryPassword", "emailed" }`. A provider
+  account and your own are `409 refused`; another administrator may reset the `admin` account's.
+- **`POST /v1/admin/users/{id}/sign-out`** revokes the person's device tokens and closes their sessions, and answers
+  `{ "sessions", "devices" }`: the sessions it closed and the usable devices it signed out.
+- **`POST /v1/admin/users/{id}/clear-block`** clears the wrong passwords counted against the person's username, never
+  an address's, and answers the person.
+- **`PUT /v1/admin/users/{id}/groups`** with `{ "groupIds" }` gives the person exactly those groups, beside their own
+  group and Everyone or `guest`, and answers the person. A missing `groupIds` is `422 required`, and an empty one
+  leaves them in no other group.
+- **`GET /v1/admin/users/{id}/devices`** is the person's usable device tokens, newest first, as a plain array: `id`,
+  `name`, `device` (the computer's id, or null), `provider` (null for a password sign-in), `created`, `lastUsed` and
+  `expires`, never a token or its hash. **`DELETE /v1/admin/users/{id}/devices/{tokenId}`** revokes one and answers
+  `204`; a token that isn't a usable one of theirs is `404`.
+- **`GET /v1/admin/users/{id}/checkouts`**, beyond the spec's list, is the documents the person has checked out, the
+  latest check-out first, as a plain array, as `GET /v1/me/checkouts` reads one's own: `docNumber`, `fileVersion` (the
+  file version, as `DocumentView` names it), `title`, `matter` (`{ "id", "number", "name" }`, or null), `since`,
+  `device` and `app`. Documents only locked aren't listed. The Admin app releases one with the public
+  `DELETE /v1/documents/{n}/checkout`, which an administrator may call on anyone's check-out.
+- **`GET /v1/admin/groups?q=`**: a page of groups, by name, ignoring case, without people's own, each with `id`,
+  `name`, `description` (null for none), `members` (its people, disabled and read-only accounts included), `fixed`
+  (true for `admin`, `guest`, `publisher` and Everyone), `admin` and `mappedBy`, the labels of the sign-in providers,
+  on or off, whose group map names it. `q` is read as the Users list's, on the name; without it, every group. The
+  pickers read `id`, `name` and `description`.
+- **`POST /v1/admin/groups`** with `{ "name", "description" }` makes a group with no members and answers `201` with
+  `GroupDetail`, the row with `folders`, and its `Location`. Both are read trimmed, and a blank description is none.
+  `422` is `required`; `too-long` for a name past 200 characters, which leaves room for the `<name>.<id>` a deleted
+  group keeps in LogicalDOC's 255, and a description past 255; `invalid` for a name starting `_user_`, and either with
+  a control character; and `taken` for a name another live group has, in any case, or a deleted group has kept,
+  exactly.
+- **`GET /v1/admin/groups/{id}`** is a group, `GroupDetail`: the row, with `folders`, how many folders and search
+  folders not in the Trash give it something with permissions of their own, Stores and templates' folders among them.
+- **`PATCH /v1/admin/groups/{id}`** changes `name` and `description`, and answers the group. A member left out stays,
+  and a description null or blank takes it away. The name is checked as New Group's, its own in another case not
+  taken. A fixed group's name is `409 refused` unless it's exactly its own; its description changes.
+- **`DELETE /v1/admin/groups/{id}`** takes every member out of the group and deletes it, and answers `204`. A fixed
+  group, a group a sign-in provider's group map names ("… Take it out of the sign-in provider's group map first.") and
+  a group named elsewhere too long to keep as `<name>.<id>` (with the length to rename it to) are `409 refused`.
+  Folders' rows for it stay, granting nobody.
+- **`GET /v1/admin/groups/{id}/members`**: a page of its people, `id`, `username`, `name`, `status` and `readOnly`, by
+  name, ignoring case, then username, with `q` as the Users list's. Paging's `400` comes before the group's `404`.
+- **`PUT`** and **`DELETE /v1/admin/groups/{id}/members/{userId}`** add and remove one person, and answer `204`: the
+  group's `404` first, then the person's, then the change that would change nothing, then the refusals above.
 
 ## Healdan's Own Client
 
