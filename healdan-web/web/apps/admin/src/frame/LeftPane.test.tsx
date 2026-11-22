@@ -10,7 +10,7 @@ import { ADMIN_BASE } from '../addresses'
 import { expectNoAxeViolations } from '../test/axe'
 import { dashboard, fakeApi, type Routes } from '../test/fakeApi'
 import { renderApp } from '../test/renderApp'
-import { LeftPane, NAV, type NavGroup } from './LeftPane'
+import { LeftPane, NAV, screenAt, type NavGroup } from './LeftPane'
 
 const pane = () => screen.getByRole('navigation', { name: 'Navigation' })
 
@@ -35,8 +35,9 @@ async function renderPane(nav: readonly NavGroup[], routes: Routes = {}) {
 }
 
 describe('The left pane', () => {
-  it('shows only the screens that have shipped: the Dashboard, Clients, Matters and Workspace Templates under Firm, Users and Groups under People, Stores and Backends under Storage, and the Classic Interface at its foot', async () => {
-    const { view } = await renderApp('/')
+  it('shows only the screens that have shipped: the Dashboard, Clients, Matters and Workspace Templates under Firm, Users and Groups under People, Stores and Backends under Storage, Errors, Server Log, Audit Trail and Background Jobs under Monitoring, and the Classic Interface at its foot', async () => {
+    // Nothing needs attention, so no entry has a count
+    const { view } = await renderApp('/', { 'GET /v1/admin/dashboard': { ...dashboard, attention: [] } })
     const links = within(pane()).getAllByRole('link')
     expect(links.map((link) => [link.textContent, link.getAttribute('href')])).toEqual([
       ['Dashboard', '/admin/'],
@@ -47,14 +48,46 @@ describe('The left pane', () => {
       ['Groups', '/admin/groups'],
       ['Stores', '/admin/stores'],
       ['Backends', '/admin/backends'],
+      ['Errors', '/admin/errors'],
+      ['Server Log', '/admin/server-log'],
+      ['Audit Trail', '/admin/audit'],
+      ['Background Jobs', '/admin/jobs'],
       ['Classic Interface', '/frontend.jsp'],
     ])
-    // Only Firm, People and Storage have a shipped screen yet, so only their groups are drawn
-    expect(within(pane()).getAllByRole('heading').map((heading) => heading.textContent)).toEqual(['Firm', 'People', 'Storage'])
+    // Search has no shipped screen yet, so its group isn't drawn
+    expect(within(pane()).getAllByRole('heading').map((heading) => heading.textContent)).toEqual(['Firm', 'People', 'Storage', 'Monitoring'])
     expect(within(pane()).getByRole('region', { name: 'Firm' })).toBeTruthy()
     expect(within(pane()).getByRole('region', { name: 'People' })).toBeTruthy()
     expect(within(pane()).getByRole('region', { name: 'Storage' })).toBeTruthy()
+    expect(within(pane()).getByRole('region', { name: 'Monitoring' })).toBeTruthy()
     await expectNoAxeViolations(view.container)
+  })
+
+  it("shows Errors' count, the unresolved errors of the last 24 hours, and Background Jobs', the jobs that failed or are overdue, from the Dashboard's answer (P5-R20)", async () => {
+    const attention = [
+      ...dashboard.attention,
+      { code: 'job-failed' as const, count: 1, detail: 'Indexer', link: '/admin/jobs' },
+      { code: 'job-overdue' as const, count: 2, detail: 'Statistics, Tags', link: '/admin/jobs' },
+    ]
+    const { api, view } = await renderApp('/clients', { 'GET /v1/admin/dashboard': { ...dashboard, attention } })
+    const monitoring = within(pane()).getByRole('region', { name: 'Monitoring' })
+    expect(await within(monitoring).findByRole('link', { name: 'Errors, 14 need attention' })).toBeTruthy()
+    expect(within(monitoring).getByRole('link', { name: 'Background Jobs, 3 need attention' })).toBeTruthy()
+    // The Server Log and the Audit Trail need no attention of their own
+    expect(within(monitoring).getByRole('link', { name: 'Server Log' }).querySelector('[data-count]')).toBeNull()
+    expect(within(monitoring).getByRole('link', { name: 'Audit Trail' }).querySelector('[data-count]')).toBeNull()
+    // One question for every count, the Dashboard's own
+    expect(api.callsTo('GET /v1/admin/dashboard')).toHaveLength(1)
+    await expectNoAxeViolations(view.container)
+  })
+
+  it("names the Monitoring screens where the Dashboard's rows link to them", () => {
+    expect(['/admin/errors', '/admin/server-log', '/admin/audit', '/admin/jobs'].map((path) => screenAt(path))).toEqual([
+      'Errors',
+      'Server Log',
+      'Audit Trail',
+      'Background Jobs',
+    ])
   })
 
   it('marks the screen that is open, and only that one', async () => {

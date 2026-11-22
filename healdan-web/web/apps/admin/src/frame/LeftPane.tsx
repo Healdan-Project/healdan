@@ -65,8 +65,17 @@ export const NAV: readonly NavGroup[] = [
   },
   // Search Index, in Phase 6
   { group: 'admin.nav.search', items: [] },
-  // Errors, Server Log, Audit Trail and Background Jobs, in Phase 5
-  { group: 'admin.nav.monitoring', items: [] },
+  // Errors, Server Log, Audit Trail and Background Jobs, in Phase 5: errors nobody has resolved, and jobs that failed or
+  // are overdue, need attention (P5-R20)
+  {
+    group: 'admin.nav.monitoring',
+    items: [
+      { label: 'admin.nav.errors', route: routes.errors, icon: 'alertTriangle', count: ['errors'] },
+      { label: 'admin.nav.serverLog', route: routes.serverLog, icon: 'document' },
+      { label: 'admin.nav.audit', route: routes.audit, icon: 'history' },
+      { label: 'admin.nav.jobs', route: routes.jobs, icon: 'clockPlay', count: ['job-failed', 'job-overdue'] },
+    ],
+  },
 ]
 
 /** The label of the screen at a path of the app (with ADMIN_BASE, no query), or undefined when no shipped screen is there */

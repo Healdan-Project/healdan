@@ -139,7 +139,8 @@ public class DashboardService {
 	/**
 	 * The screens the Dashboard links to (spec section 8.1): the Admin app's address once a screen has shipped, and
 	 * the Classic Interface until then. Each phase that ships a screen changes its row; Phase 2 shipped Clients, Matters
-	 * and Workspace Templates, Phase 3 Stores and Backends, and Phase 4 Users.
+	 * and Workspace Templates, Phase 3 Stores and Backends, Phase 4 Users, and Phase 5 Errors, the Server Log, the
+	 * Audit Trail and Background Jobs (ruling P5-R19).
 	 */
 	enum Screen {
 		DASHBOARD("/admin/"),
@@ -151,10 +152,10 @@ public class DashboardService {
 		USERS("/admin/users"),
 		SIGN_IN_PROVIDERS(Landing.CLASSIC),
 		SETTINGS(Landing.CLASSIC),
-		ERRORS(Landing.CLASSIC),
-		SERVER_LOG(Landing.CLASSIC),
-		AUDIT_TRAIL(Landing.CLASSIC),
-		BACKGROUND_JOBS(Landing.CLASSIC),
+		ERRORS("/admin/errors"),
+		SERVER_LOG("/admin/server-log"),
+		AUDIT_TRAIL("/admin/audit"),
+		BACKGROUND_JOBS("/admin/jobs"),
 		SEARCH_INDEX(Landing.CLASSIC);
 
 		final String link;

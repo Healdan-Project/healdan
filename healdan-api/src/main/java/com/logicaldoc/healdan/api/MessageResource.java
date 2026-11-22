@@ -40,6 +40,7 @@ import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.store.Store;
 import com.logicaldoc.core.store.StoreResource;
 import com.logicaldoc.healdan.HealdanConstants;
+import com.logicaldoc.healdan.admin.DocumentViews;
 import com.logicaldoc.healdan.api.model.DocumentView;
 import com.logicaldoc.healdan.api.model.FieldError;
 import com.logicaldoc.healdan.api.model.MessageView;
@@ -82,7 +83,9 @@ import jakarta.ws.rs.core.UriInfo;
  * shown in place need the Preview permission, an attachment downloaded the
  * Download permission, as for the document itself. Each route takes
  * {@code ?version=}, a version of the email such as {@code 1.0}, as the
- * document's preview does; the current file by default.
+ * document's preview does; the current file by default. The body served, or
+ * an attachment shown in place, is recorded as the person's view of the email
+ * ({@link DocumentViews}): the same view, whichever they read first.
  * <p>
  * Nothing logged here names a subject, an address or a file name, and a
  * message's parser isn't trusted not to: what it throws is logged by its class
@@ -144,26 +147,38 @@ public class MessageResource {
 	/**
 	 * The body as a page of its own, cleaned ({@link EmailBody}), with its own
 	 * policy, which lets the pictures from the internet in only when asked.
+	 * Served, it is recorded as the person's view of the email.
 	 *
 	 * @param docNumber the email's doc #
 	 * @param pictures true to let pictures from the internet show
 	 * @param version a version of the email; the current file by default
+	 * @param request the request
 	 * @return the page
 	 */
 	@GET
 	@Path("body")
 	@Produces("text/html;charset=utf-8")
 	public Response body(@PathParam("docNumber") long docNumber,
-			@QueryParam("pictures") @DefaultValue("false") boolean pictures, @QueryParam("version") String version) {
+			@QueryParam("pictures") @DefaultValue("false") boolean pictures, @QueryParam("version") String version,
+			@Context Request request) {
+		// JAX-RS answers HEAD with this method too: the headers alone, which show nothing of the email
+		boolean head = HttpMethod.HEAD.equals(request.getMethod());
 		Caller caller = Caller.current();
 		try {
 			Document document = emailDocument(docNumber, caller, Permission.PREVIEW);
 			byte[] page;
+			String fileVersion;
 			try (Opened opened = read(document, version, docNumber, false)) {
 				page = opened.message.body(pictures).getBytes(StandardCharsets.UTF_8);
+				fileVersion = opened.fileVersion;
 			}
+			if (!head)
+				DocumentViews.get().viewed(document, caller.user(), caller.session(), fileVersion);
+			// No body for a HEAD: CXF would send the page itself
+			Object entity = head ? (StreamingOutput) out -> {
+			} : page;
 			// No referrer: a picture loaded with Show Pictures doesn't say which server the message is on
-			return Response.ok(page, "text/html;charset=utf-8").header(HttpHeaders.CONTENT_LENGTH, page.length)
+			return Response.ok(entity, "text/html;charset=utf-8").header(HttpHeaders.CONTENT_LENGTH, page.length)
 					.header("Content-Security-Policy", EmailBody.policy(pictures))
 					.header("X-Content-Type-Options", "nosniff").header("Referrer-Policy", "no-referrer")
 					.header(HttpHeaders.CACHE_CONTROL, "no-store").build();
@@ -175,8 +190,9 @@ public class MessageResource {
 	/**
 	 * An attachment: downloaded (Download permission, recorded as CE records a
 	 * download of the email), or with {@code inline=true} a PDF or a picture
-	 * to show in place (Preview permission, recorded as nothing), by the type
-	 * the sender gave it or by its name ({@link MediaTypes#shownAs}).
+	 * to show in place (Preview permission, recorded as the person's view of
+	 * the email), by the type the sender gave it or by its name
+	 * ({@link MediaTypes#shownAs}).
 	 *
 	 * @param docNumber the email's doc #
 	 * @param id the attachment's index
@@ -200,7 +216,9 @@ public class MessageResource {
 			Document document = emailDocument(docNumber, caller, inline ? Permission.PREVIEW : Permission.DOWNLOAD);
 			Part part;
 			String shown;
+			String fileVersion;
 			try (Opened opened = read(document, version, docNumber, true)) {
+				fileVersion = opened.fileVersion;
 				// An inline part isn't listed by /message, so no route serves it
 				part = opened.message.parts().stream().filter(p -> p.index() == id && !p.inline()).findFirst()
 						.orElseThrow(() -> ApiProblem.notFound(
@@ -218,8 +236,13 @@ public class MessageResource {
 				}
 			}
 			long size = head ? part.size() : content.length();
-			if (!head && !inline)
-				DocumentResource.recordDownload(document, caller.user(), caller.session());
+			if (!head) {
+				// Shown in place, the email is read; downloaded, it is a download of the email
+				if (inline)
+					DocumentViews.get().viewed(document, caller.user(), caller.session(), fileVersion);
+				else
+					DocumentResource.recordDownload(document, caller.user(), caller.session());
+			}
 
 			File sent = content;
 			StreamingOutput body = head ? out -> {
@@ -364,10 +387,14 @@ public class MessageResource {
 
 		final StoredMessage message;
 
+		/** The file version it was read from */
+		final String fileVersion;
+
 		private final File copy;
 
-		Opened(StoredMessage message, File copy) {
+		Opened(StoredMessage message, String fileVersion, File copy) {
 			this.message = message;
+			this.fileVersion = fileVersion;
 			this.copy = copy;
 		}
 
@@ -403,7 +430,8 @@ public class MessageResource {
 			try (InputStream in = DocumentResource.openStream(resource); var out = FileUtils.openOutputStream(copy)) {
 				in.transferTo(out);
 			}
-			return new Opened(StoredMessage.open(copy, FilenameUtils.getExtension(asked.fileName()), content), copy);
+			return new Opened(StoredMessage.open(copy, FilenameUtils.getExtension(asked.fileName()), content),
+					asked.fileVersion(), copy);
 		} catch (MessagingException e) {
 			FileUtils.deleteQuietly(copy);
 			throw new ApiProblem(404, NOT_AN_EMAIL, "Document #%d can't be read as an email message.".formatted(docNumber));

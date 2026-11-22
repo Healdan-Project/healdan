@@ -1060,6 +1060,111 @@ export function groupRoutes(): Routes {
   }
 }
 
+// Monitoring (Phase 5): the faults the server logged and its logs, what was done, and the background jobs, each screen's
+// fixtures in a section of its own.
+
+// Monitoring: Errors and the Server Log (Task 32b)
+
+// Monitoring: the Audit Trail and Activity (Task 32c)
+
+/** A row of the Audit Trail: Tom Reeve downloading # 10388 of 1001.1 at 10:33 on 19 November 2026, unless `over` says otherwise */
+export function auditRow(over: Partial<A['AuditRow']> = {}): A['AuditRow'] {
+  return {
+    id: 'd501',
+    when: '2026-11-19T10:33:00Z',
+    who: 'Tom Reeve',
+    kind: 'document',
+    event: 'event.downloaded',
+    what: 'Downloaded',
+    detail: '# 10388, Skeleton Argument.docx, version 1.4',
+    from: '192.0.2.12',
+    docNumber: 10388,
+    folderId: 115,
+    changes: null,
+    ...over,
+  }
+}
+
+/** The morning of 19 November 2026, newest first: a row of each kind, a sign-in that names no one, and a secret changed */
+export const auditRows: A['AuditRow'][] = [
+  auditRow({
+    id: 'a41',
+    when: '2026-11-19T10:44:07.120Z',
+    who: 'Sam Okafor',
+    kind: 'administration',
+    event: 'backend.changed',
+    what: 'Changed a storage backend',
+    detail: 'Wasabi EU',
+    from: '192.0.2.9',
+    docNumber: null,
+    folderId: null,
+    changes: { name: { before: 'Wasabi', after: 'Wasabi EU' }, secret: { secret: true } },
+  }),
+  auditRow({ id: 'u17', when: '2026-11-19T10:39:00Z', who: 'Priya Nair', kind: 'sign-in', event: 'event.user.login', what: 'Signed in', detail: 'Password, Safari on a Mac', from: '192.0.2.17', docNumber: null, folderId: null }),
+  auditRow(),
+  auditRow({
+    id: 'f88',
+    when: '2026-11-19T10:05:00Z',
+    who: 'Helen Ashcombe',
+    kind: 'folder',
+    event: 'event.folder.permission',
+    what: 'Changed permissions',
+    detail: '/Client Work/1001.1 Charter Dispute – MV Northern Star/Privileged',
+    from: '192.0.2.11',
+    docNumber: null,
+    folderId: 115,
+  }),
+  auditRow({
+    id: 'a40',
+    when: '2026-11-19T09:58:00Z',
+    who: 'Sam Okafor',
+    kind: 'administration',
+    event: 'client.renamed',
+    what: 'Renamed a client',
+    detail: '1001 – Saltmarsh Shipping Ltd',
+    from: '192.0.2.9',
+    docNumber: null,
+    folderId: null,
+    changes: { description: { before: null, after: 'Shipping and charters' }, name: { before: 'Saltmarsh Shipping', after: 'Saltmarsh Shipping Ltd' } },
+  }),
+  auditRow({ id: 'u16', when: '2026-11-19T09:47:00Z', who: null, kind: 'sign-in', event: 'event.user.login.failed', what: 'Failed to sign in', detail: null, from: '192.0.2.21', docNumber: null, folderId: null }),
+  auditRow({ id: 'u15', when: '2026-11-19T09:12:00Z', who: 'Jamie Clarke', kind: 'user', event: 'event.user.passwordchanged', what: 'Changed their password', detail: null, from: null, docNumber: null, folderId: null }),
+]
+
+/** A page of the Audit Trail: its rows, and where the next one starts (none, the end, unless given) */
+export function auditPage(items: A['AuditRow'][], nextCursor: string | null = null): A['AuditPage'] {
+  return { items, nextCursor }
+}
+
+/** GET /v1/admin/audit over `rows`: those of the kinds asked for (every kind without), in one page, the end */
+export function auditTrail(query?: Record<string, unknown>, rows: A['AuditRow'][] = auditRows): A['AuditPage'] {
+  const kinds = query?.kind === undefined ? undefined : ([] as unknown[]).concat(query.kind)
+  return auditPage(rows.filter((row) => kinds === undefined || kinds.includes(row.kind)))
+}
+
+/** GET /v1/admin/matters as a search: the matters whose number starts with `q`, or whose name or client's name holds it, in any case */
+export function auditMatters(query?: Record<string, unknown>): A['MatterList'] {
+  const q = String(query?.q ?? '').trim().toLowerCase()
+  const items = matterRows.filter((row) => row.number.startsWith(q) || row.name.toLowerCase().includes(q) || row.client.name.toLowerCase().includes(q))
+  const limit = Number(query?.limit ?? 100)
+  return matterList(items.slice(0, limit), { limit, total: items.length })
+}
+
+/** What the Audit Trail and the Activity tabs read, to spread over the defaults: the rows, the people and the matters */
+export function auditRoutes(): Routes {
+  return {
+    ...peopleRoutes(),
+    'GET /v1/admin/audit': ({ query }: { query?: Record<string, unknown> }) => auditTrail(query),
+    'GET /v1/admin/matters': ({ query }: { query?: Record<string, unknown> }) => auditMatters(query),
+    'GET /v1/admin/matters/*': ({ params }: { params: string[] }) => {
+      const row = matterRows.find((one) => one.id === Number(params[0]))
+      return row ? matterPage(row) : notFound()
+    },
+  }
+}
+
+// Monitoring: Background Jobs (Task 32d)
+
 export interface Call {
   method: string
   path: string

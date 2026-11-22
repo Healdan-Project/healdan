@@ -5,8 +5,13 @@ weight: 6
 
 LogicalDOC's background work runs as tasks on schedules, listed under **Administration → System → Scheduled
 Tasks**. Healdan's own background work, such as making [Office previews](../../office-previews/) as files arrive,
-isn't listed here: the [Admin app](../../the-admin-app/)'s Dashboard shows it beside these tasks, on its
-**Background Jobs** tile, with any that failed or are overdue under **Needs Attention**.
+isn't listed here.
+
+The Admin app's [Background Jobs](../../monitoring/background-jobs/) lists these tasks beside Healdan's own jobs, with
+when each last ran and how it went, and runs, stops, enables, disables and schedules them as this screen does, and
+records each change in the Audit Trail. This screen stays for now, and is where a task's **Initial delay** and **Max
+duration** are set. The Dashboard's **Background Jobs** tile counts them all, with any that failed or are overdue
+under **Needs Attention**.
 
 ![The Scheduled Tasks list: Index Optimizer, Indexer, Tags Processor, Digest Processor, Statistics Collector and Paths Calculator, each with its last start, duration, next start, schedule and progress](scheduled-tasks.png)
 
@@ -25,7 +30,10 @@ Each first runs between half an hour and an hour and a half after Healdan starts
 
 ## Running a Task Now
 
-Right-click the task and choose **Execute**. **Progress** shows how far it has got, and **Stop** stops it.
+Right-click the task and choose **Execute**. **Progress** shows how far it has got, and **Stop** stops it. Background
+Jobs' **Run Now** and **Stop** do the same.
+
+<!-- P5 docs pass 2 -->
 
 ## Changing a Schedule
 
@@ -36,6 +44,11 @@ Right-click the task and choose **Execute**. **Progress** shows how far it has g
      expression it offers: `* 10 * * * ? *` runs the task every second for a minute each hour.
 3. **Max duration** stops a run that takes longer, in minutes. 0 means no limit.
 4. Click **Save**, which shows once something has changed.
+
+Background Jobs' **Schedule…** sets a **Simple** policy's interval, or a cron expression, and leaves the initial
+delay and the max duration as they are.
+
+<!-- P5 docs pass 2 -->
 
 A save takes effect at once, with no restart, and Healdan keeps it when it restarts or is upgraded. With **Simple**,
 the task next runs once the **Initial delay** has passed after the save, then every **Repeat interval**, so
@@ -57,8 +70,10 @@ finishes quickly.
 
 ## Turning a Task Off
 
-Right-click the task and choose **Disable**, and **Enable** to turn it back on. Leave the Indexer on: without it,
-new documents can't be found by their words.
+Right-click the task and choose **Disable**, and **Enable** to turn it back on, or use **Disable** and **Enable** on
+Background Jobs. Leave the Indexer on: without it, new documents can't be found by their words.
+
+<!-- P5 docs pass 2 -->
 
 ## When the Server Is Busy
 

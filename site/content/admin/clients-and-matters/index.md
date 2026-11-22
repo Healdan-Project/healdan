@@ -213,8 +213,10 @@ its client's page, once New Matter has made it, and from **Manage in Admin** on 
   "Saltmarsh Shipping Ltd · Client Work · owner Tom Reeve · from template Litigation · 412 documents, 4.6 GB". It
   says "no owner" once the owner's account has been deleted, and leaves out the template when there's none, and the
   figures until they've been worked out.
-- **Two tabs,** **Overview** and **Workspace**. The page's address keeps the tab, so a reload or a copied link opens
-  the same one.
+- **Three tabs,** **Overview**, **Workspace** and **Activity**. The page's address keeps the tab, so a reload or a
+  copied link opens the same one.
+
+<!-- P5 docs pass 2 -->
 
 An address that names no matter, or a matter in the Trash, says "Matter Not Found", with **Go to Matters**. The page
 asks Healdan again each time you come back to its window, as the lists do.
@@ -240,6 +242,16 @@ permission rules check each change you save to a matter's workspace: see
 [Who Can Use This Folder](../permissions/#who-can-use-this-folder). What you were changing there is kept while you
 look at the Overview, and leaving the page over a change that isn't saved asks first (see
 [Unsaved Changes](../top-level-folders/#unsaved-changes)).
+
+#### The Activity Tab
+
+The **Activity** tab is the [Audit Trail](../monitoring/audit-trail/) for the matter alone: what was done to the
+documents and folders in its workspace, and the changes the administration record holds for the matter and its
+folders, as [A Matter's Rows](../monitoring/audit-trail/#a-matters-rows) says, newest first. Moving to it keeps what
+you were changing on the Workspace tab, and asks nothing. To export the rows, open the Audit Trail with the matter as
+its filter.
+
+<!-- P5 docs pass 2 -->
 
 #### Edit
 

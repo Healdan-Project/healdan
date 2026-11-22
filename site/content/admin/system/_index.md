@@ -1,6 +1,6 @@
 ---
 title: System
-weight: 10
+weight: 11
 ---
 LogicalDOC Community Edition's settings and tools that Healdan uses as they are.
 

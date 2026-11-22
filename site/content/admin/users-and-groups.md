@@ -94,6 +94,11 @@ password, with when it was last set, or that they must change it at their next s
 can use the Admin app and read every document. Then come **Groups**, **Signed-In Devices** and **What They Hold**,
 which the sections below describe.
 
+Their **Activity** tab is the [Audit Trail](../monitoring/audit-trail/) for them alone: what they did, their sign-ins
+among it, and what was done to their account, newest first.
+
+<!-- P5 docs pass 2 -->
+
 An address that names no person says "Person Not Found", with **Go to Users**, as one naming a system account or a
 deleted account does.
 
@@ -453,7 +458,11 @@ Healdan records each change made here, with who made it, when and from where:
 - **a group** made, with its name and description; renamed or given a new description, before and after; deleted; and
   given a member or losing one.
 
-A change that changes nothing, such as saving someone's groups as they were, isn't recorded.
+A change that changes nothing, such as saving someone's groups as they were, isn't recorded. The
+[Audit Trail](../monitoring/audit-trail/) lists these changes, and a person's **Activity** tab those about them and
+those they made.
+
+<!-- P5 docs pass 2 -->
 
 ## In the Classic Interface
 

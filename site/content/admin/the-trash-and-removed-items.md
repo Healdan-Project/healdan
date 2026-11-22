@@ -136,7 +136,11 @@ each member was destroyed. Nothing in Healdan shows these records yet. They're f
 a document, and Healdan's developers can read them in `hd_trash` and `hd_trash_member`: see
 [How Healdan Extends LogicalDOC](../../developer/how-healdan-extends-logicaldoc/).
 
-LogicalDOC's own history rows (**Last Changes**) for a destroyed document or folder stay too.
+A destroyed folder's own history rows stay too. A destroyed document's own history rows go with it, while its
+folder's history keeps a row of the destroy. The Admin app's [Audit Trail](../monitoring/audit-trail/) lists what
+stays, as the Classic Interface's **Last Changes** report does.
+
+<!-- P5 docs pass 2 -->
 
 ## A Backup's Reach
 

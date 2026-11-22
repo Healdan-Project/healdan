@@ -74,10 +74,20 @@ public class DashboardServiceTest extends AbstractHealdanTestCase {
 
 	private static final String BACKENDS = "/admin/backends";
 
+	private static final String JOBS = "/admin/jobs";
+
+	private static final String SERVER_LOG = "/admin/server-log";
+
 	/** The links to the Admin app's screens, by attention code and tile name; every other is the Classic Interface */
-	private static final Map<String, String> LINKS = Map.of(AttentionItem.FILES_STUCK, "/admin/stores",
-			AttentionItem.BACKEND_UNREACHABLE, BACKENDS, AttentionItem.DISK_LOW, BACKENDS, HealthTile.STORAGE_BACKENDS,
-			BACKENDS, HealthTile.DISK, BACKENDS);
+	private static final Map<String, String> LINKS = Map.ofEntries(
+			Map.entry(AttentionItem.FILES_STUCK, "/admin/stores"), Map.entry(AttentionItem.BACKEND_UNREACHABLE, BACKENDS),
+			Map.entry(AttentionItem.DISK_LOW, BACKENDS),
+			Map.entry(AttentionItem.ERRORS, "/admin/errors"), Map.entry(AttentionItem.PREVIEWS_GIVEN_UP, JOBS),
+			Map.entry(AttentionItem.JOB_FAILED, JOBS), Map.entry(AttentionItem.JOB_OVERDUE, JOBS),
+			Map.entry(HealthTile.STORAGE_BACKENDS, BACKENDS), Map.entry(HealthTile.DISK, BACKENDS),
+			Map.entry(HealthTile.SERVER, SERVER_LOG), Map.entry(HealthTile.DATABASE, SERVER_LOG),
+			Map.entry(HealthTile.MEMORY, SERVER_LOG), Map.entry(HealthTile.PREVIEWS, JOBS),
+			Map.entry(HealthTile.BACKGROUND_JOBS, JOBS));
 
 	private final HealdanFixtures fx = new HealdanFixtures();
 
@@ -236,8 +246,9 @@ public class DashboardServiceTest extends AbstractHealdanTestCase {
 		assertEquals(1, disk.count());
 		assertEquals("Repository 86% full", disk.detail());
 
-		// Stuck files are fixed on the Stores screen and the storage's on the Backends screen, both the Admin app's;
-		// the rest on the Classic Interface's still. Every line says something
+		// Stuck files are fixed on the Stores screen, the storage's on the Backends screen, errors on the Errors screen
+		// and the jobs' on Background Jobs, all the Admin app's; the rest on the Classic Interface's still. Every line
+		// says something
 		for (AttentionItem item : dashboard.attention()) {
 			assertEquals(item.code(), LINKS.getOrDefault(item.code(), CLASSIC), item.link());
 			assertFalse(item.code(), item.detail().isBlank());

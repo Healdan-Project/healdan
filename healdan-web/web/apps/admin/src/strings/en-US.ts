@@ -1099,6 +1099,82 @@ export const adminEnUS = {
   'admin.removeMember.confirm': 'Remove',
   'admin.removeMember.done': 'Took {name} out of {group}',
 
+  // Errors (spec 8.8): each kind of fault the server logged, grouped and kept until it's resolved
+  'admin.nav.errors': 'Errors',
+  'admin.errors.title': 'Errors',
+  // The Server Log (spec 8.8): the lines of the logs the server writes
+  'admin.nav.serverLog': 'Server Log',
+  'admin.serverLog.title': 'Server Log',
+
+  // Monitoring: Errors and the Server Log (Task 32b)
+
+  // The Audit Trail (spec 8.8): what was done, newest first
+  'admin.nav.audit': 'Audit Trail',
+  'admin.audit.title': 'Audit Trail',
+
+  // Monitoring: the Audit Trail and Activity (Task 32c)
+  'admin.audit.export': 'Export CSV',
+  'admin.audit.filters': 'Filters',
+  // The kinds of row, as a filter and in the Kind column
+  'admin.audit.kinds': 'Kind',
+  'admin.audit.kind.sign-in': 'Sign-In',
+  'admin.audit.kind.document': 'Document',
+  'admin.audit.kind.folder': 'Folder',
+  'admin.audit.kind.user': 'User',
+  'admin.audit.kind.administration': 'Administration',
+  'admin.audit.person': 'Person',
+  'admin.audit.from': 'From Date',
+  'admin.audit.to': 'To Date',
+  // One box: a bare number is a doc #, anything else words
+  'admin.audit.text': 'Doc #, Name or Address',
+  'admin.audit.clear': 'Clear Filters',
+  // The person or the matter an address names by an id the server can't name, as for one that has gone
+  'admin.audit.personById': 'Person {id}',
+  'admin.audit.matterById': '{matter} {id}',
+  'admin.audit.column.time': 'Time',
+  'admin.audit.column.who': 'Who',
+  'admin.audit.column.kind': 'Kind',
+  'admin.audit.column.what': 'What',
+  'admin.audit.column.detail': 'Detail',
+  'admin.audit.column.from': 'From',
+  'admin.audit.none': 'Nothing has been recorded yet.',
+  'admin.audit.noneMatch': 'No rows match the filters.',
+  // A page reads only so far back, so a narrow filter can find nothing in it with more to read
+  'admin.audit.noneYet': 'Nothing found yet in what has been read. Show More reads further back.',
+  'admin.audit.showMore': 'Show More',
+  'admin.audit.end': 'No older rows.',
+  // The selected row, whole, under the list
+  'admin.audit.details': 'Row Details',
+  'admin.audit.detail.when': 'When',
+  'admin.audit.detail.who': 'Who',
+  'admin.audit.detail.kind': 'Kind',
+  'admin.audit.detail.what': 'What',
+  'admin.audit.detail.detail': 'Detail',
+  'admin.audit.detail.from': 'From',
+  'admin.audit.detail.changes': 'Changes',
+  'admin.audit.notRecorded': 'Not recorded',
+  // An administration row's changed field, old and new; a secret's only as changed, as no value of it is kept
+  'admin.audit.change': '{name}: {before} → {after}',
+  'admin.audit.secretChanged': '{name}: changed',
+  'admin.audit.noValue': '(none)',
+  'admin.audit.openDocument': 'Open Document in Healdan',
+  'admin.audit.openFolder': 'Open Folder in Healdan',
+  // A search over the Matters list, as the Audit Trail's filter
+  'admin.matterPicker.label': '{matter}',
+  // A matter's page and a person's: the Audit Trail of that matter or person, in a tab (spec 8.3, 8.7)
+  'admin.matter.tab.activity': 'Activity',
+  'admin.user.tabs': 'Sections',
+  'admin.user.tab.overview': 'Overview',
+  'admin.user.tab.activity': 'Activity',
+  'admin.activity.label': 'Activity of {name}',
+  'admin.activity.inAuditTrail': 'Open in the Audit Trail',
+
+  // Background Jobs (spec 8.8): Healdan's jobs and LogicalDOC's tasks
+  'admin.nav.jobs': 'Background Jobs',
+  'admin.jobs.title': 'Background Jobs',
+
+  // Monitoring: Background Jobs (Task 32d)
+
   // The problems only the admin API answers, which the shared catalogue doesn't hold
   'problems.storage-unavailable': "This server doesn't have Healdan's storage module.",
   'problems.secret-key-missing': "Healdan's secret key file is missing.",
@@ -1189,6 +1265,12 @@ export const adminPlurals = {
     one: "A new key keeps the S3 secret you typed, and the {n} value sealed with the missing one can't be opened again: each sign-in provider's client secret and each other storage backend's S3 secret are entered again (those backends fail until then), and Healdan Helpers that signed in through a provider sign in again.",
     other: "A new key keeps the S3 secret you typed, and the {n} values sealed with the missing one can't be opened again: each sign-in provider's client secret and each other storage backend's S3 secret are entered again (those backends fail until then), and Healdan Helpers that signed in through a provider sign in again.",
   },
+
+  // Monitoring: Errors and the Server Log (Task 32b), their plurals
+
+  // Monitoring: the Audit Trail and Activity (Task 32c), their plurals
+
+  // Monitoring: Background Jobs (Task 32d), its plurals
 } as const satisfies Record<`admin.${string}`, PluralForms>
 
 export type AdminStringKey = keyof typeof adminEnUS

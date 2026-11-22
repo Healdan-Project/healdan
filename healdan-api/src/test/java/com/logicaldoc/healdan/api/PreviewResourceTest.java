@@ -10,13 +10,18 @@ import static org.junit.Assert.assertTrue;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
+import java.util.Map;
 
 import org.apache.commons.io.FileUtils;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.springframework.beans.factory.support.DefaultListableBeanFactory;
 import org.springframework.context.support.GenericApplicationContext;
+import org.springframework.mock.web.MockHttpSession;
 
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentManager;
@@ -29,7 +34,10 @@ import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.store.FSStore;
 import com.logicaldoc.core.store.Store;
 import com.logicaldoc.core.store.StoreResource;
+import com.logicaldoc.healdan.admin.DocumentViews;
+import com.logicaldoc.healdan.admin.DocumentViewsTestHooks;
 import com.logicaldoc.healdan.preview.PreviewJobs;
+import com.logicaldoc.healdan.support.LogCapture;
 import com.logicaldoc.healdan.support.OfficeFiles;
 import com.logicaldoc.healdan.util.StorageUnreachableException;
 
@@ -326,5 +334,139 @@ public class PreviewResourceTest extends ApiTestCase {
 		down.setId(real.getId());
 		beans.destroySingleton(name);
 		beans.registerSingleton(name, down);
+	}
+
+	// Reading a document recorded (Admin app spec section 8.8)
+
+	@After
+	public void putTheViewsBack() {
+		DocumentViewsTestHooks.reset();
+	}
+
+	private List<Map<String, Object>> views() {
+		return jdbc().queryForList("select * from ld_history where ld_event = 'event.viewed' order by ld_id");
+	}
+
+	private int views(User user, Document d) {
+		return jdbc().queryForObject(
+				"select count(*) from ld_history where ld_event = 'event.viewed' and ld_userid = ? and ld_docid = ?",
+				Integer.class, user.getId(), d.getId()).intValue();
+	}
+
+	@Test
+	public void testAPreviewServedRecordsAView() throws Exception {
+		Document d = file("a.pdf", OfficeFiles.pdf(1));
+		MockHttpSession web = signInWeb(clerk);
+
+		ApiResponse response = get(path(d)).webSession(web).send();
+
+		assertEquals(response.toString(), 200, response.status());
+		List<Map<String, Object>> views = views();
+		assertEquals(1, views.size());
+		Map<String, Object> view = views.get(0);
+		assertEquals(clerk.getId(), ((Number) view.get("ld_userid")).longValue());
+		assertEquals("clerk", view.get("ld_userlogin"));
+		assertEquals(d.getId(), ((Number) view.get("ld_docid")).longValue());
+		assertEquals(documents.getId(), ((Number) view.get("ld_folderid")).longValue());
+		assertEquals(FolderDAO.get().computePathExtended(documents.getId()), view.get("ld_path"));
+		assertEquals(d.getVersion(), view.get("ld_version"));
+		assertEquals(d.getFileVersion(), view.get("ld_fileversion"));
+		assertEquals("a.pdf", view.get("ld_filename"));
+		assertEquals(sid(web), view.get("ld_sessionid"));
+		assertEquals("127.0.0.1", view.get("ld_ip"));
+		assertEquals(Tenant.DEFAULT_ID, ((Number) view.get("ld_tenantid")).longValue());
+		assertEquals(0, downloads());
+	}
+
+	@Test
+	public void testAViewIsRecordedOncePerPersonAndDocumentInHalfAnHour() throws Exception {
+		Document d = file("a.pdf", OfficeFiles.pdf(1));
+		Document other = file("b.png", PNG);
+		String token = signIn(clerk);
+		// Only the test moves the clock, so the half hour's last moment is exact
+		DocumentViewsTestHooks.stopTime();
+
+		assertEquals(200, get(path(d)).token(token).send().status());
+		assertEquals(200, get(path(d)).token(token).send().status());
+		assertEquals(1, views(clerk, d));
+
+		DocumentViewsTestHooks.passTime(Duration.ofMinutes(30).minusNanos(1));
+		assertEquals(200, get(path(d)).token(token).send().status());
+		assertEquals(1, views(clerk, d));
+
+		DocumentViewsTestHooks.passTime(Duration.ofNanos(1));
+		assertEquals(200, get(path(d)).token(token).send().status());
+		assertEquals(2, views(clerk, d));
+
+		// Another document, and another person, one each
+		assertEquals(200, get(path(other)).token(token).send().status());
+		assertEquals(200, get(path(d)).token(signInAdmin()).send().status());
+		assertEquals(1, views(clerk, other));
+		assertEquals(1, views(fx.admin(), d));
+		assertEquals(4, views().size());
+	}
+
+	@Test
+	public void testWhatServesNoPreviewRecordsNoView() throws Exception {
+		Document pending = file("a.docx", OfficeFiles.docx(null));
+		PreviewJobs.get().add(pending.getId(), pending.getFileVersion(), Instant.now());
+		Document none = file("a.zip", new byte[] { 'P', 'K' });
+		Document pdf = file("a.pdf", OfficeFiles.pdf(1));
+		String token = signIn(clerk);
+
+		assertEquals(202, get(path(pending)).token(token).send().status());
+		assertEquals("no-preview", get(path(none)).token(token).send().code());
+		assertEquals(403, get(path(pdf)).token(signIn(reader)).send().status());
+		assertEquals(404, get(path(pdf)).token(signIn(outsider)).send().status());
+		assertEquals(404, get(path(pdf) + "?version=9.9").token(token).send().status());
+		assertEquals(200, head(path(pdf)).token(token).send().status());
+		unreachable();
+		assertEquals(503, get(path(pdf)).token(token).send().status());
+
+		assertEquals(0, views().size());
+	}
+
+	@Test
+	public void testCheckingADocumentIsTheRightOneRecordsNoView() throws Exception {
+		Document d = file("a.pdf", OfficeFiles.pdf(1));
+		Store.get().store(new ByteArrayInputStream(PNG),
+				StoreResource.builder().docId(d.getId()).fileVersion(d.getFileVersion()).suffixThumbnail().build());
+		String token = signInAdmin();
+		String document = "/api/v1/documents/" + d.getCustomId();
+
+		assertEquals(200, get(document + "/thumbnail").token(token).send().status());
+		assertEquals(200, get(document + "/properties").token(token).send().status());
+		assertEquals(200, get(document + "/versions").token(token).send().status());
+		assertEquals(200, get(document).token(token).send().status());
+		assertEquals(200, get("/api/v1/folders/" + documents.getId() + "/children").token(token).send().status());
+		assertEquals(0, views().size());
+
+		// A download is recorded as one, not as a view
+		assertEquals(200, get(document + "/content").token(token).send().status());
+		assertEquals(1, downloads());
+		assertEquals(0, views().size());
+	}
+
+	@Test
+	public void testAPreviewIsServedWhileTheHistoryStoreFails() throws Exception {
+		byte[] pdf = OfficeFiles.pdf(2);
+		Document d = file("a.pdf", pdf);
+		String token = signIn(clerk);
+		DocumentViewsTestHooks.failWrites();
+
+		try (LogCapture log = LogCapture.of(DocumentViews.class)) {
+			ApiResponse response = get(path(d)).token(token).send();
+
+			assertEquals(response.toString(), 200, response.status());
+			assertArrayEquals(pdf, response.body());
+			assertEquals(List.of("WARN Couldn't record a view of document " + d.getId()
+					+ ": org.springframework.dao.DataAccessResourceFailureException"), log.lines());
+		}
+		assertEquals(0, views().size());
+
+		// A failed write isn't remembered: the next preview records the view
+		DocumentViewsTestHooks.reset();
+		assertEquals(200, get(path(d)).token(token).send().status());
+		assertEquals(1, views().size());
 	}
 }
