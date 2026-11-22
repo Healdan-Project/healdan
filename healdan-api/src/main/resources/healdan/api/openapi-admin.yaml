@@ -206,10 +206,17 @@ tags:
       a device token `403 web-session-only`, and anyone else
       `403 admins-only`.
 
-      - A fault's message and stack, and each log line, are answered as the
-        server logged them, but for the user name and password of any URL
-        in them, which are taken out: `scheme://user:secret@host` reads
-        `scheme://host`. A log's download is its files as they are.
+      - A fault's message and stack, each log line, and a job's error are
+        answered as the server logged them, but for the user name and
+        password of each URL written plainly in them, which are taken out:
+        `scheme://user:secret@host` reads `scheme://host`, and so does a
+        URL that follows another's host directly, as in a list of hosts
+        joined by commas. What isn't recognised stays as it was logged: a
+        password that itself holds a raw `/`, `?`, `#`, a space, a quote or
+        an angle bracket; a URL that is JSON-escaped or percent-encoded;
+        and a URL cut short by a length limit before its `@`. So treat these
+        answers as holding what the server logged. A log's download is its
+        files as they are.
       - A log is named by its appender's name, as `GET /v1/admin/logs` lists
         it, and only those names are taken: nothing a request sends is read
         as a file's name or path.
@@ -4193,16 +4200,17 @@ paths:
         - `q`, read with the whitespace at either end taken off, in any case,
           its `%` and `_` taken as they are, keeps the faults whose latest
           message, or the name of the logger they were logged through,
-          contains it, each compared as stored, before any URL's user name
-          and password are taken out. Without it, or blank, every fault.
+          contains it, each compared as stored, before URLs' user names and
+          passwords are taken out. Without it, or blank, every fault.
         - `area` keeps the faults of that area.
         - `unresolved` true keeps the faults nobody has marked resolved
           since they were last seen.
 
         A resolved fault that's seen again is unresolved again, of itself.
 
-        A `window` or `area` that isn't one of these, a negative `offset` or
-        a `limit` outside 1 to 200 is `400 bad-request`.
+        A `window` or `area` that isn't one of these, an `unresolved` that is
+        neither `true` nor `false`, a negative `offset` or a `limit` outside
+        1 to 200 is `400 bad-request`.
       tags: [Monitoring]
       parameters:
         - name: window
@@ -4420,10 +4428,13 @@ paths:
           keeps the entries whose message, source or continuation lines, as
           answered, contain it.
 
-        An entry is a line that starts as the server's logging writes one,
-        with its time, level, source and message, and the lines after it
+        An entry is a line that starts with its time as the server's logging
+        writes it, such as `22.11.2026 10:41:07,120`, and the lines after it
         that don't start one, such as a stack trace's, which are its
-        `continuation`. Lines that start no entry at the start of what was
+        `continuation`. After the time the main log, and most others, write
+        the level, the source and the message; a few of the server's logs
+        write the level and the message, or the message alone, and their
+        entries have no `source`, or neither `level` nor `source`. Lines that start no entry at the start of what was
         read, such as those at the start of the oldest file, or, with
         `after`, the rest of a stack an earlier answer ended in while it was
         still being written, are entries of their own, a line each, with no
@@ -4500,7 +4511,9 @@ paths:
         are, its current file and the files it rolled over to, which hold its
         older lines, in a zip, each under its own file name. The answer is an
         attachment named after the log's file and the time it was made, in
-        UTC, such as `dms-20261122-104107.zip`.
+        UTC, such as `dms-20261122-104107.zip`. It's `no-store`, as the files
+        hold what the server logged. A `HEAD` answers the headers, and reads
+        no file.
 
         `404 not-found` for a `name` that isn't one of the logs
         `GET /v1/admin/logs` lists.
@@ -4513,6 +4526,11 @@ paths:
           headers:
             Content-Disposition:
               description: '`attachment`, with the zip''s file name'
+              required: true
+              schema:
+                type: string
+            Cache-Control:
+              description: '`no-store`'
               required: true
               schema:
                 type: string
@@ -4578,9 +4596,12 @@ paths:
           dated list.
         - `q`, read with the whitespace at either end taken off, in any
           case, its `%` and `_` taken as they are, keeps the rows whose file
-          name, folder path, target's name, address, or username as the row
-          kept it, contains it. That's the username, not the name `who`
-          gives: `userId` is the filter for a person.
+          name, folder path, target's name or address contains it, or the
+          person as the row kept them: their username, and in LogicalDOC's
+          history also their name at the time. Never the name `who` gives,
+          which is read now: `userId` is the filter for a person. What was
+          typed at a failed sign-in for a username no account has is never
+          compared.
 
         A page holds at most `limit` rows, newest first, and reads only so
         far into each source, so a page whose filters keep few rows may
@@ -4589,13 +4610,17 @@ paths:
         after it. It holds each source's place, so rows written meanwhile
         never repeat or skip one on a later page. There's no total.
         `nextCursor` is null only once every source has been read to its
-        end.
+        end. `readBackTo` says how far back the page's reading reached, so
+        a page with few rows, or none, can say nothing more was found back
+        to then.
 
-        A `kind` that isn't one of these, a `zone` the server doesn't know,
-        a `from` or `to` that isn't a day, a `limit` outside 1 to 200, or a
+        A `kind` that isn't one of these, a `userId`, `matterId` or
+        `docNumber` that isn't a whole number from 0 up, a `zone` the server
+        doesn't know, a `from` or `to` that isn't a day of the years 0001 to
+        9999 written as `2026-11-22`, a `limit` outside 1 to 200, or a
         `cursor` that isn't one this route gives is `400 bad-request`. A
         `userId`, `matterId` or `docNumber` that names nothing keeps no
-        row, and so does a `to` before `from`.
+        row, `0` included, and so does a `to` before `from`.
       tags: [Monitoring]
       parameters:
         - $ref: '#/components/parameters/AuditKinds'
@@ -4664,8 +4689,19 @@ paths:
         last line, whose one cell says
         `Stopped at 100,000 rows: narrow the filters to export the rest.`
 
-        The filters are checked before anything is sent, and refused as
-        `adminListAudit` refuses them: `400 bad-request`.
+        The filters are checked, and the first page of rows read, before
+        anything is sent: a filter is refused as `adminListAudit` refuses
+        it, `400 bad-request`, and a first page that can't be read is a
+        problem, `500`. Then the column names go out at once, and the rows
+        as each page is read. An export that can't finish says so in a last
+        line, a cell of its own as the rows' are:
+        `Stopped before the end: the server couldn't read the rest. Export again.`
+        when a later page can't be read, and
+        `Stopped before the end: only an administrator can export the Audit Trail.`
+        when the person exporting is no longer an administrator as the next
+        page is read, which is asked at each page. A `HEAD` answers the
+        headers once the filters are checked, and reads no row. The answer
+        is `no-store`.
       tags: [Monitoring]
       parameters:
         - $ref: '#/components/parameters/AuditKinds'
@@ -4682,6 +4718,11 @@ paths:
           headers:
             Content-Disposition:
               description: '`attachment`, with the file''s name'
+              required: true
+              schema:
+                type: string
+            Cache-Control:
+              description: '`no-store`'
               required: true
               schema:
                 type: string
@@ -5154,7 +5195,9 @@ components:
       name: from
       in: query
       required: false
-      description: Only the rows of this day or later, the day starting at midnight in `zone`
+      description: |
+        Only the rows of this day or later, the day starting at midnight in
+        `zone`; a day of the years 0001 to 9999
       schema:
         type: string
         format: date
@@ -5162,7 +5205,9 @@ components:
       name: to
       in: query
       required: false
-      description: Only the rows of this day or earlier, to the day's end in `zone`
+      description: |
+        Only the rows of this day or earlier, to the day's end in `zone`; a
+        day of the years 0001 to 9999
       schema:
         type: string
         format: date
@@ -5183,7 +5228,9 @@ components:
       name: q
       in: query
       required: false
-      description: Part of a row's file name, folder path, target's name, address, or username as the row kept it
+      description: |
+        Part of a row's file name, folder path, target's name or address, or
+        of the person's username or name as the row kept them
       schema:
         type: string
   responses:
@@ -8153,7 +8200,8 @@ components:
           type: string
           description: |
             What Happened: its latest message, as the server logged it, but
-            for any URL's user name and password, which are taken out
+            for the credentials of the URLs in it, taken out as the Monitoring
+            tag says
         area:
           $ref: '#/components/schemas/ErrorArea'
         times:
@@ -8220,9 +8268,9 @@ components:
         stack:
           type: [string, 'null']
           description: |
-            Its latest stack trace, as the server logged it, but for any
-            URL's user name and password, which are taken out; null when it
-            was logged with none
+            Its latest stack trace, as the server logged it, but for the
+            credentials of the URLs in it, taken out as the Monitoring tag
+            says; null when it was logged with none
         documents:
           type: array
           description: The documents its latest message names, in the order it names them
@@ -8371,27 +8419,30 @@ components:
             zone; null for a line that starts no entry
         level:
           type: [string, 'null']
-          description: The level it was logged at; null for a line that starts no entry
+          description: |
+            The level it was logged at; null for a line that starts no
+            entry, and for an entry of a log that writes no level
           enum: [TRACE, DEBUG, INFO, WARN, ERROR, FATAL, null]
         source:
           type: [string, 'null']
           description: |
             Where it was logged from, as the log writes it: the class and the
-            line, without spaces; null for a line that starts no entry
+            line, without spaces; null for a line that starts no entry, and
+            for an entry of a log that writes no source
           examples: ['com.logicaldoc.healdan.preview.PreviewWorker:366']
         message:
           type: string
           description: |
-            Its message, as the server logged it, but for any URL's user name
-            and password, which are taken out; for a line that starts no
-            entry, the line
+            Its message, as the server logged it, but for the credentials of
+            the URLs in it, taken out as the Monitoring tag says; for a line
+            that starts no entry, the line
           maxLength: 10000
         continuation:
           type: array
           description: |
             The lines after it that start no entry, such as a stack trace's,
-            each with any URL's user name and password taken out; empty for a
-            line that starts no entry
+            each with the credentials of its URLs taken out as the Monitoring
+            tag says; empty for a line that starts no entry
           items:
             type: string
             maxLength: 10000
@@ -8412,7 +8463,7 @@ components:
         hold fewer rows than asked for, even none, while `nextCursor` isn't
         null.
       additionalProperties: false
-      required: [items, nextCursor]
+      required: [items, nextCursor, readBackTo]
       properties:
         items:
           type: array
@@ -8426,6 +8477,16 @@ components:
             Where the next page starts, for `cursor`, which holds each
             source's place and nothing a client reads; null once every
             source has been read to its end
+        readBackTo:
+          type: [string, 'null']
+          format: date-time
+          description: |
+            How far back the reading has reached: every row the filters keep
+            that's newer than this has been given, on this page or an
+            earlier one of the same filters, so a page with fewer rows than
+            asked for, or none, says nothing more was found back to it. The
+            rows of the next page are this old or older. Null once every
+            source has been read to its end, as `nextCursor` is
     AuditRow:
       type: object
       description: A row of the Audit Trail
@@ -8443,8 +8504,13 @@ components:
           type: [string, 'null']
           description: |
             Who did it: the person's name, as the Users list names them, read
-            now; the username the row kept when no account has the row's
-            user id; null when the row names no one
+            now; when no account has the row's user id, the person as the
+            row kept them, which in LogicalDOC's history is their name at the
+            time and in Healdan's records their username; null when the row
+            names no one. On a `user` row, the person who made the change to
+            the account, when the row names them, as a change made in this
+            app does, and null when it doesn't: `detail` names the account.
+            On a failed sign-in for a username no account has, null
           examples: [Sam Okafor]
         kind:
           $ref: '#/components/schemas/AuditKind'
@@ -8467,9 +8533,20 @@ components:
           type: [string, 'null']
           description: |
             One line more, in English: a document's doc #, file name and
-            version; a folder's path; a sign-in's client; an administration
-            row's target. Null when there's nothing more to say
-          examples: ['# 10388, Skeleton Argument.docx, version 1.4']
+            version; a folder's path; a sign-in's client, or
+            `Unknown username` for a failed sign-in for a username no account
+            has, whose typed text isn't answered; an administration row's
+            target. On a `user` row, the account it's about, as the
+            administration record names a person, then, for an account
+            created, changed, disabled, enabled or deleted, a password
+            changed, an API key made, a sign-in as another account, a change
+            of who can sign in as the account, or a legal notice confirmed,
+            the note LogicalDOC kept with it, cut to 300 characters, as
+            `Sam Okafor (sokafor): By admin in the Admin app`; for any other
+            account event, such as a message received or a search, the
+            account alone. Null when there's nothing more to say
+          examples: ['# 10388, Skeleton Argument.docx, version 1.4',
+            'Sam Okafor (sokafor): By admin in the Admin app']
         from:
           type: [string, 'null']
           description: The address it came from; null when the row keeps none
@@ -8569,8 +8646,8 @@ components:
           type: [string, 'null']
           description: |
             What its last run failed with, in English, as the server logged
-            it, but for any URL's user name and password, which are taken
-            out; null unless `result` is `failed`
+            it, but for the credentials of the URLs in it, taken out as the
+            Monitoring tag says; null unless `result` is `failed`
         nextRun:
           type: [string, 'null']
           format: date-time
