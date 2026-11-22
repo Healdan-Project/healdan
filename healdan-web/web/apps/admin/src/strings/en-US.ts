@@ -1133,7 +1133,7 @@ export const adminEnUS = {
   'admin.errors.column.lastSeen': 'Last Seen',
   // After a resolved fault's message in its row
   'admin.errors.resolvedTag': 'Resolved',
-  // Beside the title: "14 errors of 4 kinds", each half a plural
+  // Beside the title: "14 Errors of 4 Kinds", each half a plural
   'admin.errors.count': '{errors} of {kinds}',
   'admin.errors.none.1h': 'No errors in the last hour.',
   'admin.errors.none.24h': 'No errors in the last 24 hours.',
@@ -1381,9 +1381,9 @@ export const adminPlurals = {
   },
 
   // Monitoring: Errors and the Server Log (Task 32b), their plurals
-  // The two halves of the count beside the Errors title: "14 errors" of "4 kinds"
-  'admin.errors.errors': { one: '{n} error', other: '{n} errors' },
-  'admin.errors.kinds': { one: '{n} kind', other: '{n} kinds' },
+  // The two halves of the count beside the Errors title, in Title Case as the other lists' counts: "14 Errors" of "4 Kinds"
+  'admin.errors.errors': { one: '{n} Error', other: '{n} Errors' },
+  'admin.errors.kinds': { one: '{n} Kind', other: '{n} Kinds' },
   // How many times a fault was seen in all, in its details
   'admin.errors.timesInAll': { one: 'Once in all', other: '{n} times in all' },
 

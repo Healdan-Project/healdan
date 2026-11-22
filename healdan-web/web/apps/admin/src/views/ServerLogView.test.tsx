@@ -11,6 +11,7 @@ import { expectNoAxeViolations } from '../test/axe'
 import { fakeLog, logEntries, logLine, logRoutes, problem, type Routes } from '../test/fakeApi'
 import { hidePage, returnToPage } from '../test/visibility'
 import { renderApp } from '../test/renderApp'
+import { slowAnswer } from '../test/slowAnswer'
 import { serverLogSearch } from './ServerLogView'
 
 type A = adminComponents['schemas']
@@ -40,15 +41,6 @@ async function openLog(path = '/server-log', over: Routes = {}) {
   const rendered = await pending
   await settle()
   return rendered
-}
-
-/** A request the server answers only when the test says, and the signal it was sent with */
-function slowAnswer<T>() {
-  let answer!: (value: T) => void
-  const answered = new Promise<T>((resolve) => {
-    answer = resolve
-  })
-  return { answered, answer }
 }
 
 /**
@@ -84,16 +76,13 @@ const restore: (() => void)[] = []
 afterEach(() => restore.splice(0).forEach((undo) => undo()))
 
 /**
- * axe over what's drawn, with the page asking for the light theme and then the dark one; colours.test.ts checks the colours.
- * axe waits on timers of its own, so the clock is real again first: it ends the test.
+ * axe over what's drawn, once. It waits on timers of its own, so the clock is real again first, which ends the test's own
+ * waits. jsdom draws no colours, so the two themes' colours aren't checked here: every colour is a token, which
+ * test/colours.test.ts checks on each surface of both themes, and the phase's browser spec runs axe in each theme.
  */
-async function expectNoAxeViolationsInBothThemes(container: Element) {
+async function expectNoAxeViolationsAtTheEnd(container: Element) {
   vi.useRealTimers()
-  for (const dark of [false, true]) {
-    window.matchMedia = (query: string) =>
-      ({ matches: dark && query.includes('prefers-color-scheme: dark'), media: query, addEventListener: () => {}, removeEventListener: () => {}, addListener: () => {}, removeListener: () => {}, onchange: null, dispatchEvent: () => false }) as unknown as MediaQueryList
-    await expectNoAxeViolations(container)
-  }
+  await expectNoAxeViolations(container)
 }
 
 /** `count` entries, the ones at the indexes `errorsAt` keeps errors, the rest the Indexer's runs, each saying its number */
@@ -159,7 +148,7 @@ describe("The Server Log's choices", () => {
     expect(router.state.location.search).toEqual({ log: 'IndexerTask', level: 'warn', q: 'wasabi' })
     expect(reads(api, 'IndexerTask')).toEqual([{ level: 'warn', q: 'wasabi' }])
     expect(box('Indexer')).toBeTruthy()
-    await expectNoAxeViolationsInBothThemes(view.container)
+    await expectNoAxeViolationsAtTheEnd(view.container)
   })
 
   it('opens the log, level and words the address names', async () => {
@@ -187,10 +176,24 @@ describe("The Server Log's choices", () => {
     expect(screen.getByRole('link', { name: 'Download' }).getAttribute('href')).toBe('/api/v1/admin/logs/IndexerTask/file')
   })
 
-  it("shows why the logs couldn't be listed, or the lines read, with Try Again", async () => {
+  it("shows why the logs couldn't be listed, with Try Again", async () => {
+    let failing = true
+    const { api } = await openLog('/server-log', { 'GET /v1/admin/logs': () => (failing ? problem(500, 'server-error') : logRoutes()['GET /v1/admin/logs']) })
+    expect(screen.getByText('Something went wrong.')).toBeTruthy()
+    expect(screen.queryByRole('region', { name: 'Lines of Main Log' })).toBeNull()
+    expect(reads(api)).toEqual([])
+    failing = false
+    fireEvent.click(screen.getByRole('button', { name: 'Try Again' }))
+    await settle()
+    expect(shown()).toHaveLength(9)
+  })
+
+  it("shows why the lines couldn't be read, with Try Again", async () => {
     let failing = true
     await openLog('/server-log', { 'GET /v1/admin/logs/*/lines': (request: Request) => (failing ? problem(500, 'server-error') : fakeLog(logEntries())(request)) })
     expect(screen.getByText('Something went wrong.')).toBeTruthy()
+    // The menu is there, as the logs could be listed
+    expect(within(screen.getByRole('combobox', { name: 'Log' })).getAllByRole('option')).toHaveLength(2)
     failing = false
     fireEvent.click(screen.getByRole('button', { name: 'Try Again' }))
     await settle()
@@ -213,7 +216,7 @@ describe("The Server Log's lines", () => {
     expect(source.getAttribute('title')).toBe('com.logicaldoc.healdan.storage.Mover:322')
     const stack = error.querySelector('pre')!
     expect(stack.textContent).toBe('java.net.SocketException: Connection reset\n\tat java.base/sun.nio.ch.NioSocketImpl.implRead(NioSocketImpl.java:318)')
-    await expectNoAxeViolationsInBothThemes(view.container)
+    await expectNoAxeViolationsAtTheEnd(view.container)
   })
 
   it("shows a line that starts no entry with no time, level or source, as a stack's own line", async () => {
@@ -497,6 +500,63 @@ describe('Following', () => {
     expect(earlier(api)[0]).toEqual({ before: `p${1200 - MAX_KEPT}`, level: 'all' })
   })
 
+  it(`doesn't move someone reading near the top of ${MAX_KEPT} entries as more follow in: it pauses, keeping their lines`, async () => {
+    const log = manyEntries(200)
+    const { api } = await openLog('/server-log', logRoutes(log))
+    for (let round = 0; round < 4; round++) {
+      log.push(...manyEntries(200).map((entry, i) => ({ ...entry, message: `Entry ${200 + round * 200 + i}` })))
+      await wait(FOLLOW_MS)
+      await settle()
+    }
+    expect(shown()).toHaveLength(MAX_KEPT)
+    const lines = box()
+    const scroll = layOut(lines)
+    // Entry 5 at the top of the box
+    scroll.scrollTo(5 * 20)
+    log.push(...manyEntries(50).map((entry, i) => ({ ...entry, message: `Entry ${1000 + i}` })))
+    await wait(FOLLOW_MS)
+    await settle()
+    // Not thrown to the end, nor anywhere else: entry 5 is where it was, with every line above it kept
+    expect(scroll.top).toBeLessThan(lines.scrollHeight - lines.clientHeight)
+    expect(scroll.top).toBe(5 * 20)
+    expect(shown()[0]).toBe('Entry 0')
+    expect(shown()).toHaveLength(MAX_KEPT)
+    expect(screen.getByText('Paused')).toBeTruthy()
+    expect(screen.getByText('Following paused, so the earlier lines stay. Follow goes back to the newest.')).toBeTruthy()
+    await wait(FOLLOW_MS * 2)
+    expect(follows(api)).toHaveLength(5)
+
+    // Follow goes back to the newest, from where it paused, and drops the oldest again
+    fireEvent.click(screen.getByRole('button', { name: 'Follow' }))
+    await settle()
+    expect(follows(api).at(-1)).toEqual({ after: `p${MAX_KEPT}`, level: 'all' })
+    expect(shown().at(-1)).toBe('Entry 1049')
+    expect(shown()[0]).toBe('Entry 50')
+    expect(scroll.top).toBe(lines.scrollHeight - lines.clientHeight)
+  })
+
+  it("puts someone reading further up at the top of what's left, never the end, when the entry they read has gone", async () => {
+    const { api } = await openLog('/server-log', {
+      'GET /v1/admin/logs/*/lines': (request: Request) => {
+        // The log rolls over: ten entries of the new file, taller than the box
+        if (request.query?.after === 'p9')
+          return { lines: Array.from({ length: 10 }, (_, i) => logLine(`n${i}`, { message: `New file ${i}` })), before: 'n0', after: 'n10', atStart: false, atEnd: true, rolled: true } satisfies A['LogLines']
+        if (request.query?.before === 'n0') return { lines: [], before: 'n0', after: 'n0', atStart: true, atEnd: false, rolled: false } satisfies A['LogLines']
+        return fakeLog(logEntries())(request)
+      },
+    })
+    const lines = box()
+    const scroll = layOut(lines, 100)
+    // Reading entry 2 of the old file, which the new one's entries replace
+    scroll.scrollTo(40)
+    await wait(FOLLOW_MS)
+    await settle()
+    expect(shown()).toHaveLength(10)
+    expect(lines.scrollHeight - lines.clientHeight).toBe(100)
+    expect(scroll.top).toBe(0)
+    expect(earlier(api)).toEqual([{ before: 'n0', level: 'all' }])
+  })
+
   it("doesn't take the focus, or the place of someone reading further up, as lines come; at the end, it keeps to the end", async () => {
     const log = logEntries()
     await openLog('/server-log', logRoutes(log))
@@ -592,6 +652,41 @@ describe('Earlier lines', () => {
     expect(shown().at(-1)).toBe('Entry 1199')
     expect(shown()).toHaveLength(MAX_KEPT)
     expect(screen.queryByText('Following paused, so the earlier lines stay. Follow goes back to the newest.')).toBeNull()
+  })
+
+  it('follow again once the log or a filter changes, after a pause that only kept the earlier lines', async () => {
+    const { api } = await openLog('/server-log', logRoutes(manyEntries(1200)))
+    for (let press = 0; press < 5; press++) {
+      fireEvent.click(within(box()).getByRole('button', { name: 'Show Earlier' }))
+      await settle()
+    }
+    expect(screen.getByText('Paused')).toBeTruthy()
+    fireEvent.click(screen.getByRole('radio', { name: 'Errors' }))
+    await settle()
+    expect(screen.getByText('Following Live')).toBeTruthy()
+    expect(screen.queryByText('Following paused, so the earlier lines stay. Follow goes back to the newest.')).toBeNull()
+    await wait(FOLLOW_MS)
+    await settle()
+    expect(follows(api).at(-1)).toEqual({ after: 'p1200', level: 'error' })
+
+    // A pause the person chose stays across a change
+    fireEvent.click(screen.getByRole('button', { name: 'Pause' }))
+    await settle()
+    fireEvent.click(screen.getByRole('radio', { name: 'Everything' }))
+    await settle()
+    expect(screen.getByText('Paused')).toBeTruthy()
+  })
+
+  it('go back by themselves the same few reads after Show Earlier as after the first read', async () => {
+    // 2,000 entries, one error in every hundred: each read looks through 200, and finds two
+    const { api } = await openLog('/server-log?level=error', logRoutes(manyEntries(2000, (i) => i % 100 === 0)))
+    // The first read, then three by themselves
+    expect(reads(api).map((query) => query?.before)).toEqual([undefined, 'p1800', 'p1600', 'p1400'])
+    fireEvent.click(within(box()).getByRole('button', { name: 'Show Earlier' }))
+    await settle()
+    // The read Show Earlier asked for, then three by themselves, and Show Earlier is offered again
+    expect(earlier(api).map((query) => query?.before)).toEqual(['p1800', 'p1600', 'p1400', 'p1200', 'p1000', 'p800', 'p600'])
+    expect(within(box()).getByRole('button', { name: 'Show Earlier' })).toBeTruthy()
   })
 
   it("say so when they couldn't be read, keeping what's shown", async () => {

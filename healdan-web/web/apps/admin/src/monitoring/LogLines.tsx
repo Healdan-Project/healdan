@@ -98,23 +98,32 @@ export interface LogLinesProps {
  * The box of a log's lines (spec 8.8): oldest at the top, newest at the bottom, with Show Earlier above them, or the start
  * of the log said. It scrolls inside, so it's a Tab stop the arrows scroll, named apart from every other region on the
  * page, and it isn't a live region: lines arriving aren't said one by one, nor do they take the focus. At its end it keeps
- * to its end as lines come; read further up, the entry at its top stays where it is, whatever is added or dropped. Scrolled
- * to its top, it reads earlier lines.
+ * to its end as lines come; read further up, the entry at its top stays where it is, whatever is added or dropped, and the
+ * follow pauses at MAX_KEPT rather than drop the lines being read (it's told, `readingUp`). Should the entry at its top go
+ * all the same, as when the log rolls over, the reader is put at the top of what's left, never the end, and earlier lines
+ * are read. Scrolled to its top, it reads earlier lines.
  */
 export function LogLines({ label, lines, filtered }: LogLinesProps) {
   const box = useRef<HTMLDivElement>(null)
   const atEnd = useRef(true)
   const anchor = useRef<{ position: string; offset: number } | undefined>(undefined)
   const wasFollowing = useRef(lines.following)
+  // The lines as last drawn, for the effects below, which run as the entries change and call into what reads them
+  const latest = useRef(lines)
+  useLayoutEffect(() => {
+    latest.current = lines
+  })
 
   function measure() {
     const element = box.current
     if (!element) return
     atEnd.current = element.scrollHeight - element.scrollTop - element.clientHeight <= END_SLACK
     anchor.current = firstInView(element)
+    latest.current.readingUp(!atEnd.current)
   }
 
-  // As entries are added or dropped: at the end, to the end; else the entry at the top where it was, or the end if it went
+  // As entries are added or dropped: at the end, to the end; else the entry at the top where it was. Should it have gone,
+  // the top of what's left, and the lines before it read, so the reader is never thrown to the newest.
   useLayoutEffect(() => {
     const element = box.current
     if (!element) return
@@ -123,7 +132,10 @@ export function LogLines({ label, lines, filtered }: LogLinesProps) {
     else {
       const item = [...element.querySelectorAll<HTMLElement>('li[data-position]')].find((one) => one.getAttribute('data-position') === kept.position)
       if (item) element.scrollTop = item.offsetTop - kept.offset
-      else element.scrollTop = element.scrollHeight
+      else {
+        element.scrollTop = 0
+        latest.current.showEarlier()
+      }
     }
     measure()
   }, [lines.entries])

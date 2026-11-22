@@ -3,14 +3,13 @@
 
 import { useNavigate } from '@tanstack/react-router'
 import { useId } from 'react'
-import type { adminPaths } from '@healdan/api'
 import { ErrorPanel, useApi } from '@healdan/shell'
 import { Button, Icon, SelectField, StatusDot, TextField, ToggleButtons } from '@healdan/ui'
 import { routes } from '../addresses'
 import { Refusal } from '../forms/Refusal'
 import { useWords } from '../lists/useWords'
 import { LogLines } from '../monitoring/LogLines'
-import { logFileUrl, useLogs } from '../monitoring/logQueries'
+import { logFileUrl, useLogs, type LogLevel } from '../monitoring/logQueries'
 import { useLogLines } from '../monitoring/useLogLines'
 import { StaleNote } from '../people/StaleNote'
 import { typed } from '../pickers/typing'
@@ -18,8 +17,8 @@ import { t } from '../strings'
 import listStyles from '../matters/Matters.module.css'
 import styles from '../monitoring/Monitoring.module.css'
 
-/** The entries a log's lines keep, as `GET /v1/admin/logs/{name}/lines` takes it: everything, warnings and errors, or errors */
-export type LogLevel = NonNullable<NonNullable<adminPaths['/v1/admin/logs/{name}/lines']['get']['parameters']['query']>['level']>
+// The level a log's lines are kept from is the log's reads' (monitoring/logQueries.ts), named here too as the route's
+export type { LogLevel }
 
 export const logLevels = ['all', 'warn', 'error'] as const satisfies readonly LogLevel[]
 

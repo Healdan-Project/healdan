@@ -11,7 +11,7 @@ import { focusLost } from '../focus'
 import { useWords } from '../lists/useWords'
 import { errorColumns, errorRowOf } from '../monitoring/errorColumns'
 import { ErrorDetails } from '../monitoring/ErrorDetails'
-import { useErrorDetail, useErrorList, type ErrorListQuery } from '../monitoring/errorQueries'
+import { isGone, useErrorDetail, useErrorList, type ErrorListQuery } from '../monitoring/errorQueries'
 import { areaWords } from '../monitoring/errorText'
 import { StaleNote } from '../people/StaleNote'
 import { typed } from '../pickers/typing'
@@ -109,9 +109,9 @@ export function ErrorsView({ search }: { search: ErrorsSearch }) {
   const columns = useMemo(() => errorColumns(), [])
   const rows = useMemo(() => listing.items.map(errorRowOf), [listing.items])
   const open = useMemo(() => new Set(search.id === undefined ? [] : [String(search.id)]), [search.id])
-  // A page came, so its rows stay while a new read fails; and so do the details
+  // A page came, so its rows stay while a new read fails; and so do the details, unless the fault has gone, which they say
   const kept = listing.total !== undefined
-  const stale = (listing.isError && kept) || (detail.isError && detail.data !== undefined)
+  const stale = (listing.isError && kept) || (detail.isError && detail.data !== undefined && !isGone(detail.error))
 
   function openFault(key: string, focus: boolean) {
     const id = idFrom(key)

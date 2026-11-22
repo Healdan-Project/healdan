@@ -11,9 +11,14 @@ import { expectNoAxeViolations } from '../test/axe'
 import { errorDetailOf, errorDetails, errorList, errorRoutes, errorRow, errorRows, problem, type Routes } from '../test/fakeApi'
 import { bringObservedIntoView } from '../test/intersection'
 import { renderApp } from '../test/renderApp'
+import { slowAnswer } from '../test/slowAnswer'
 import { errorsSearch } from './ErrorsView'
 
 type A = adminComponents['schemas']
+
+// axe runs once for each state drawn. jsdom draws no colours, so the two themes' colours aren't checked here: every colour
+// is a token, which test/colours.test.ts checks on each surface of both themes, and the phase's browser spec runs axe in
+// the light theme and the dark one.
 
 const pane = () => screen.getByRole('navigation', { name: 'Navigation' })
 const current = () => within(pane()).getAllByRole('link').filter((link) => link.getAttribute('aria-current') === 'page')
@@ -28,34 +33,10 @@ const details = () => screen.getByRole('region', { name: 'Error Details' })
 const pause = () => act(() => new Promise((resolve) => setTimeout(resolve, TYPING_DELAY_MS + 100)))
 const queries = (api: { callsTo: (pattern: string) => { query?: Record<string, unknown> }[] }) => api.callsTo('GET /v1/admin/errors').map((call) => call.query)
 
-/**
- * axe over what's drawn, with the page asking for the light theme and then the dark one (`prefers-color-scheme`). jsdom
- * draws no colours, so this checks the markup under each; the colours themselves are tokens, which colours.test.ts checks
- * on every surface of both themes.
- */
-async function expectNoAxeViolationsInBothThemes(container: Element) {
-  for (const dark of [false, true]) {
-    window.matchMedia = (query: string) =>
-      ({ matches: dark && query.includes('prefers-color-scheme: dark'), media: query, addEventListener: () => {}, removeEventListener: () => {}, addListener: () => {}, removeListener: () => {}, onchange: null, dispatchEvent: () => false }) as unknown as MediaQueryList
-    await expectNoAxeViolations(container)
-  }
-}
-
 async function openErrors(path = '/errors', over: Routes = {}) {
   const rendered = await renderApp(path, { ...errorRoutes(), ...over })
   await within(await screen.findByRole('grid', { name: 'Errors' })).findAllByRole('rowheader')
   return rendered
-}
-
-/** A change the server answers only when the test says, as a slow one would be */
-function slowAnswer<T>() {
-  let answer!: (value: T) => void
-  let refuse!: (error: unknown) => void
-  const answered = new Promise<T>((resolve, reject) => {
-    answer = resolve
-    refuse = reject
-  })
-  return { answered, answer, refuse }
 }
 
 describe('Errors', () => {
@@ -92,16 +73,16 @@ describe('The Errors list', () => {
     expect(cells('Preview conversion')).toEqual(['Previews', '6', formatDateTime('2026-11-18T14:02:00Z'), formatDateTime('2026-11-19T10:41:00Z')])
     expect(cells("Couldn't read PDF text")[0]).toBe('Search Index')
     // The heading's count line: how many times the faults kept were seen, of how many kinds, as the server adds them up
-    expect(screen.getByText('14 errors of 4 kinds')).toBeTruthy()
+    expect(screen.getByText('14 Errors of 4 Kinds')).toBeTruthy()
     expect(queries(api)).toEqual([{ window: '24h', offset: 0, limit: 100 }])
     // 24 Hours is pressed, the screen's default
     expect(screen.getByRole('radio', { name: '24 Hours' }).getAttribute('aria-checked')).toBe('true')
-    await expectNoAxeViolationsInBothThemes(view.container)
+    await expectNoAxeViolations(view.container)
   })
 
-  it('says one error of one kind in the singular', async () => {
+  it('says one error of one kind in the singular, in Title Case as its siblings', async () => {
     await openErrors('/errors', { 'GET /v1/admin/errors': errorList(undefined, [errorRow({ times: 1 })]) })
-    expect(screen.getByText('1 error of 1 kind')).toBeTruthy()
+    expect(screen.getByText('1 Error of 1 Kind')).toBeTruthy()
   })
 
   it('asks again for each window: 1 Hour, 24 Hours, 7 Days and 30 Days, kept in the address', async () => {
@@ -234,7 +215,7 @@ describe("A fault's details", () => {
       'Board Minutes.xlsx (id 5013)',
       'Id 4999, no longer there',
     ])
-    await expectNoAxeViolationsInBothThemes(view.container)
+    await expectNoAxeViolations(view.container)
   })
 
   it('opens the fault the address names, as a reload or a link does, and says who resolved one and when', async () => {
@@ -278,6 +259,20 @@ describe("A fault's details", () => {
     await openErrors('/errors?id=99')
     const region = await screen.findByRole('region', { name: 'Error Details' })
     expect(await within(region).findByText("This error isn't there any more: the server deletes a resolved error once it hasn't been seen for 90 days.")).toBeTruthy()
+  })
+
+  it("says the fault has gone when a re-read finds it no more, rather than that it couldn't refresh", async () => {
+    let gone = false
+    const routes = errorRoutes()
+    const detail = routes['GET /v1/admin/errors/*'] as (request: { params: string[] }) => unknown
+    await openErrors('/errors?id=12', { 'GET /v1/admin/errors/*': (request: { params: string[] }) => (gone ? problem(404, 'not-found') : detail(request)) })
+    const region = await screen.findByRole('region', { name: 'Error Details' })
+    await within(region).findByRole('group', { name: 'Latest Message' })
+    gone = true
+    await act(async () => void window.dispatchEvent(new Event('focus')))
+    expect(await within(region).findByText("This error isn't there any more: the server deletes a resolved error once it hasn't been seen for 90 days.")).toBeTruthy()
+    expect(within(region).queryByRole('group', { name: 'Latest Message' })).toBeNull()
+    expect(screen.queryByText("Couldn't refresh this, so it shows what was read last.")).toBeNull()
   })
 
   it("shows what the server logged as text, never as markup: a fault's message, stack and documents come from log lines", async () => {

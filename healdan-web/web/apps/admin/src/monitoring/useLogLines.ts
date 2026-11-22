@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { apiPath, type Api, type adminComponents } from '@healdan/api'
 import { useApi } from '@healdan/shell'
-import type { LogLevel } from '../views/ServerLogView'
+import type { LogLevel } from './logQueries'
 
 type A = adminComponents['schemas']
 
@@ -12,13 +12,17 @@ type A = adminComponents['schemas']
 export const FOLLOW_MS = 3_000
 /** An answer not at the end of the log is followed by another at once, at most this many in a row (P5-R21, amended) */
 export const QUICK_READS = 5
-/** A short answer going back, not at the start, is followed by another by itself, at most this many in a row (P5-R27) */
+/**
+ * Going back, a short answer not at the start is followed by another by itself, at most this many after the read that
+ * started the run, whichever started it: the first read or Show Earlier (P5-R27)
+ */
 export const EARLIER_RUN = 3
 /** The most entries a read gives (the contract's `maxItems`): an answer with fewer, not at the start, is short */
 export const LOG_PAGE = 200
 /**
- * The most entries the screen keeps: five full reads. Following drops the oldest past it, and Show Earlier drops the
- * newest, pausing the follow so the lines read further back stay.
+ * The most entries the screen keeps: five full reads. Following drops the oldest past it while the box is at its end; with
+ * the reader further up, it pauses there instead, as Show Earlier does past it (dropping the newest), so the lines being
+ * read stay.
  */
 export const MAX_KEPT = 1_000
 
@@ -50,6 +54,11 @@ export interface LogLines extends LogView {
   follow: () => void
   /** Show Earlier, or the box scrolled to its top: the entries before the first kept, then on by itself while short */
   showEarlier: () => void
+  /**
+   * Whether the reader is further up than the box's end, which the box says as it's scrolled: past MAX_KEPT, what's new
+   * then pauses the follow rather than drop the oldest, which may be the lines being read
+   */
+  readingUp: (up: boolean) => void
   /** Try Again, after the first read failed */
   retry: () => void
 }
@@ -78,6 +87,7 @@ interface Session {
   pause(): void
   follow(): void
   showEarlier(): void
+  readingUp(up: boolean): void
   retry(): void
   stop(): void
 }
@@ -102,6 +112,8 @@ function openSession(api: Api, name: string, level: LogLevel, q: string | undefi
   let earlierCall: AbortController | undefined
   // Reads of what's new asked at once, in a row, because the one before wasn't at the end
   let quick = 0
+  // The reader is further up than the box's end
+  let up = false
 
   const show = () => {
     if (!stopped) publish({ ...view })
@@ -140,6 +152,14 @@ function openSession(api: Api, name: string, level: LogLevel, q: string | undefi
       view.rolled = true
     } else {
       const entries = joined(view.entries, answer.lines)
+      if (entries.length > MAX_KEPT && up) {
+        // The oldest may be the lines being read: keep them, and what fits after them, and pause there. Follow reads the
+        // rest again, from the first left out.
+        view.entries = view.entries.length >= MAX_KEPT ? view.entries : entries.slice(0, MAX_KEPT)
+        after = entries[MAX_KEPT]!.position
+        pauseToKeep()
+        return
+      }
       if (entries.length > MAX_KEPT) {
         // Show Earlier reads the dropped ones again, from the first kept
         stopEarlier()
@@ -151,6 +171,14 @@ function openSession(api: Api, name: string, level: LogLevel, q: string | undefi
     after = answer.after
   }
 
+  /** The follow pauses so the lines read further back stay, and says why */
+  function pauseToKeep() {
+    if (!view.following) return
+    stopFollowing()
+    view.following = false
+    view.pausedToKeep = true
+  }
+
   /** Earlier entries are added at the start; past MAX_KEPT the newest go, and the follow pauses so these stay */
   function prepend(answer: A['LogLines']) {
     const entries = joined(answer.lines, view.entries)
@@ -160,11 +188,7 @@ function openSession(api: Api, name: string, level: LogLevel, q: string | undefi
       // A follow reads them again, from the first dropped, once Follow is pressed
       after = entries[MAX_KEPT]!.position
       view.entries = entries.slice(0, MAX_KEPT)
-      if (view.following) {
-        stopFollowing()
-        view.following = false
-        view.pausedToKeep = true
-      }
+      pauseToKeep()
     } else view.entries = entries
   }
 
@@ -201,7 +225,16 @@ function openSession(api: Api, name: string, level: LogLevel, q: string | undefi
     )
   }
 
-  function earlier(run: number) {
+  /**
+   * After a read going back (`byItself` of them asked by the screen itself since the read that started the run): on back by
+   * itself while the answer is short and not at the start, at most EARLIER_RUN reads after the one that started it
+   */
+  function goOnBack(answer: A['LogLines'], byItself: number) {
+    if (isShort(answer) && byItself < EARLIER_RUN) earlier(byItself + 1)
+  }
+
+  /** The entries before the first kept; `byItself` is how many reads of this run the screen asked for by itself, this one included */
+  function earlier(byItself: number) {
     if (view.state !== 'loaded' || view.atStart || before === undefined || earlierCall !== undefined) return
     const call = new AbortController()
     earlierCall = call
@@ -215,7 +248,7 @@ function openSession(api: Api, name: string, level: LogLevel, q: string | undefi
         view.earlier = 'idle'
         show()
         // A short answer goes on back by itself, a few in a row; then Show Earlier asks again
-        if (isShort(answer) && run < EARLIER_RUN) earlier(run + 1)
+        goOnBack(answer, byItself)
       },
       () => {
         if (stopped || call !== earlierCall) return
@@ -241,7 +274,8 @@ function openSession(api: Api, name: string, level: LogLevel, q: string | undefi
         view.state = 'loaded'
         view.error = undefined
         show()
-        if (isShort(answer)) earlier(1)
+        // The first read starts a run, as Show Earlier does
+        goOnBack(answer, 0)
         schedule()
       },
       (error: unknown) => {
@@ -272,6 +306,8 @@ function openSession(api: Api, name: string, level: LogLevel, q: string | undefi
       show()
     },
     follow() {
+      // Follow goes back to the newest: the box goes to its end
+      up = false
       view.following = true
       view.pausedToKeep = false
       show()
@@ -279,6 +315,9 @@ function openSession(api: Api, name: string, level: LogLevel, q: string | undefi
     },
     showEarlier() {
       earlier(0)
+    },
+    readingUp(next: boolean) {
+      up = next
     },
     retry() {
       if (view.state !== 'failed') return
@@ -310,15 +349,17 @@ export function useLogLines(name: string | undefined, level: LogLevel, q: string
   const key = name === undefined ? undefined : JSON.stringify([name, level, q ?? ''])
   const [view, setView] = useState<LogView>(() => viewOf(true))
   const [shownKey, setShownKey] = useState(key)
+  // A pause made only to keep the lines read further back ends with them: the new log or filters follow again
+  const followNext = view.following || view.pausedToKeep
   if (key !== shownKey) {
     setShownKey(key)
-    setView(viewOf(view.following))
+    setView(viewOf(followNext))
   }
   // Read by a new session, which a change of log or filters opens after a pause
-  const following = useRef(view.following)
+  const following = useRef(followNext)
   useEffect(() => {
-    following.current = view.following
-  }, [view.following])
+    following.current = followNext
+  }, [followNext])
 
   const session = useRef<Session | undefined>(undefined)
   useEffect(() => {
@@ -336,6 +377,7 @@ export function useLogLines(name: string | undefined, level: LogLevel, q: string
     pause: () => session.current?.pause(),
     follow: () => session.current?.follow(),
     showEarlier: () => session.current?.showEarlier(),
+    readingUp: (up: boolean) => session.current?.readingUp(up),
     retry: () => session.current?.retry(),
   }
 }

@@ -4,13 +4,13 @@
 import { useQueryClient, type UseQueryResult } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { Fragment, useId, useState, type Ref } from 'react'
-import { ApiError, type adminComponents } from '@healdan/api'
+import type { adminComponents } from '@healdan/api'
 import { ErrorPanel, useApi } from '@healdan/shell'
 import { Button, Icon, toast } from '@healdan/ui'
 import { routes } from '../addresses'
 import { Refusal } from '../forms/Refusal'
 import { t } from '../strings'
-import { errorChanged, markError } from './errorQueries'
+import { errorChanged, isGone, markError } from './errorQueries'
 import { documentWords, errorDetailsText, errorFacts, logSearchWords } from './errorText'
 import styles from './Monitoring.module.css'
 
@@ -142,15 +142,15 @@ export interface ErrorDetailsProps {
  * the documents it names, its latest message and stack, Mark Resolved or Reopen, Show in Server Log and Copy Details.
  * The region scrolls inside, so it's a Tab stop of its own, named by its heading. Everything from the server is drawn as
  * text: a fault's message, stack and documents come from what was logged. While a re-read fails, the last answer stays
- * (the page says so); a fault the server no longer has says so.
+ * (the page says so); a fault the server no longer has says so, even when it was read before.
  */
 export function ErrorDetails({ query, onClose, regionRef }: ErrorDetailsProps) {
   const headingId = useId()
-  const gone = query.error instanceof ApiError && query.error.status === 404
   let body
+  // Gone first: a re-read's 404 means the fault read before is no more, not that it couldn't refresh
+  if (isGone(query.error)) body = <p className={styles.note}>{t('admin.errors.gone')}</p>
   // A fault of its own for each, so what one's button was doing doesn't stay on the next one's
-  if (query.data !== undefined) body = <Fault key={query.data.id} detail={query.data} />
-  else if (gone) body = <p className={styles.note}>{t('admin.errors.gone')}</p>
+  else if (query.data !== undefined) body = <Fault key={query.data.id} detail={query.data} />
   else if (query.isError) body = <ErrorPanel error={query.error} onRetry={() => void query.refetch()} />
   else body = <p className={styles.note}>{t('common.loading')}</p>
 

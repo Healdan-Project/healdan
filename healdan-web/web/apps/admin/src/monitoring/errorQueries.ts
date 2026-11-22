@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { useQuery, type QueryClient } from '@tanstack/react-query'
-import { apiPath, type Api, type adminComponents } from '@healdan/api'
+import { ApiError, apiPath, type Api, type adminComponents } from '@healdan/api'
 import { ASK_ON_RETURN, useApi } from '@healdan/shell'
 import { usePagedList, type PagedListing } from '../lists/usePagedList'
 import { adminKey, adminKeys } from '../queries'
@@ -47,6 +47,14 @@ export function useErrorDetail(id: number | undefined) {
     enabled: id !== undefined,
     meta: ASK_ON_RETURN,
   })
+}
+
+/**
+ * A read of a fault that found it no more (`404`), as after the server deleted a resolved fault not seen for 90 days: the
+ * details say it has gone, whatever was read of it before, and no re-read brings it back
+ */
+export function isGone(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 404
 }
 
 /** Mark Resolved, or Reopen for a resolved fault: the fault as the server then has it */
