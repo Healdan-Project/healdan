@@ -217,13 +217,13 @@ public final class TemporaryPasswords {
 		email.setUsername(user.getUsername());
 		email.setSentDate(new Date());
 		email.setLocale(user.getLocale());
-		// Unlike LogicalDOC's: never filed as a document, wherever the admin keeps a copy of each email sent
+		// Never filed as a document, wherever the admin keeps a copy of each email sent
 		email.setHistoricyze(false);
 
 		Map<String, Object> dictionary = new HashMap<>();
 		dictionary.put("url", Context.get().getConfig().getProperty("server.url"));
 		dictionary.put("user", user);
-		// Unlike LogicalDOC's, escaped: the email is HTML, and a password may hold an &
+		// Escaped: the email is HTML, and a password may hold an &
 		dictionary.put("password", StringEscapeUtils.escapeHtml(pending.password()));
 		try {
 			OutgoingEmail.fill(email, CREDENTIALS_TEMPLATE, dictionary);

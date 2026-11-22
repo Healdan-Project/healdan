@@ -62,6 +62,7 @@ import com.logicaldoc.healdan.HealdanConstants;
 import com.logicaldoc.healdan.HealdanRuleException;
 import com.logicaldoc.healdan.admin.FieldRefusal;
 import com.logicaldoc.healdan.admin.Page;
+import com.logicaldoc.healdan.admin.PersonNames;
 import com.logicaldoc.healdan.matter.Matter;
 import com.logicaldoc.healdan.signin.GroupMapping;
 import com.logicaldoc.healdan.signin.IdClaims;
@@ -641,7 +642,39 @@ public class UserAdministrationTest extends AbstractHealdanTestCase {
 		refusal = assertThrows(FieldRefusal.class, () -> service.update(carol.getId(),
 				new UserDraft("carla", "Caroline", "Ng", null, null, null, null), admin));
 		assertEquals(List.of(field("username", FieldRefusal.NOT_EDITABLE)), codes(refusal));
+		// An edit changes no groups, refused before its fields
+		assertThrows(IllegalArgumentException.class, () -> service.update(carol.getId(),
+				new UserDraft(null, " ", null, "x", null, null, List.of()), admin));
 		assertEquals(2, events("user").size());
+	}
+
+	@Test
+	public void testAnEditKeepsAStoredBlankName() throws Exception {
+		// As a provider's claims can leave a name
+		User carol = named(fx.user("carol"), "Carol", "", "carol@firm.example");
+		User jane = providerAccount("jane");
+		jdbc.update("update ld_user set ld_firstname = '' where ld_id = ?", jane.getId());
+		UserDAO.get().evict(jane.getId());
+
+		// Sent back blank or left null, as the route merges a blank one, it stays blank
+		assertTrue(service.update(carol.getId(), UserDraft.edit("Carol", null, "c@firm.example", null, null), admin));
+		assertFalse(service.update(carol.getId(), UserDraft.edit("Carol", "  ", "c@firm.example", null, null), admin));
+		assertNull(service.person(carol.getId(), admin).row().lastName());
+		assertTrue(service.update(jane.getId(), UserDraft.edit(null, jane.getName(), "jd@firm.example", null, null),
+				admin));
+		assertNull(service.person(jane.getId(), admin).row().firstName());
+		assertEquals(List.of("PEOPLE user.changed user %d Carol (carol) %s".formatted(carol.getId(),
+				"{\"email\":{\"before\":\"carol@firm.example\",\"after\":\"c@firm.example\"}}"),
+				"PEOPLE user.changed user %d %s %s".formatted(jane.getId(), PersonNames.recorded("", jane.getName(),
+						"jane"), "{\"email\":{\"before\":\"jane@firm.example\",\"after\":\"jd@firm.example\"}}")),
+				events("user"));
+
+		// One typed is taken, and a stored one can't be blanked
+		assertTrue(service.update(carol.getId(), UserDraft.edit("Carol", "Ng", "c@firm.example", null, null), admin));
+		assertEquals("Ng", service.person(carol.getId(), admin).row().lastName());
+		FieldRefusal refusal = assertThrows(FieldRefusal.class,
+				() -> service.update(carol.getId(), UserDraft.edit("Carol", " ", "c@firm.example", null, null), admin));
+		assertEquals(List.of(field("lastName", FieldRefusal.REQUIRED)), codes(refusal));
 	}
 
 	@Test
@@ -693,6 +726,8 @@ public class UserAdministrationTest extends AbstractHealdanTestCase {
 				() -> service.resetPassword(carol.getId(), false, clerk),
 				() -> service.signOut(carol.getId(), clerk), () -> service.clearBlock(carol.getId(), clerk),
 				() -> service.setGroups(carol.getId(), List.of(), clerk),
+				// Before its list's own checks
+				() -> service.setGroups(carol.getId(), List.of(partners.getId(), partners.getId()), clerk),
 				() -> service.revokeDevice(carol.getId(), 1L, clerk));
 		for (ThrowingRunnable change : changes) {
 			HealdanRuleException e = assertThrows(HealdanRuleException.class, change::run);
@@ -909,19 +944,30 @@ public class UserAdministrationTest extends AbstractHealdanTestCase {
 		Session web = SessionManager.get().newSession("carol", HealdanFixtures.PASSWORD, client);
 		ApiTokens.get().issue(carol, "Laptop", null);
 		ApiTokens.get().issue(carol, "Phone", null);
+		ApiToken expired = ApiTokens.get().issue(carol, "Old Laptop", null).row();
+		expire(expired);
 		Session mine = SessionManager.get().newSession("admin", "admin", client);
 
+		// The devices their page shows; the expired one is revoked too
 		assertEquals(new SignedOut(1, 2), service.signOut(carol.getId(), admin));
 
 		assertFalse(SessionManager.get().isOpen(web.getSid()));
 		assertTrue(SessionManager.get().isOpen(mine.getSid()));
 		assertEquals(List.of(), ApiTokens.get().list(carol.getId()));
+		assertEquals(1, revoked(expired));
 		assertEquals(List.of("PEOPLE user.signed-out user %d carol carol (carol) %s".formatted(carol.getId(),
 				"{\"devices\":{\"before\":\"2\",\"after\":\"0\"},\"sessions\":{\"before\":\"1\",\"after\":\"0\"}}")),
 				events("user"));
 
 		// Nothing left to close: not recorded
 		assertEquals(new SignedOut(0, 0), service.signOut(carol.getId(), admin));
+		assertEquals(1, events("user").size());
+		// Nor a device the page doesn't show, which is revoked all the same
+		User dave = fx.user("dave");
+		ApiToken idle = ApiTokens.get().issue(dave, "Idle", null).row();
+		expire(idle);
+		assertEquals(new SignedOut(0, 0), service.signOut(dave.getId(), admin));
+		assertEquals(1, revoked(idle));
 		assertEquals(1, events("user").size());
 
 		// Signing yourself out closes your own session too
@@ -1210,6 +1256,18 @@ public class UserAdministrationTest extends AbstractHealdanTestCase {
 		for (int i = 0; i < 5; i++)
 			assertThrows(AuthenticationException.class,
 					() -> SessionManager.get().newSession(username, "Not-the-password-1", client));
+	}
+
+	/** Makes a token expired with JDBC, so no list shows it */
+	private void expire(ApiToken token) {
+		jdbc.update("update hd_api_token set hd_expires = ? where ld_id = ?",
+				java.sql.Timestamp.from(Instant.now().minus(Duration.ofDays(1))), token.getId());
+	}
+
+	/** @return the token's row's deleted flag */
+	private int revoked(ApiToken token) {
+		return jdbc.queryForObject("select ld_deleted from hd_api_token where ld_id = ?", Integer.class,
+				token.getId());
 	}
 
 	private long addressCount() {

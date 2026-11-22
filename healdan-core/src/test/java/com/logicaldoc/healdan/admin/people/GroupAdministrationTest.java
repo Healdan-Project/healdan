@@ -243,6 +243,44 @@ public class GroupAdministrationTest extends AbstractHealdanTestCase {
 	}
 
 	@Test
+	public void testAGroupsNameIsAtMost200Characters() throws Exception {
+		String longest = "x".repeat(200);
+
+		assertEquals(longest, service.create(longest, null, admin).row().name());
+		assertEquals(List.of(field("name", FieldRefusal.TOO_LONG)),
+				codes(() -> service.create("y".repeat(201), null, admin)));
+		assertEquals(List.of(field("name", FieldRefusal.TOO_LONG)),
+				codes(() -> service.update(partners.getId(), "z".repeat(201), null, admin)));
+		assertEquals("Partners", service.group(partners.getId(), admin).row().name());
+		assertEquals(1, events().size());
+	}
+
+	@Test
+	public void testAnOlderLongNameStaysEditableButTheGroupIsntDeleted() throws Exception {
+		// Named elsewhere, longer than 200 characters, and too long to be kept as <name>.<id> once deleted
+		String older = "o".repeat(255 - String.valueOf(partners.getId()).length());
+		assertTrue(older.length() > 200);
+		jdbc.update("update ld_group set ld_name = ? where ld_id = ?", older, partners.getId());
+		GroupDAO.get().evict(partners.getId());
+
+		assertTrue(service.update(partners.getId(), older, "x", admin));
+		assertEquals(older, service.group(partners.getId(), admin).row().name());
+		assertEquals("x", service.group(partners.getId(), admin).row().description());
+		assertEquals(List.of(field("name", FieldRefusal.TOO_LONG)),
+				codes(() -> service.update(partners.getId(), older + "s", "x", admin)));
+
+		HealdanRuleException e = assertThrows(HealdanRuleException.class,
+				() -> service.delete(partners.getId(), admin));
+		assertEquals(GroupAdministration.NAME_TOO_LONG_TO_DELETE
+				.formatted(255 - 1 - String.valueOf(partners.getId()).length()), e.getMessage());
+		assertTrue(service.isGroup(partners.getId(), admin));
+		assertEquals(0, jdbc.queryForObject("select ld_deleted from ld_group where ld_id = ?", Integer.class,
+				partners.getId()).intValue());
+		// Only the description's change is recorded
+		assertEquals(List.of("group.changed"), events().stream().map(event -> event.split(" ")[1]).toList());
+	}
+
+	@Test
 	public void testTwoCreatesOfOneNameInAnyCase() throws Exception {
 		Thread[] threads = new Thread[2];
 		java.util.concurrent.atomic.AtomicInteger arrived = new java.util.concurrent.atomic.AtomicInteger();
@@ -336,6 +374,44 @@ public class GroupAdministrationTest extends AbstractHealdanTestCase {
 		assertEquals(List.of("PEOPLE group.deleted group %d clerks null".formatted(clerks.getId())), events());
 		// Its name is free again
 		assertEquals("clerks", service.create("clerks", null, admin).row().name());
+	}
+
+	@Test
+	public void testDeletingAGroupNeverStoresASystemAccount() throws Exception {
+		User carol = fx.user("carol", "Partners");
+		User gone = fx.user("gone");
+		UserDAO.get().delete(gone.getId(), null);
+		String goneName = jdbc.queryForObject("select ld_username from ld_user where ld_id = ?", String.class,
+				gone.getId());
+		// A system account and a deleted account in the group, as data from before could have them
+		jdbc.update("insert into ld_usergroup (ld_groupid, ld_userid) values (?, -1010)", partners.getId());
+		jdbc.update("insert into ld_usergroup (ld_groupid, ld_userid) values (?, ?)", partners.getId(), gone.getId());
+		int systemHistory = jdbc.queryForObject("select count(*) from ld_user_history where ld_userid = -1010",
+				Integer.class);
+		int systemGroups = jdbc.queryForObject(
+				"select count(*) from ld_usergroup where ld_userid = -1010 and not ld_groupid = ?", Integer.class,
+				partners.getId());
+
+		service.delete(partners.getId(), admin);
+
+		// The system account is still one, never stored: no history, its other groups kept
+		assertEquals(User.Type.SYSTEM.ordinal(),
+				jdbc.queryForObject("select ld_type from ld_user where ld_id = -1010", Integer.class).intValue());
+		assertEquals(systemHistory, jdbc
+				.queryForObject("select count(*) from ld_user_history where ld_userid = -1010", Integer.class)
+				.intValue());
+		assertEquals(systemGroups, jdbc.queryForObject("select count(*) from ld_usergroup where ld_userid = -1010",
+				Integer.class).intValue());
+		// The deleted account isn't stored either
+		assertEquals(goneName, jdbc.queryForObject("select ld_username from ld_user where ld_id = ?", String.class,
+				gone.getId()));
+		assertEquals(1, jdbc.queryForObject("select ld_deleted from ld_user where ld_id = ?", Integer.class,
+				gone.getId()).intValue());
+		// No membership of the group is left, the person's taken out through LogicalDOC's store
+		assertEquals(0, jdbc.queryForObject("select count(*) from ld_usergroup where ld_groupid = ?", Integer.class,
+				partners.getId()).intValue());
+		assertFalse(UserDAO.get().findById(carol.getId(), true).isMemberOf("Partners"));
+		assertEquals(List.of("PEOPLE group.deleted group %d Partners null".formatted(partners.getId())), events());
 	}
 
 	@Test

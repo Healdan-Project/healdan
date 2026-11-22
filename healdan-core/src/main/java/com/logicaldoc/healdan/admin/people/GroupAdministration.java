@@ -71,9 +71,9 @@ public class GroupAdministration {
 
 	public static final String NOT_A_GROUP = "That group doesn't exist.";
 
-	public static final String FIXED_RENAME = "The %s group is one of LogicalDOC's own, so it can't be renamed.";
+	public static final String FIXED_RENAME = "The %s group is one Healdan needs, so it can't be renamed.";
 
-	public static final String FIXED_DELETE = "The %s group is one of LogicalDOC's own, so it's never deleted.";
+	public static final String FIXED_DELETE = "The %s group is one Healdan needs, so it's never deleted.";
 
 	public static final String MAPPED = "A sign-in provider's group map names this group. Take it out of the sign-in "
 			+ "provider's group map first.";
@@ -343,17 +343,18 @@ public class GroupAdministration {
 	public void delete(long id, User actor) throws PersistenceException {
 		UserAdministration.requireAdmin(actor);
 		long tenantId = actor.getTenantId();
-		GroupRecord group = existing(id, tenantId);
-		if (FIXED.contains(group.name()))
-			throw new HealdanRuleException(FIXED_DELETE.formatted(group.name()));
-		if (mappedBy().containsKey(id))
-			throw new HealdanRuleException(MAPPED);
-		// LogicalDOC keeps a deleted group as <name>.<id>, which the column must hold
-		if ((group.name() + "." + id).length() > MAX_TEXT)
-			throw new HealdanRuleException(NAME_TOO_LONG_TO_DELETE.formatted(MAX_TEXT - 1 - String.valueOf(id).length()));
-
 		people.inTransaction(() -> {
+			// Read where it's deleted: a provider's map could name it meanwhile, or another route rename it
 			GroupRecord now = existing(id, tenantId);
+			if (FIXED.contains(now.name()))
+				throw new HealdanRuleException(FIXED_DELETE.formatted(now.name()));
+			if (mappedBy().containsKey(id))
+				throw new HealdanRuleException(MAPPED);
+			// A deleted group is kept as <name>.<id>, which the column must hold
+			if ((now.name() + "." + id).length() > MAX_TEXT)
+				throw new HealdanRuleException(
+						NAME_TOO_LONG_TO_DELETE.formatted(MAX_TEXT - 1 - String.valueOf(id).length()));
+
 			evictor.evictGroupsOnRollback(List.of(id));
 			List<Account> members = reads.accounts(tenantId, null, id);
 			evictor.evictUsersOnRollback(members.stream().map(Account::id).toList());

@@ -6,7 +6,6 @@ package com.logicaldoc.healdan.admin.people;
 import java.security.NoSuchAlgorithmException;
 import java.sql.SQLException;
 import java.time.Instant;
-import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Date;
@@ -32,14 +31,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import org.springframework.transaction.support.TransactionTemplate;
 
 import com.logicaldoc.core.PersistenceException;
-import com.logicaldoc.core.document.Document;
-import com.logicaldoc.core.document.DocumentDAO;
-import com.logicaldoc.core.document.DocumentEvent;
-import com.logicaldoc.core.document.DocumentHistory;
-import com.logicaldoc.core.document.DocumentHistoryDAO;
-import com.logicaldoc.core.document.DocumentStatus;
 import com.logicaldoc.core.security.HealdanThrottle;
-import com.logicaldoc.core.security.TenantDAO;
 import com.logicaldoc.core.security.user.Group;
 import com.logicaldoc.core.security.user.GroupDAO;
 import com.logicaldoc.core.security.user.User;
@@ -59,12 +51,6 @@ import com.logicaldoc.healdan.admin.PersonNames;
 import com.logicaldoc.healdan.admin.people.PeopleReads.Account;
 import com.logicaldoc.healdan.admin.people.PeopleReads.Counter;
 import com.logicaldoc.healdan.admin.people.PeopleReads.Throttle;
-import com.logicaldoc.healdan.matter.Client;
-import com.logicaldoc.healdan.matter.ClientDAO;
-import com.logicaldoc.healdan.matter.FolderPosition;
-import com.logicaldoc.healdan.matter.Matter;
-import com.logicaldoc.healdan.matter.MatterDisplay;
-import com.logicaldoc.healdan.matter.MatterLocator;
 import com.logicaldoc.healdan.rules.FilingRules;
 import com.logicaldoc.healdan.signin.OutgoingEmail;
 import com.logicaldoc.healdan.signin.SignInProvider;
@@ -72,12 +58,7 @@ import com.logicaldoc.healdan.signin.SignInProviders;
 import com.logicaldoc.healdan.signin.TemporaryPasswords;
 import com.logicaldoc.healdan.token.ApiToken;
 import com.logicaldoc.healdan.token.ApiTokens;
-import com.logicaldoc.healdan.token.DeviceHolds;
 import com.logicaldoc.healdan.util.CacheEvictor;
-import com.logicaldoc.healdan.util.StorableText;
-import com.logicaldoc.i18n.I18N;
-import com.logicaldoc.util.LocaleUtil;
-import com.logicaldoc.util.html.HTMLSanitizer;
 import com.logicaldoc.util.spring.Context;
 
 /**
@@ -121,8 +102,8 @@ public class UserAdministration {
 	};
 
 	/**
-	 * Run inside each lock's transaction, after its write and its check, just before the commit; a test sets it to
-	 * hold a change there while another tries to start
+	 * Run inside each lock's transaction, once it has written and, for a change of the enabled administrators, counted
+	 * them; a test sets it to hold a change there while another tries to start
 	 */
 	static volatile Runnable whileLocked = NOTHING;
 
@@ -154,35 +135,6 @@ public class UserAdministration {
 
 	public static final String TAKEN = "Another account already has that username.";
 
-	static final String NO_USERNAME = "Give the person a username.";
-
-	static final String LONG_USERNAME = "A username can't be longer than 255 characters.";
-
-	static final String BAD_USERNAME = "A username can't contain '>', control characters or "
-			+ StorableText.CANT_KEEP + ".";
-
-	static final String USERNAME_FIXED = "A username never changes.";
-
-	static final String NO_FIRST_NAME = "Give the person a first name.";
-
-	static final String NO_LAST_NAME = "Give the person a last name.";
-
-	static final String LONG_NAME = "A name can't be longer than 255 characters.";
-
-	static final String BAD_NAME = "A name can't contain control characters, markup or " + StorableText.CANT_KEEP
-			+ ".";
-
-	static final String LONG_EMAIL = "An email address can't be longer than 255 characters.";
-
-	static final String BAD_EMAIL = "That isn't an email address.";
-
-	static final String BAD_LANGUAGE = "Choose one of the languages offered.";
-
-	static final String BAD_TIME_ZONE = "Choose one of the time zones offered.";
-
-	/** The longest username, name or email address the account's columns hold */
-	static final int MAX_TEXT = 255;
-
 	/** LogicalDOC's administrator's username, the account that always stays in the admin group */
 	static final String ADMIN_ACCOUNT = "admin";
 
@@ -191,9 +143,6 @@ public class UserAdministration {
 
 	/** The group read-only accounts belong to */
 	static final String GUEST_GROUP = "guest";
-
-	/** The language a person gets when none is chosen, when it's offered */
-	static final String DEFAULT_LANGUAGE = "en";
 
 	/** What the administration record calls a person */
 	static final String USER = "user";
@@ -280,12 +229,12 @@ public class UserAdministration {
 			return null;
 		Account account = found.get(0);
 		PersonRow row = rows(tenantId, id, found).get(0);
-		boolean provider = row.signsInWith().kind() == SignsInWith.Kind.PROVIDER;
-		boolean mustChange = !provider && account.source() == UserSource.DEFAULT.ordinal()
+		boolean provider = providerAccount(UserSource.values()[account.source()]);
+		boolean mustChange = !provider
 				&& (account.passwordExpired() || UserDAO.get().isPasswordExpired(account.username()));
-		return new Person(row, account.language() != null ? account.language() : defaultLanguage(tenantId),
+		return new Person(row, account.language() != null ? account.language() : UserForm.defaultLanguage(tenantId),
 				account.timeZone(), account.created(), provider ? null : account.passwordChanged(), mustChange,
-				shownCheckouts(id).size(), reads.mattersOwned(id), refusals(row, reader));
+				PersonCheckouts.count(id), reads.mattersOwned(id), refusals(row, provider, reader));
 	}
 
 	/**
@@ -298,8 +247,8 @@ public class UserAdministration {
 				.map(p -> new SignsInWith.Provider(p.id(),
 						StringUtils.isNotBlank(p.label()) ? p.label() : p.id()))
 				.toList();
-		return new UserOptions(languages(tenantId), defaultLanguage(tenantId), timeZones(), providers,
-				OutgoingEmail.isSetUp());
+		return new UserOptions(UserForm.languages(tenantId), UserForm.defaultLanguage(tenantId), UserForm.timeZones(),
+				providers, OutgoingEmail.isSetUp());
 	}
 
 	/**
@@ -324,28 +273,7 @@ public class UserAdministration {
 	 * @return their check-outs, the latest first, then by doc #, highest first
 	 */
 	public List<CheckedOut> checkouts(long id) {
-		try {
-			List<CheckedOut> held = new ArrayList<>();
-			for (Document doc : shownCheckouts(id)) {
-				FolderPosition position = MatterLocator.get().locate(doc.getFolder().getId());
-				Matter matter = position.matter();
-				CheckedOut.Matter brief = null;
-				if (matter != null) {
-					Client client = ClientDAO.get().findById(matter.getClientId());
-					brief = new CheckedOut.Matter(matter.getId(),
-							MatterDisplay.number(client.getNumber(), matter.getNumber()), matter.getName());
-				}
-				DeviceHolds.Held device = DeviceHolds.get().held(doc).orElse(null);
-				held.add(new CheckedOut(Long.parseLong(doc.getCustomId()), doc.getFileVersion(), doc.getFileName(),
-						brief, since(doc), device != null ? device.name() : null,
-						device != null ? device.row().getApp() : null));
-			}
-			held.sort(Comparator.comparing(CheckedOut::since, Comparator.nullsLast(Comparator.reverseOrder()))
-					.thenComparing(Comparator.comparingLong(CheckedOut::docNumber).reversed()));
-			return held;
-		} catch (PersistenceException e) {
-			throw new IllegalStateException("Can't list the check-outs of user " + id, e);
-		}
+		return PersonCheckouts.of(id);
 	}
 
 	// Changes
@@ -369,7 +297,7 @@ public class UserAdministration {
 		Objects.requireNonNull(draft, "draft");
 		long tenantId = actor.getTenantId();
 		Set<Long> groupIds = distinct(draft.groupIds());
-		Form form = form(draft, tenantId, null);
+		UserForm form = UserForm.check(draft, tenantId, null, this::taken);
 		checkGroups(groupIds, tenantId);
 		String password = TemporaryPasswords.make(tenantId);
 
@@ -379,6 +307,8 @@ public class UserAdministration {
 				id = inTransaction(() -> {
 					if (taken(form.username()))
 						throw new FieldRefusal(List.of(new FieldRefusal.Field("username", FieldRefusal.TAKEN, TAKEN)));
+					// Again where they're added: a group deleted meanwhile is still read, and would be joined
+					checkGroups(groupIds, tenantId);
 					User user = new User();
 					user.setUsername(form.username());
 					user.setFirstName(form.firstName());
@@ -436,30 +366,33 @@ public class UserAdministration {
 	 * @param actor who changes them
 	 * @return false if they had these details already, which changes nothing
 	 * @throws PersistenceException a refusal: {@link #ONLY_ADMINS}, {@link #NO_PERSON}, {@link #SYSTEM_ACCOUNT}, or a
-	 *         {@link FieldRefusal} for the draft's fields, a username among them, which never changes. Or an error at
+	 *         {@link FieldRefusal} for the draft's fields, a username among them, which never changes. A name, a
+	 *         language or a time zone the person has already is taken as it is, a blank name among them. Or an error at
 	 *         data layer
+	 * @throws IllegalArgumentException for a draft with groups, which an edit doesn't change
 	 */
 	public boolean update(long id, UserDraft draft, User actor) throws PersistenceException {
 		requireAdmin(actor);
 		Objects.requireNonNull(draft, "draft");
+		if (draft.groupIds() != null)
+			throw new IllegalArgumentException("An edit changes no groups");
 		return inTransaction(() -> {
 			User user = changeable(id, actor.getTenantId());
-			Form form = form(draft, user.getTenantId(), user);
-			if (draft.groupIds() != null)
-				throw new IllegalArgumentException("An edit changes no groups");
-			String language = StringUtils.isBlank(user.getLanguage()) ? defaultLanguage(user.getTenantId())
+			UserForm form = UserForm.check(draft, user.getTenantId(), user, this::taken);
+			String language = StringUtils.isBlank(user.getLanguage()) ? UserForm.defaultLanguage(user.getTenantId())
 					: user.getLanguage();
 			Map<String, Change> changes = new HashMap<>();
-			changed(changes, "firstName", blankless(user.getFirstName()), form.firstName());
-			changed(changes, "lastName", blankless(user.getName()), form.lastName());
+			// A stored blank name, which a provider's claims can leave, stays blank until one is typed
+			changed(changes, "firstName", blankless(user.getFirstName()), blankless(form.firstName()));
+			changed(changes, "lastName", blankless(user.getName()), blankless(form.lastName()));
 			changed(changes, "email", blankless(user.getEmail()), form.email());
 			changed(changes, "language", language, form.language());
 			changed(changes, "timeZone", blankless(user.getTimeZone()), form.timeZone());
 			if (changes.isEmpty())
 				return false;
 
-			user.setFirstName(form.firstName());
-			user.setName(form.lastName());
+			user.setFirstName(StringUtils.defaultString(form.firstName()));
+			user.setName(StringUtils.defaultString(form.lastName()));
 			user.setEmail(StringUtils.defaultString(form.email()));
 			user.setLanguage(form.language());
 			user.setTimeZone(form.timeZone());
@@ -579,15 +512,17 @@ public class UserAdministration {
 	 *
 	 * @param id a person
 	 * @param actor who signs them out
-	 * @return how many sessions it closed and devices it revoked
+	 * @return how many sessions it closed, and how many of the devices their page showed it revoked
 	 * @throws PersistenceException a refusal: {@link #ONLY_ADMINS}, {@link #NO_PERSON} or {@link #SYSTEM_ACCOUNT}. Or
 	 *         an error at data layer
 	 */
 	public SignedOut signOut(long id, User actor) throws PersistenceException {
 		requireAdmin(actor);
 		User user = changeable(id, actor.getTenantId());
+		// The devices their page shows; every token of theirs is revoked, expired and idle ones too
+		int devices = ApiTokens.get().list(id).size();
 		int sessions = PersonSessions.closeAll(id);
-		int devices = ApiTokens.get().revokeAll(id);
+		ApiTokens.get().revokeAll(id);
 		if (sessions > 0 || devices > 0)
 			events.recordAfter(new AdminEvent(AdminArea.PEOPLE, "user.signed-out", USER, id,
 					PersonNames.recorded(user), Map.of("sessions", new Change(String.valueOf(sessions), "0"),
@@ -640,7 +575,7 @@ public class UserAdministration {
 	 * @throws IllegalArgumentException for a group listed twice, or a null one
 	 */
 	public boolean setGroups(long id, List<Long> groupIds, User actor) throws PersistenceException {
-		Objects.requireNonNull(actor, "actor");
+		requireAdmin(actor);
 		Set<Long> wanted = distinct(Objects.requireNonNull(groupIds, "groupIds"));
 		return memberships(id, actor, (user, current) -> {
 			Set<Long> target = new TreeSet<>(wanted);
@@ -694,8 +629,8 @@ public class UserAdministration {
 	/**
 	 * Changes a person's memberships of the listed groups (live groups of the tenant but people's own), under
 	 * {@link #ADMIN_CHANGES}, in a transaction of its own: the groups must be listed ones, a read-only account gets
-	 * none but {@code guest}, and the admin group's guards hold. Their own group, and any other group a row lists,
-	 * stays as it is.
+	 * none but {@code guest}, and the admin group's guards hold. The groups a row doesn't list (their own, others'
+	 * own groups, deleted ones) stay as they are.
 	 *
 	 * @return false if their groups were these already, which changes nothing
 	 */
@@ -832,7 +767,7 @@ public class UserAdministration {
 
 	/**
 	 * Inside a guarded change's transaction, after its write: counts the enabled administrators as the change leaves
-	 * them, then runs {@link #whileLocked}, just before the commit
+	 * them, then runs {@link #whileLocked}
 	 *
 	 * @param lowersAdmins whether the change took an enabled administrator out
 	 * @throws HealdanRuleException {@link #LAST_ADMIN} if it leaves none, which rolls it back
@@ -910,8 +845,11 @@ public class UserAdministration {
 		return descending ? comparator.reversed() : comparator;
 	}
 
-	/** The refusals a person's page shows the reader */
-	private Person.Refusals refusals(PersonRow row, User reader) {
+	/**
+	 * @param provider whether it's a provider account ({@link #providerAccount})
+	 * @return the refusals a person's page shows the reader
+	 */
+	private Person.Refusals refusals(PersonRow row, boolean provider, User reader) {
 		boolean admin = ADMIN_ACCOUNT.equals(row.username());
 		boolean self = row.id() == reader.getId();
 		boolean lastAdmin = row.admin() && row.status() != PersonStatus.DISABLED
@@ -919,16 +857,25 @@ public class UserAdministration {
 		// An action that would change nothing is refused nothing: a disabled account's Disable
 		String disable = row.status() == PersonStatus.DISABLED ? null
 				: admin ? DISABLE_ADMIN : self ? DISABLE_YOURSELF : lastAdmin ? LAST_ADMIN : null;
-		String reset = row.signsInWith().kind() == SignsInWith.Kind.PROVIDER ? RESET_PROVIDER
-				: self ? RESET_YOURSELF : null;
+		String reset = provider ? RESET_PROVIDER : self ? RESET_YOURSELF : null;
 		String leaveAdmin = !row.admin() ? null
 				: admin ? ADMIN_STAYS : self ? LEAVE_ADMIN_YOURSELF : lastAdmin ? LAST_ADMIN : null;
 		return new Person.Refusals(disable, null, reset, leaveAdmin);
 	}
 
+	/**
+	 * Whether the account signs in through a sign-in provider, and so has no password here: Reset Password refuses it,
+	 * and its page shows no password change. Unlinking makes it a password account again.
+	 *
+	 * @param source how the account was made
+	 */
+	static boolean providerAccount(UserSource source) {
+		return source != UserSource.DEFAULT;
+	}
+
 	/** @throws HealdanRuleException for a provider account, or one's own */
 	private static void checkResettable(User user, User actor) throws HealdanRuleException {
-		if (user.getSource() != UserSource.DEFAULT)
+		if (providerAccount(user.getSource()))
 			throw new HealdanRuleException(RESET_PROVIDER);
 		if (user.getId() == actor.getId())
 			throw new HealdanRuleException(RESET_YOURSELF);
@@ -1033,173 +980,5 @@ public class UserAdministration {
 
 	private static Instant instant(Date date) {
 		return date != null ? date.toInstant() : null;
-	}
-
-	/**
-	 * @return the documents checked out to the person that the API shows: with a doc # and in a Store, no shortcut
-	 */
-	private List<Document> shownCheckouts(long id) {
-		try {
-			List<Document> shown = new ArrayList<>();
-			for (Document partial : DocumentDAO.get().findByLockUserAndStatus(id, DocumentStatus.CHECKEDOUT)) {
-				// The partial documents the DAO returns are only good for their ids
-				Document doc = DocumentDAO.get().findById(partial.getId());
-				if (doc != null && doc.getDeleted() == 0 && doc.getDocRef() == null && numbered(doc.getCustomId())
-						&& MatterLocator.get().locate(doc.getFolder().getId()).isUnderAStore())
-					shown.add(doc);
-			}
-			return shown;
-		} catch (PersistenceException e) {
-			throw new IllegalStateException("Can't read the check-outs of user " + id, e);
-		}
-	}
-
-	/** Whether a doc # is one the API shows: digits, at most 18 */
-	private static boolean numbered(String customId) {
-		return customId != null && !customId.isEmpty() && customId.length() <= 18
-				&& customId.chars().allMatch(c -> c >= '0' && c <= '9');
-	}
-
-	/** When the holder checked the document out: their latest check-out of it */
-	private static Instant since(Document doc) throws PersistenceException {
-		if (doc.getLockUserId() == null)
-			return null;
-		// A missing date last, where PostgreSQL would put it first in a descending sort
-		List<DocumentHistory> latest = DocumentHistoryDAO.get().findByWhere(
-				"_entity.docId = :docId and _entity.event = :event and _entity.userId = :userId",
-				Map.of("docId", doc.getId(), "event", DocumentEvent.CHECKEDOUT.toKey(), "userId", doc.getLockUserId()),
-				"_entity.date desc nulls last, _entity.id desc", 1);
-		return latest.isEmpty() ? null : instant(latest.get(0).getDate());
-	}
-
-	// The form
-
-	/**
-	 * A person's details, checked
-	 *
-	 * @param username the username, null for an edit
-	 * @param firstName the first name
-	 * @param lastName the last name
-	 * @param email the email address, null for none
-	 * @param language the language, never null
-	 * @param timeZone the time zone, null for none
-	 */
-	private record Form(String username, String firstName, String lastName, String email, String language,
-			String timeZone) {
-	}
-
-	/**
-	 * @param current the person an edit is of, whose language and time zone are taken as they are, offered or not, as
-	 *        the app sends back what it was given; null for a new account, which gives its username
-	 * @return the details, each without the whitespace at either end
-	 * @throws FieldRefusal for the fields Healdan doesn't take, in the form's order
-	 */
-	private Form form(UserDraft draft, long tenantId, User current) throws FieldRefusal {
-		List<FieldRefusal.Field> fields = new ArrayList<>();
-		String username = null;
-		if (current == null) {
-			username = StringUtils.strip(draft.username());
-			if (StringUtils.isEmpty(username))
-				fields.add(new FieldRefusal.Field("username", FieldRefusal.REQUIRED, NO_USERNAME));
-			else if (username.length() > MAX_TEXT)
-				fields.add(new FieldRefusal.Field("username", FieldRefusal.TOO_LONG, LONG_USERNAME));
-			else if (username.contains(">") || !StorableText.holds(username)
-					|| username.chars().anyMatch(Character::isISOControl))
-				fields.add(new FieldRefusal.Field("username", FieldRefusal.INVALID, BAD_USERNAME));
-			else if (taken(username))
-				fields.add(new FieldRefusal.Field("username", FieldRefusal.TAKEN, TAKEN));
-		} else if (draft.username() != null) {
-			fields.add(new FieldRefusal.Field("username", FieldRefusal.NOT_EDITABLE, USERNAME_FIXED));
-		}
-		String firstName = name(draft.firstName(), "firstName", NO_FIRST_NAME, fields);
-		String lastName = name(draft.lastName(), "lastName", NO_LAST_NAME, fields);
-
-		String email = StringUtils.strip(draft.email());
-		if (StringUtils.isEmpty(email))
-			email = null;
-		else if (email.length() > MAX_TEXT)
-			fields.add(new FieldRefusal.Field("email", FieldRefusal.TOO_LONG, LONG_EMAIL));
-		else if (!email.contains("@") || email.startsWith("@") || email.endsWith("@") || !StorableText.holds(email)
-				|| email.chars().anyMatch(c -> Character.isWhitespace(c) || Character.isISOControl(c)))
-			fields.add(new FieldRefusal.Field("email", FieldRefusal.INVALID, BAD_EMAIL));
-
-		String language = StringUtils.strip(draft.language());
-		if (StringUtils.isEmpty(language))
-			language = defaultLanguage(tenantId);
-		else if (!(current != null && language.equals(current.getLanguage()))
-				&& languages(tenantId).stream().noneMatch(offered -> offered.code().equals(draft.language().strip())))
-			fields.add(new FieldRefusal.Field("language", FieldRefusal.INVALID, BAD_LANGUAGE));
-
-		String timeZone = StringUtils.strip(draft.timeZone());
-		if (StringUtils.isEmpty(timeZone))
-			timeZone = null;
-		else if (!(current != null && timeZone.equals(current.getTimeZone())) && !timeZone(timeZone))
-			fields.add(new FieldRefusal.Field("timeZone", FieldRefusal.INVALID, BAD_TIME_ZONE));
-
-		if (!fields.isEmpty())
-			throw new FieldRefusal(fields);
-		return new Form(username, firstName, lastName, email, language, timeZone);
-	}
-
-	/** A first or last name, which every person has, as LogicalDOC would store it */
-	private static String name(String given, String field, String missing, List<FieldRefusal.Field> fields) {
-		String name = StringUtils.strip(given);
-		if (StringUtils.isEmpty(name))
-			fields.add(new FieldRefusal.Field(field, FieldRefusal.REQUIRED, missing));
-		else if (name.length() > MAX_TEXT)
-			fields.add(new FieldRefusal.Field(field, FieldRefusal.TOO_LONG, LONG_NAME));
-		else if (!StorableText.holds(name) || name.chars().anyMatch(Character::isISOControl)
-				|| !name.equals(HTMLSanitizer.sanitizeSimpleText(name)))
-			fields.add(new FieldRefusal.Field(field, FieldRefusal.INVALID, BAD_NAME));
-		return name;
-	}
-
-	/**
-	 * @return the languages a person's screens can be in, as the tenant turns them on
-	 *         ({@code <tenant>.lang.<code>.gui}), by name; English when it turns none on
-	 */
-	static List<UserOptions.Language> languages(long tenantId) {
-		String tenant;
-		try {
-			tenant = TenantDAO.get().getTenantName(tenantId);
-		} catch (PersistenceException e) {
-			throw new IllegalStateException("Can't read the tenant's name", e);
-		}
-		List<UserOptions.Language> languages = new ArrayList<>();
-		for (String code : I18N.getLocales())
-			if ("enabled".equals(Context.get().getConfig().getProperty(tenant + ".lang." + code + ".gui")))
-				languages.add(language(code));
-		if (languages.isEmpty())
-			languages.add(language(DEFAULT_LANGUAGE));
-		languages.sort(Comparator.comparing((UserOptions.Language language) -> language.name().toLowerCase(Locale.ROOT))
-				.thenComparing(UserOptions.Language::code));
-		return languages;
-	}
-
-	private static UserOptions.Language language(String code) {
-		return new UserOptions.Language(code,
-				StringUtils.capitalize(LocaleUtil.toLocale(code).getDisplayName(Locale.ENGLISH)));
-	}
-
-	/**
-	 * @return the language a person gets when none is chosen: English when it's offered, else the first offered
-	 */
-	static String defaultLanguage(long tenantId) {
-		List<UserOptions.Language> offered = languages(tenantId);
-		return offered.stream().anyMatch(language -> language.code().equals(DEFAULT_LANGUAGE)) ? DEFAULT_LANGUAGE
-				: offered.get(0).code();
-	}
-
-	/**
-	 * @return the time zones a person can have: the region ids the JVM knows, such as {@code Europe/London}, and
-	 *         {@code UTC}, sorted
-	 */
-	static List<String> timeZones() {
-		return ZoneId.getAvailableZoneIds().stream().filter(UserAdministration::timeZone).sorted().toList();
-	}
-
-	private static boolean timeZone(String zone) {
-		return ZoneId.getAvailableZoneIds().contains(zone)
-				&& ("UTC".equals(zone) || zone.contains("/") && !zone.startsWith("SystemV/"));
 	}
 }
