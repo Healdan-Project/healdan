@@ -3,7 +3,6 @@
 
 package com.logicaldoc.healdan.signin;
 
-import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
@@ -24,8 +23,6 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import org.springframework.transaction.support.TransactionTemplate;
 
 import com.logicaldoc.core.PersistenceException;
-import com.logicaldoc.core.security.Session;
-import com.logicaldoc.core.security.SessionManager;
 import com.logicaldoc.core.security.Tenant;
 import com.logicaldoc.core.security.apikey.ApiKeyDAO;
 import com.logicaldoc.core.security.user.User;
@@ -33,9 +30,9 @@ import com.logicaldoc.core.security.user.UserDAO;
 import com.logicaldoc.core.security.user.UserEvent;
 import com.logicaldoc.core.security.user.UserHistory;
 import com.logicaldoc.core.security.user.UserSource;
+import com.logicaldoc.healdan.admin.people.PersonSessions;
 import com.logicaldoc.healdan.signin.GroupSync.Change;
 import com.logicaldoc.healdan.util.StorableText;
-import com.logicaldoc.util.crypt.Encrypter;
 import com.logicaldoc.util.html.HTMLSanitizer;
 import com.logicaldoc.util.spring.Context;
 
@@ -491,14 +488,9 @@ public class SignInAccounts {
 
 	/**
 	 * Closes this node's open CE sessions that one of the keys opened, and,
-	 * given an account, every one of its own. CE's pool keeps each session's
-	 * key as it was given, so a session is matched by the part before an
-	 * impersonation's {@code >}, as CE's chain reads it: {@code <key>>bob}
-	 * opens a session as {@code bob} with the key's owner as the impersonator.
-	 * Only the sessions in this node's pool can be found. Each session is
-	 * checked and closed on its own, so one that fails doesn't keep the others
-	 * open. It never throws: a failure here is logged, and the decision,
-	 * already committed, stands.
+	 * given an account, every one of its own ({@link PersonSessions#close}).
+	 * It never throws: a failure here is logged, and the decision, already
+	 * committed, stands.
 	 *
 	 * @param hashes the SHA-256 of the keys deleted, possibly none
 	 * @param userId the account whose sessions all close, or null for only the
@@ -506,67 +498,17 @@ public class SignInAccounts {
 	 * @param username the account's username, printable, for the log
 	 */
 	private static void closeSessions(Set<String> hashes, Long userId, String username) {
-		int closed = 0;
-		int failed = 0;
-		try {
-			SessionManager sessions = SessionManager.get();
-			// newSession holds this lock while it signs in, so a sign-in that read the account or its key before the
-			// commit has its session in the pool by now, and one that starts later finds the password or key gone.
-			// Healdan never decides a sign-in inside newSession, so the identity's lock, held here, is never taken the
-			// other way round.
-			synchronized (sessions) {
-				for (Session session : sessions.getSessions()) {
-					try {
-						if (session.isOpen() && (accounts(session, userId) || openedWith(session, hashes))) {
-							sessions.kill(session.getSid());
-							closed++;
-						}
-					} catch (RuntimeException e) {
-						failed++;
-						log.debug("A session couldn't be checked or closed", e);
-					}
-				}
-			}
-		} catch (RuntimeException e) {
-			failed++;
-			log.debug("The sessions couldn't be read", e);
-		}
+		PersonSessions.Closed result = PersonSessions.close(userId, hashes);
+		int closed = result.closed();
 		String sessions = closed == 1 ? "session" : "sessions";
 		if (closed > 0 && userId != null)
 			log.info("Closed {} {} of the account {}, or opened with its deleted API keys, as it signs in through a "
 					+ "provider now", closed, sessions, username);
 		else if (closed > 0)
 			log.info("Closed {} {} opened with the deleted API keys of the account {}", closed, sessions, username);
-		if (failed > 0)
+		if (result.failed() > 0)
 			log.warn("Couldn't check or close {} of the sessions of the account {} or opened with its deleted API "
-					+ "keys; an administrator can kill them in the Sessions list", failed, username);
-	}
-
-	/** Whether the session is the account's own: it signed in as it, whoever impersonated it */
-	private static boolean accounts(Session session, Long userId) {
-		return userId != null && session.getUser() != null && session.getUserId() == userId;
-	}
-
-	/**
-	 * Whether one of the keys opened the session. A session opened with a
-	 * password has no key, neither as given nor hashed, so it's never one.
-	 */
-	private static boolean openedWith(Session session, Set<String> hashes) {
-		if (hashes.isEmpty())
-			return false;
-		String key = session.getDecodedKey();
-		if (key == null) {
-			// The set refuses to look a null up
-			String hash = session.getKey();
-			return hash != null && hashes.contains(hash);
-		}
-		if (key.contains(">"))
-			key = StringUtils.substringBefore(key, ">").trim();
-		try {
-			return hashes.contains(Encrypter.encryptSHA256(key));
-		} catch (NoSuchAlgorithmException e) {
-			throw new IllegalStateException(e);
-		}
+					+ "keys; an administrator can kill them in the Sessions list", result.failed(), username);
 	}
 
 	/** Marks a link whose account is gone unlinked now, by nobody */

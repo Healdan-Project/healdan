@@ -22,6 +22,7 @@ import com.logicaldoc.core.document.AbstractDocument;
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.Version;
 import com.logicaldoc.core.folder.Folder;
+import com.logicaldoc.core.security.user.Group;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.util.spring.Context;
 
@@ -136,6 +137,27 @@ public class CacheEvictor {
 	 */
 	public void evictUsersAfterCompletion(Collection<Long> ids) {
 		afterCompletion(User.class, ids, true);
+	}
+
+	/**
+	 * Evicts users if the current transaction rolls back, such as a change
+	 * the Admin app refuses once it has stored the account. Outside a
+	 * transaction it evicts them at once.
+	 *
+	 * @param ids the user ids
+	 */
+	public void evictUsersOnRollback(Collection<Long> ids) {
+		onRollback(User.class, ids);
+	}
+
+	/**
+	 * Evicts groups if the current transaction rolls back. Outside a
+	 * transaction it evicts them at once.
+	 *
+	 * @param ids the group ids
+	 */
+	public void evictGroupsOnRollback(Collection<Long> ids) {
+		onRollback(Group.class, ids);
 	}
 
 	private void onRollback(Class<?> entity, Collection<Long> ids) {

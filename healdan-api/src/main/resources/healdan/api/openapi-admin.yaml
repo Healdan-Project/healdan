@@ -4243,11 +4243,10 @@ components:
       name: id
       in: path
       required: true
-      description: The group's id
+      description: The group's id, as `GET /v1/admin/groups` gives it; `publisher`'s is negative
       schema:
         type: integer
         format: int64
-        minimum: 0
     MemberPath:
       name: userId
       in: path

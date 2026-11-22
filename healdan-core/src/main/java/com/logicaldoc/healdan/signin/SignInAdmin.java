@@ -6,40 +6,25 @@ package com.logicaldoc.healdan.signin;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Date;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
-import java.util.function.Function;
 
-import org.apache.commons.lang.StringEscapeUtils;
-import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import com.logicaldoc.core.PersistenceException;
-import com.logicaldoc.core.communication.EMail;
-import com.logicaldoc.core.communication.Recipient;
-import com.logicaldoc.core.security.TenantDAO;
-import com.logicaldoc.core.security.authentication.PasswordWeakException;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.security.user.UserDAO;
 import com.logicaldoc.core.security.user.UserEvent;
 import com.logicaldoc.core.security.user.UserHistory;
 import com.logicaldoc.core.security.user.UserSource;
-import com.logicaldoc.core.threading.ThreadPools;
 import com.logicaldoc.healdan.HealdanRuleException;
 import com.logicaldoc.healdan.signin.SignInAccounts.Journal;
 import com.logicaldoc.healdan.token.ApiTokens;
-import com.logicaldoc.util.security.PasswordGenerator;
 import com.logicaldoc.util.spring.Context;
 
 /**
@@ -61,29 +46,14 @@ import com.logicaldoc.util.spring.Context;
  * Each account is unlinked in one transaction, under the lock its sign-ins
  * take. Once it commits, the temporary password is emailed to the person when
  * outgoing email is set up, in CE's credentials email (the {@code psw.rec1}
- * template, built as {@code SecurityServiceImpl.notifyAccount} builds it).
- * When it can't be, the password is returned, for the admin to pass on. The
- * password is never logged.
+ * template, built as {@code SecurityServiceImpl.notifyAccount} builds it;
+ * {@link TemporaryPasswords} makes and emails it). When it can't be, the
+ * password is returned, for the admin to pass on. The password is never logged.
  */
 @Component
 public class SignInAdmin {
 
-	/** CE's credentials email, which its admin Change Password sends */
-	static final String CREDENTIALS_TEMPLATE = "psw.rec1";
-
-	/** How long unlinking waits for the mail server to take the temporary passwords' emails, in all */
-	static final long EMAIL_WAIT_MILLIS = 15_000L;
-
-	/** CE's pool for emails ({@code EMailSender.sendAsync}) */
-	private static final String EMAIL_POOL = "Email";
-
 	private static final Logger log = LoggerFactory.getLogger(SignInAdmin.class);
-
-	/** CE's generator of a password for a tenant, by its name, under the tenant's password settings */
-	static final Function<String, String> CE_GENERATOR = PasswordGenerator::generate;
-
-	/** How temporary passwords are made; {@code SignInTestHooks} puts it back to {@link #CE_GENERATOR} */
-	static volatile Function<String, String> generator = CE_GENERATOR;
 
 	private final SignInAccounts accounts;
 
@@ -124,6 +94,10 @@ public class SignInAdmin {
 		@Override
 		public String toString() {
 			return "Temporary[" + user.getUsername() + "]";
+		}
+
+		TemporaryPasswords.Pending pending() {
+			return new TemporaryPasswords.Pending(user, password);
 		}
 	}
 
@@ -168,7 +142,7 @@ public class SignInAdmin {
 	 *         isn't set up or LogicalDOC doesn't send
 	 *         ({@link OutgoingEmail#isSetUp}), the account has no email, the
 	 *         email couldn't be started, or the mail server didn't take it
-	 *         within {@link #EMAIL_WAIT_MILLIS}; else null
+	 *         within {@link TemporaryPasswords#EMAIL_WAIT_MILLIS}; else null
 	 * @throws PersistenceException error at data layer
 	 * @throws HealdanRuleException if the account isn't linked, or doesn't exist
 	 */
@@ -218,7 +192,7 @@ public class SignInAdmin {
 		User account = UserDAO.get().findById(userId);
 		if (account == null)
 			throw noAccount();
-		String password = temporaryPassword(account.getTenantId());
+		String password = TemporaryPasswords.make(account.getTenantId());
 		return accounts.lockedOnce(link.getProvider(), link.getIdentity(),
 				journal -> unlinkNow(userId, linkId, by, password, journal));
 	}
@@ -268,47 +242,6 @@ public class SignInAdmin {
 		return new Temporary(user, provider, password);
 	}
 
-	/**
-	 * Makes a temporary password the tenant's password rules accept. CE's
-	 * generator reads {@code password.sequence} as 4 when it isn't set, where
-	 * the rules read it as 3, so it can make a password with a sequence of 4,
-	 * such as {@code abcd}, which the rules refuse: about one in 10,000. Storing
-	 * it would roll the unlinking back, so it gets a second try.
-	 * <p>
-	 * It runs before the unlinking's transaction: CE's check refuses with a
-	 * runtime exception, which would mark that transaction for rollback. It
-	 * checks a stand-in account of the tenant, as CE checks a ticket's password
-	 * ({@code DocumentManager.createTicket}).
-	 *
-	 * @param tenantId the account's tenant
-	 * @return the password
-	 * @throws PersistenceException if neither try passes the rules; it never
-	 *         says the password or what the rules found in it
-	 */
-	private static String temporaryPassword(long tenantId) throws PersistenceException {
-		String tenant = TenantDAO.get().getTenantName(tenantId);
-		User standIn = new User();
-		standIn.setId(-1);
-		standIn.setUsername("dummy");
-		standIn.setTenantId(tenantId);
-		standIn.setLocale(Locale.ENGLISH);
-		for (int tries = 1;; tries++) {
-			String password = generator.apply(tenant);
-			try {
-				standIn.setDecodedPassword(password);
-				UserDAO.get().checkPasswordCompliance(standIn);
-				return password;
-			} catch (NoSuchAlgorithmException e) {
-				throw new PersistenceException("Couldn't make a temporary password", e);
-			} catch (PasswordWeakException e) {
-				// Its message quotes what the rules found, part of the password
-				if (tries == 2)
-					throw new PersistenceException(
-							"Couldn't make a temporary password that the password rules accept, in two tries");
-			}
-		}
-	}
-
 	private static void storeUnlinking(User user, UserHistory history) throws PersistenceException {
 		try {
 			ProviderPasswordListener.unlinking(user.getId(), () -> {
@@ -331,115 +264,21 @@ public class SignInAdmin {
 	}
 
 	/**
-	 * Emails each temporary password, when outgoing email is set up, and waits
-	 * for the mail server to take them, {@link #EMAIL_WAIT_MILLIS} in all.
+	 * Emails each temporary password ({@link TemporaryPasswords#email(List)}), when outgoing email is set up, and
+	 * waits for the mail server to take them.
 	 *
 	 * @return the passwords that weren't emailed, by username
 	 */
 	private static Map<String, String> deliver(List<Temporary> temporaries) {
+		List<TemporaryPasswords.Outcome> outcomes = TemporaryPasswords
+				.email(temporaries.stream().map(Temporary::pending).toList());
 		Map<String, String> notEmailed = new LinkedHashMap<>();
-		boolean setUp = OutgoingEmail.isSetUp();
-		Map<Temporary, Future<Object>> sending = new LinkedHashMap<>();
-		for (Temporary temporary : temporaries) {
-			Future<Object> future = setUp ? send(temporary) : null;
-			if (future == null)
-				notEmailed.put(temporary.user().getUsername(), temporary.password());
-			else
-				sending.put(temporary, future);
-		}
-
-		long deadline = System.currentTimeMillis() + EMAIL_WAIT_MILLIS;
-		for (Map.Entry<Temporary, Future<Object>> entry : sending.entrySet()) {
-			Temporary temporary = entry.getKey();
-			if (taken(entry.getValue(), deadline, temporary))
-				log.info("Emailed the temporary password of the account {}",
-						SignInAccounts.printable(temporary.user().getUsername()));
-			else
-				notEmailed.put(temporary.user().getUsername(), temporary.password());
-		}
+		for (int i = 0; i < temporaries.size(); i++)
+			if (outcomes.get(i) != TemporaryPasswords.Outcome.EMAILED)
+				notEmailed.put(temporaries.get(i).user().getUsername(), temporaries.get(i).password());
 		for (String username : notEmailed.keySet())
 			log.info("The temporary password of the account {} wasn't emailed; it's shown to the administrator who "
 					+ "unlinked it, to pass on", SignInAccounts.printable(username));
 		return notEmailed;
-	}
-
-	/**
-	 * Starts the credentials email to the account, as CE's
-	 * {@code SecurityServiceImpl.notifyAccount} builds it: CE's {@code psw.rec1}
-	 * template, with the server's address, the account and the password, in
-	 * the account's language.
-	 *
-	 * @return the email's sending, or null if it can't be sent
-	 */
-	private static Future<Object> send(Temporary temporary) {
-		User user = temporary.user();
-		String username = SignInAccounts.printable(user.getUsername());
-		if (StringUtils.isBlank(user.getEmail())) {
-			log.info("The account {} has no email, so its temporary password can't be emailed", username);
-			return null;
-		}
-
-		EMail email = new EMail();
-		email.setTenantId(user.getTenantId());
-		email.setHtml(true);
-		Recipient recipient = new Recipient();
-		recipient.setAddress(user.getEmail());
-		recipient.setRead(1);
-		email.addRecipient(recipient);
-		email.setFolder("outbox");
-		email.setUsername(user.getUsername());
-		email.setSentDate(new Date());
-		email.setLocale(user.getLocale());
-		// Unlike CE's: never filed as a document, wherever the admin keeps a copy of each email sent
-		email.setHistoricyze(false);
-
-		Map<String, Object> dictionary = new HashMap<>();
-		dictionary.put("url", Context.get().getConfig().getProperty("server.url"));
-		dictionary.put("user", user);
-		// Unlike CE's, escaped: the email is HTML, and a password may hold an &
-		dictionary.put("password", StringEscapeUtils.escapeHtml(temporary.password()));
-		try {
-			OutgoingEmail.fill(email, CREDENTIALS_TEMPLATE, dictionary);
-		} catch (Exception e) {
-			// The class only: a template's error can quote what it was given
-			log.warn("Couldn't write the email of the temporary password of the account {} ({})", username,
-					e.getClass().getSimpleName());
-			return null;
-		}
-
-		Future<Object> future;
-		try {
-			future = ThreadPools.get().execute(() -> {
-				OutgoingEmail.send(email);
-				return null;
-			}, EMAIL_POOL);
-		} catch (RuntimeException e) {
-			// Caught, so the passwords of the accounts unlinked with this one are kept all the same
-			log.warn("Couldn't email the temporary password of the account {}: the email pool didn't take it ({})",
-					username, e.getClass().getSimpleName());
-			return null;
-		}
-		if (future == null)
-			log.warn("Couldn't email the temporary password of the account {}: the email pool has stopped", username);
-		return future;
-	}
-
-	/** Whether the mail server took the email by the deadline */
-	private static boolean taken(Future<Object> future, long deadline, Temporary temporary) {
-		String username = SignInAccounts.printable(temporary.user().getUsername());
-		try {
-			future.get(Math.max(0L, deadline - System.currentTimeMillis()), TimeUnit.MILLISECONDS);
-			return true;
-		} catch (ExecutionException e) {
-			Throwable cause = e.getCause() == null ? e : e.getCause();
-			log.warn("Couldn't email the temporary password of the account {}: {}", username, cause.toString());
-		} catch (TimeoutException e) {
-			// It may still go, with the same password
-			log.warn("The mail server didn't take the email of the temporary password of the account {} in time",
-					username);
-		} catch (InterruptedException e) {
-			Thread.currentThread().interrupt();
-		}
-		return false;
 	}
 }

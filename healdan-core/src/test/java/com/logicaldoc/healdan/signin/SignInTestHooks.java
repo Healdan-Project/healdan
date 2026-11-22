@@ -7,6 +7,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Function;
 
 import javax.net.ssl.SSLContext;
 
@@ -125,16 +126,27 @@ public final class SignInTestHooks {
 	}
 
 	/**
+	 * Makes temporary passwords ({@link TemporaryPasswords#make}) with this
+	 * instead of CE's generator, until {@link #reset}, as a test in this
+	 * package can by setting {@code TemporaryPasswords.generator}.
+	 *
+	 * @param generator what makes a password, given the tenant's name
+	 */
+	public static void makeTemporaryPasswords(Function<String, String> generator) {
+		TemporaryPasswords.generator = generator;
+	}
+
+	/**
 	 * Goes back to reading the environment variable, to the system's clocks,
 	 * to the JVM's TLS for calls to providers, to sending emails through CE,
-	 * and to CE's password generator, which a test in this package may have
-	 * replaced ({@code OutgoingEmail.sender}, {@code SignInAdmin.generator}).
+	 * and to CE's password generator, which a test may have replaced
+	 * ({@code OutgoingEmail.sender}, {@code TemporaryPasswords.generator}).
 	 */
 	public static void reset() {
 		SignInProviders.allowHttpSetting = SignInProviders.ENVIRONMENT;
 		ProviderClient.sslContext = ProviderClient.JVM_TLS;
 		OutgoingEmail.sender = OutgoingEmail.CE;
-		SignInAdmin.generator = SignInAdmin.CE_GENERATOR;
+		TemporaryPasswords.generator = TemporaryPasswords.CE_GENERATOR;
 		PendingSignIns.clock = Clock.systemUTC();
 		OneTimeCodes.clock = Clock.systemUTC();
 		ProviderRecheck.clock = Clock.systemUTC();
