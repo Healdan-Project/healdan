@@ -11,6 +11,7 @@ import { storeHref } from '../addresses'
 import { Confirm } from '../dialogs/Confirm'
 import { focusLost } from '../focus'
 import { useStores } from '../queries'
+import { useRowsHeight } from '../lists/useRowsHeight'
 import { NewStoreDialog } from '../stores/NewStoreDialog'
 import { storesChanged, useDeletedStores } from '../stores/queries'
 import { backendLabel, filesState, mattersInSentence, readersOf } from '../stores/text'
@@ -25,8 +26,6 @@ interface StoreRow extends TableRow {
   store: A['StoreInfo']
 }
 
-/** --row-height in tokens.css, which the list's height is counted in: the virtualiser needs one of its own */
-const ROW = 34
 /** The rows the list shows before it scrolls */
 const ROWS_SHOWN = 10
 
@@ -92,7 +91,7 @@ export function StoresView() {
   const storage = list.length === 0 || list.some((store) => store.backend !== null)
   const columns = useMemo(() => storeColumns(storage), [storage])
   const rows = useMemo(() => list.map((store): StoreRow => ({ id: String(store.id), textValue: store.name, store })), [list])
-  const height = (Math.min(Math.max(rows.length, 1), ROWS_SHOWN) + 1) * ROW + 2
+  const { boxRef, height } = useRowsHeight(rows.length, ROWS_SHOWN)
   // One summary gives every Store's figures
   const figuresAt = list.find((store) => store.figuresAt !== null)?.figuresAt ?? null
 
@@ -118,7 +117,7 @@ export function StoresView() {
         <>
           {list.length > 0 && <p className={clientStyles.figures}>{figuresAt === null ? t('admin.stores.figuresPending') : t('admin.stores.figuresAt', { when: formatDateTime(figuresAt) })}</p>}
           {!storage && <p className={styles.about}>{t('admin.stores.storageOff')}</p>}
-          <div className={styles.list} style={{ height }}>
+          <div ref={boxRef} className={styles.list} style={{ height }}>
             <Table
               aria-labelledby={headingId}
               columns={columns}
