@@ -1106,7 +1106,7 @@ export const adminEnUS = {
   'admin.nav.serverLog': 'Server Log',
   'admin.serverLog.title': 'Server Log',
 
-  // Monitoring: Errors and the Server Log (Task 32b)
+  // Monitoring: Errors and the Server Log
   // Errors' windows, filters and list: how far back, the words, the area, Unresolved
   'admin.errors.window': 'How Far Back',
   'admin.errors.window.1h': '1 Hour',
@@ -1192,6 +1192,7 @@ export const adminEnUS = {
   'admin.serverLog.atStart': 'This is the start of the log: it holds nothing older.',
   'admin.serverLog.earlierFailed': "Couldn't read the earlier lines.",
   'admin.serverLog.pollFailed': "Couldn't read the newest lines, so this shows what was read last. Healdan keeps trying.",
+  'admin.serverLog.followLost': 'The server no longer knows this log, or the place it was read to, so following has stopped. Follow starts again from the newest lines.',
   'admin.serverLog.rolled': 'The log rolled over to a new file, so this starts again at its top. Show Earlier reads the lines before it.',
   'admin.serverLog.pausedToKeep': 'Following paused, so the earlier lines stay. Follow goes back to the newest.',
   'admin.serverLog.empty': 'Nothing is in the log yet.',
@@ -1208,7 +1209,8 @@ export const adminEnUS = {
   'admin.nav.audit': 'Audit Trail',
   'admin.audit.title': 'Audit Trail',
 
-  // Monitoring: the Audit Trail and Activity (Task 32c)
+  // Monitoring: the Audit Trail and Activity
+  'admin.audit.refresh': 'Refresh',
   'admin.audit.export': 'Export CSV',
   'admin.audit.filters': 'Filters',
   // The kinds of row, as a filter and in the Kind column
@@ -1221,6 +1223,7 @@ export const adminEnUS = {
   'admin.audit.person': 'Person',
   'admin.audit.from': 'From Date',
   'admin.audit.to': 'To Date',
+  'admin.audit.toBeforeFrom': 'The To Date is before the From Date, so no row can match.',
   // One box: a bare number is a doc #, anything else words
   'admin.audit.text': 'Doc #, Name or Address',
   'admin.audit.clear': 'Clear Filters',
@@ -1237,6 +1240,10 @@ export const adminEnUS = {
   'admin.audit.noneMatch': 'No rows match the filters.',
   // A page reads only so far back, so a narrow filter can find nothing in it with more to read
   'admin.audit.noneYet': 'Nothing found yet in what has been read. Show More reads further back.',
+  // The same, with how far back the reading has reached (P5-R33)
+  'admin.audit.noneBackTo': 'Nothing found back to {when}. Show More reads further back.',
+  // How far back the rows shown reach, beside Show More
+  'admin.audit.reach': 'Read back to {when}',
   'admin.audit.showMore': 'Show More',
   'admin.audit.end': 'No older rows.',
   // The selected row, whole, under the list
@@ -1269,7 +1276,7 @@ export const adminEnUS = {
   'admin.nav.jobs': 'Background Jobs',
   'admin.jobs.title': 'Background Jobs',
 
-  // Monitoring: Background Jobs (Task 32d)
+  // Monitoring: Background Jobs
   'admin.jobs.about':
     "What each job last did since the server started, and when it runs next. Healdan's jobs keep their own times; LogicalDOC's tasks run on the schedule set here, while they're enabled.",
   'admin.jobs.none': 'The server lists no background jobs.',
@@ -1435,16 +1442,18 @@ export const adminPlurals = {
     other: "A new key keeps the S3 secret you typed, and the {n} values sealed with the missing one can't be opened again: each sign-in provider's client secret and each other storage backend's S3 secret are entered again (those backends fail until then), and Healdan Helpers that signed in through a provider sign in again.",
   },
 
-  // Monitoring: Errors and the Server Log (Task 32b), their plurals
+  // Monitoring: Errors and the Server Log, their plurals
   // The two halves of the count beside the Errors title, in Title Case as the other lists' counts: "14 Errors" of "4 Kinds"
   'admin.errors.errors': { one: '{n} Error', other: '{n} Errors' },
   'admin.errors.kinds': { one: '{n} Kind', other: '{n} Kinds' },
   // How many times a fault was seen in all, in its details
   'admin.errors.timesInAll': { one: 'Once in all', other: '{n} times in all' },
 
-  // Monitoring: the Audit Trail and Activity (Task 32c), their plurals
+  // Monitoring: the Audit Trail and Activity, their plurals
+  // What a run of Show More found, said to a screen reader as it ends
+  'admin.audit.moreRows': { one: '{n} more row', other: '{n} more rows' },
 
-  // Monitoring: Background Jobs (Task 32d), its plurals
+  // Monitoring: Background Jobs, its plurals
   // A LogicalDOC task's schedule, every so many seconds, minutes or hours, in the largest of them that fits it whole
   'admin.jobs.every.seconds': { one: 'Every second', other: 'Every {n} seconds' },
   'admin.jobs.every.minutes': { one: 'Every minute', other: 'Every {n} minutes' },

@@ -6,6 +6,7 @@ import { useId } from 'react'
 import { ErrorPanel, useApi } from '@healdan/shell'
 import { Button, Icon, SelectField, StatusDot, TextField, ToggleButtons } from '@healdan/ui'
 import { routes } from '../addresses'
+import { useDownload } from '../download'
 import { Refusal } from '../forms/Refusal'
 import { useWords } from '../lists/useWords'
 import { LogLines } from '../monitoring/LogLines'
@@ -47,8 +48,8 @@ export function serverLogSearch(search: Record<string, unknown>): ServerLogSearc
  * The Server Log, at /admin/server-log (spec 8.8): the lines of the main log or a task's, as one log across the files it
  * rolled over to (P5-R27), with Everything, Warnings and Errors, or Errors, and words to search for, all kept in the
  * address. It opens on the newest lines, following live: what's new comes every 3 seconds while the page is visible, until
- * Pause (P5-R21). Show Earlier, or the box scrolled to its top, reads back. Download is the log's files, zipped. The route
- * hands in the address's parameters as `search`.
+ * Pause (P5-R21). Show Earlier, or the box scrolled to its top, reads back. Download is the log's files, zipped, through a
+ * hidden frame once the logs have been asked for (useDownload). The route hands in the address's parameters as `search`.
  */
 export function ServerLogView({ search }: { search: ServerLogSearch }) {
   const navigate = useNavigate({ from: routes.serverLog })
@@ -69,6 +70,8 @@ export function ServerLogView({ search }: { search: ServerLogSearch }) {
   }
 
   const words = useWords(search.q ?? '', (q) => change({ q: q === '' ? undefined : q }))
+  // The logs asked for first, through the app, as the file is answered the same way to the same person (P5-R36)
+  const download = useDownload(shown === undefined ? '' : logFileUrl(api.url, shown.name))
 
   let body
   if (list === undefined) body = logs.isError ? <ErrorPanel error={logs.error} onRetry={() => void logs.refetch()} /> : <p className={styles.note}>{t('common.loading')}</p>
@@ -86,10 +89,12 @@ export function ServerLogView({ search }: { search: ServerLogSearch }) {
         {shown !== undefined && (
           <div className={listStyles.actions}>
             <Button onPress={lines.following ? lines.pause : lines.follow}>{t(lines.following ? 'admin.serverLog.pause' : 'admin.serverLog.follow')}</Button>
-            <a href={logFileUrl(api.url, shown.name)} download className={styles.linkButton}>
-              <Icon name="download" size={14} />
-              {t('admin.serverLog.download')}
-            </a>
+            <Button isPending={download.checking} onPress={() => void download.start(() => api.get('/v1/admin/logs'))}>
+              <span className={styles.row}>
+                <Icon name="download" size={14} />
+                {t('admin.serverLog.download')}
+              </span>
+            </Button>
           </div>
         )}
       </div>
@@ -125,11 +130,13 @@ export function ServerLogView({ search }: { search: ServerLogSearch }) {
           )}
         </div>
       </div>
+      <Refusal failure={download.failure} />
       <StaleNote failed={logs.isError && list !== undefined} onRetry={() => void logs.refetch()} />
       {unknown && <Refusal>{t('admin.serverLog.unknownLog', { name: search.log ?? '' })}</Refusal>}
       {/* Said as each comes, there before it has words: a failed read of what's new once, however many tries follow */}
       <div role="status" className={styles.notes}>
         {lines.pollFailed && <p className={styles.note}>{t('admin.serverLog.pollFailed')}</p>}
+        {lines.followLost && <p className={styles.note}>{t('admin.serverLog.followLost')}</p>}
         {lines.rolled && <p className={styles.note}>{t('admin.serverLog.rolled')}</p>}
         {lines.pausedToKeep && <p className={styles.note}>{t('admin.serverLog.pausedToKeep')}</p>}
       </div>

@@ -8,7 +8,7 @@ import { ErrorPanel, useApi } from '@healdan/shell'
 import { Button, formatDateTime, StatusDot, toast, VisuallyHidden } from '@healdan/ui'
 import { Confirm } from '../dialogs/Confirm'
 import { Refusal } from '../forms/Refusal'
-import { jobAction, jobChanged, useJobs, type JobAction } from '../monitoring/jobQueries'
+import { jobAction, jobChanged, jobIn, jobsStale, useJobs, type JobAction } from '../monitoring/jobQueries'
 import { enabledWords, intervalWords, resultOf } from '../monitoring/jobText'
 import { ScheduleDialog } from '../monitoring/ScheduleDialog'
 import { useKeptFocus } from '../monitoring/useKeptFocus'
@@ -71,6 +71,7 @@ interface JobRowProps {
  * Disable ask first. Enable and Disable are one button whose words follow the task, so the focus stays on it.
  */
 function JobRow({ job, act, ask, schedule }: JobRowProps) {
+  const queryClient = useQueryClient()
   const nameId = useId()
   const [busy, setBusy] = useState<JobAction>()
   const [refused, setRefused] = useState<{ failure: unknown; against: string }>()
@@ -83,7 +84,8 @@ function JobRow({ job, act, ask, schedule }: JobRowProps) {
     try {
       await act(job, action)
     } catch (error) {
-      setRefused({ failure: error, against: stateOf(job) })
+      // Said against the job as the list now has it, which a refusal reads again first
+      setRefused({ failure: error, against: stateOf(jobIn(queryClient, job.name) ?? job) })
     } finally {
       setBusy(undefined)
     }
@@ -186,7 +188,8 @@ function Group({ title, jobs, ...row }: { title: string; jobs: A['Job'][] } & Om
  * row holds its own buttons, the list is a plain table, not the app's virtualised one, whose rows are one control each;
  * a dozen or so jobs need no paging. A failed run's error is under its row, as text. Stop and Disable ask first, naming
  * the job (spec 7.2); each action's answer is the job, which the list then shows, and the Dashboard's answer, whose Needs
- * Attention and the left pane's count count failed and overdue jobs, is asked again (P5-R20). While a job runs the list
+ * Attention and the left pane's count count failed and overdue jobs, is asked again (P5-R20). An action refused as no
+ * longer allowed, or for a job the server no longer has, has the list read again before the refusal shows. While a job runs the list
  * asks again every 30 seconds while the page is visible, and shortly after a Run Now or a Stop, whatever else runs
  * (P5-R21); a return to the window asks again too. While a new read fails, the list it had stays, with a note (P4-R15).
  */
@@ -205,7 +208,15 @@ export function JobsView() {
   useKeptFocus(list, heading)
 
   async function act(job: A['Job'], action: JobAction) {
-    await jobChanged(queryClient, await jobAction(api, job.name, action))
+    let answer
+    try {
+      answer = await jobAction(api, job.name, action)
+    } catch (error) {
+      // A refusal that says the list is out of date has it read again before the refusal shows
+      await jobsStale(queryClient, error)
+      throw error
+    }
+    await jobChanged(queryClient, answer)
     toast(t(WORDS[action].done, { name: job.label }))
     if (action === 'run' || action === 'stop') setAskedAt(Date.now())
   }

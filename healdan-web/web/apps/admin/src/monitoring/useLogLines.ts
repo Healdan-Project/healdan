@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { useEffect, useRef, useState } from 'react'
-import { apiPath, type Api, type adminComponents } from '@healdan/api'
+import { ApiError, apiPath, type Api, type adminComponents } from '@healdan/api'
 import { useApi } from '@healdan/shell'
 import type { LogLevel } from './logQueries'
 
@@ -10,6 +10,8 @@ type A = adminComponents['schemas']
 
 /** While following, how long the screen waits between two reads of what's new (P5-R21) */
 export const FOLLOW_MS = 3_000
+/** After a read of what's new fails, the next waits twice as long as the last wait, this long at most (P5-R35) */
+export const FOLLOW_MOST_MS = 60_000
 /** An answer not at the end of the log is followed by another at once, at most this many in a row (P5-R21, amended) */
 export const QUICK_READS = 5
 /**
@@ -39,8 +41,13 @@ export interface LogView {
   rolled: boolean
   /** The person's choice: Follow, or Pause. The screen reads what's new only while this and the page is visible. */
   following: boolean
-  /** The last read of what's new failed: what's shown is what was read last, and the follow goes on trying */
+  /** The last read of what's new failed: what's shown is what was read last, and the follow goes on trying, less often */
   pollFailed: boolean
+  /**
+   * The server no longer knows the log or the place the follow reads from (a `400` or `404`), so the follow has stopped:
+   * Follow starts again from the newest lines (P5-R35)
+   */
+  followLost: boolean
   /** A read of earlier entries: none, on its way, or failed */
   earlier: 'idle' | 'loading' | 'failed'
   /** Following was paused so that the entries read further back aren't dropped as new ones come */
@@ -50,7 +57,7 @@ export interface LogView {
 export interface LogLines extends LogView {
   /** Pause: no more reads of what's new until Follow */
   pause: () => void
-  /** Follow: a read of what's new at once, then every FOLLOW_MS */
+  /** Follow: a read of what's new at once, then every FOLLOW_MS; after the follow was lost, the newest lines read afresh */
   follow: () => void
   /** Show Earlier, or the box scrolled to its top: the entries before the first kept, then on by itself while short */
   showEarlier: () => void
@@ -64,7 +71,12 @@ export interface LogLines extends LogView {
 }
 
 function viewOf(following: boolean): LogView {
-  return { entries: [], state: 'loading', error: undefined, atStart: false, rolled: false, following, pollFailed: false, earlier: 'idle', pausedToKeep: false }
+  return { entries: [], state: 'loading', error: undefined, atStart: false, rolled: false, following, pollFailed: false, followLost: false, earlier: 'idle', pausedToKeep: false }
+}
+
+/** A refusal of a follow that no try again can mend: the log, or the place it reads from, is one the server no longer knows */
+function isLost(error: unknown): boolean {
+  return error instanceof ApiError && (error.status === 400 || error.status === 404)
 }
 
 /** An answer going back that holds fewer than a read can give and isn't at the start: a level or words kept few of a read */
@@ -84,6 +96,8 @@ function joined(older: A['LogLine'][], newer: A['LogLine'][]): A['LogLine'][] {
 }
 
 interface Session {
+  /** The log, level and words it reads (keyOf) */
+  key: string
   pause(): void
   follow(): void
   showEarlier(): void
@@ -99,6 +113,7 @@ interface Session {
  * on its way, and drops its answer should it come all the same.
  */
 function openSession(api: Api, name: string, level: LogLevel, q: string | undefined, following: boolean, publish: (view: LogView) => void): Session {
+  const key = keyOf(name, level, q)
   const path = apiPath`/v1/admin/logs/${name}/lines`
   const view = viewOf(following)
   // Where the next read of earlier entries ends, and where the next read of what's new starts
@@ -112,6 +127,8 @@ function openSession(api: Api, name: string, level: LogLevel, q: string | undefi
   let earlierCall: AbortController | undefined
   // Reads of what's new asked at once, in a row, because the one before wasn't at the end
   let quick = 0
+  // Reads of what's new that failed in a row, since the last answered: each doubles the wait before the next
+  let failures = 0
   // The reader is further up than the box's end
   let up = false
 
@@ -138,7 +155,7 @@ function openSession(api: Api, name: string, level: LogLevel, q: string | undefi
   function schedule() {
     clearTimeout(timer)
     timer = undefined
-    if (live() && followCall === undefined) timer = setTimeout(poll, FOLLOW_MS)
+    if (live() && followCall === undefined) timer = setTimeout(poll, Math.min(FOLLOW_MS * 2 ** failures, FOLLOW_MOST_MS))
   }
 
   /** What's new is added at the end, the oldest dropped past MAX_KEPT; a log that rolled over starts again at its new top */
@@ -161,11 +178,13 @@ function openSession(api: Api, name: string, level: LogLevel, q: string | undefi
         return
       }
       if (entries.length > MAX_KEPT) {
-        // Show Earlier reads the dropped ones again, from the first kept
+        // Show Earlier reads the dropped ones again, from the first kept. The new file's top, if the log rolled over, is
+        // dropped with them, so the note that the lines start there goes too.
         stopEarlier()
         view.entries = entries.slice(-MAX_KEPT)
         before = view.entries[0]!.position
         view.atStart = false
+        view.rolled = false
       } else view.entries = entries
     }
     after = answer.after
@@ -184,6 +203,8 @@ function openSession(api: Api, name: string, level: LogLevel, q: string | undefi
     const entries = joined(answer.lines, view.entries)
     before = answer.before
     view.atStart = answer.atStart
+    // The lines read back reach before the new file's top, where the note said they started
+    view.rolled = false
     if (entries.length > MAX_KEPT) {
       // A follow reads them again, from the first dropped, once Follow is pressed
       after = entries[MAX_KEPT]!.position
@@ -201,6 +222,7 @@ function openSession(api: Api, name: string, level: LogLevel, q: string | undefi
       (answer) => {
         if (stopped || call !== followCall) return
         followCall = undefined
+        failures = 0
         append(answer)
         view.pollFailed = false
         show()
@@ -212,12 +234,22 @@ function openSession(api: Api, name: string, level: LogLevel, q: string | undefi
           schedule()
         }
       },
-      () => {
+      (error: unknown) => {
         // A follow cancelled (paused, hidden, stopped) is no longer the one asked for, so it never says it failed
         if (stopped || call !== followCall) return
         followCall = undefined
         quick = 0
-        // What's shown stays, and the next read goes on trying
+        if (isLost(error)) {
+          // No try again would be answered: what's shown stays, and the follow stops, saying so
+          stopFollowing()
+          view.following = false
+          view.pollFailed = false
+          view.followLost = true
+          show()
+          return
+        }
+        // What's shown stays, and the next read goes on trying, waiting twice as long as the last time
+        failures++
         view.pollFailed = true
         show()
         schedule()
@@ -288,6 +320,18 @@ function openSession(api: Api, name: string, level: LogLevel, q: string | undefi
     )
   }
 
+  /** The newest entries read afresh, following, as when the session opened: after the follow was lost */
+  function restart() {
+    stopFollowing()
+    stopEarlier()
+    Object.assign(view, viewOf(true))
+    before = undefined
+    after = undefined
+    failures = 0
+    show()
+    first()
+  }
+
   function onVisibility() {
     visible = document.visibilityState !== 'hidden'
     // Hidden, nothing is asked; shown again, what's new is asked for at once
@@ -299,6 +343,7 @@ function openSession(api: Api, name: string, level: LogLevel, q: string | undefi
   first()
 
   return {
+    key,
     pause() {
       stopFollowing()
       view.following = false
@@ -308,8 +353,14 @@ function openSession(api: Api, name: string, level: LogLevel, q: string | undefi
     follow() {
       // Follow goes back to the newest: the box goes to its end
       up = false
+      if (view.followLost) {
+        restart()
+        return
+      }
       view.following = true
       view.pausedToKeep = false
+      // A note that the lines start at a new file's top is the place read back from's, which Follow leaves
+      view.rolled = false
       show()
       if (timer === undefined) poll()
     },
@@ -345,16 +396,14 @@ function openSession(api: Api, name: string, level: LogLevel, q: string | undefi
  */
 export function useLogLines(name: string | undefined, level: LogLevel, q: string | undefined): LogLines {
   const api = useApi()
-  // What's read is this log's, with these filters; a new one starts from nothing, keeping Follow or Pause
-  const key = name === undefined ? undefined : JSON.stringify([name, level, q ?? ''])
-  const [view, setView] = useState<LogView>(() => viewOf(true))
-  const [shownKey, setShownKey] = useState(key)
+  // What's read is this log's, with these filters; a new one starts from nothing, keeping Follow or Pause. The view is kept
+  // with the key it's of, so a session of another one, on its way out, can't put its view in the new one's place.
+  const key = name === undefined ? undefined : keyOf(name, level, q)
+  const [shown, setShown] = useState<{ key: string | undefined; view: LogView }>(() => ({ key, view: viewOf(true) }))
+  const view = shown.view
   // A pause made only to keep the lines read further back ends with them: the new log or filters follow again
   const followNext = view.following || view.pausedToKeep
-  if (key !== shownKey) {
-    setShownKey(key)
-    setView(viewOf(followNext))
-  }
+  if (key !== shown.key) setShown({ key, view: viewOf(followNext) })
   // Read by a new session, which a change of log or filters opens after a pause
   const following = useRef(followNext)
   useEffect(() => {
@@ -364,7 +413,8 @@ export function useLogLines(name: string | undefined, level: LogLevel, q: string
   const session = useRef<Session | undefined>(undefined)
   useEffect(() => {
     if (name === undefined) return undefined
-    const opened = openSession(api, name, level, q, following.current, setView)
+    const shownFor = keyOf(name, level, q)
+    const opened = openSession(api, name, level, q, following.current, (next) => setShown((now) => (now.key === shownFor ? { key: now.key, view: next } : now)))
     session.current = opened
     return () => {
       opened.stop()
@@ -372,14 +422,22 @@ export function useLogLines(name: string | undefined, level: LogLevel, q: string
     }
   }, [api, name, level, q])
 
+  // Only the session of what's shown is asked anything: between a change of log or filters and the effects that open its
+  // session, the one still open is the old one's
+  const ofShown = () => (session.current?.key === key ? session.current : undefined)
   return {
     ...view,
-    pause: () => session.current?.pause(),
-    follow: () => session.current?.follow(),
-    showEarlier: () => session.current?.showEarlier(),
-    readingUp: (up: boolean) => session.current?.readingUp(up),
-    retry: () => session.current?.retry(),
+    pause: () => ofShown()?.pause(),
+    follow: () => ofShown()?.follow(),
+    showEarlier: () => ofShown()?.showEarlier(),
+    readingUp: (up: boolean) => ofShown()?.readingUp(up),
+    retry: () => ofShown()?.retry(),
   }
+}
+
+/** What a session reads, as one key: the log, the level and the words */
+function keyOf(name: string, level: LogLevel, q: string | undefined): string {
+  return JSON.stringify([name, level, q ?? ''])
 }
 
 const TIME = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' })

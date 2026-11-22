@@ -138,7 +138,7 @@
   gap: var(--hd-space-2);
 }
 
-/* A link with a button's face: Show in Server Log, and the log's Download */
+/* A link with a button's face: Show in Server Log */
 .linkButton {
   display: inline-flex;
   box-sizing: border-box;

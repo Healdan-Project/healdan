@@ -8,7 +8,8 @@ import { FOLLOW_MS, MAX_KEPT, formatLogTime } from '../monitoring/useLogLines'
 import monitoringCss from '../monitoring/Monitoring.module.css?raw'
 import { TYPING_DELAY_MS } from '../pickers/typing'
 import { expectNoAxeViolations } from '../test/axe'
-import { fakeLog, logEntries, logLine, logRoutes, problem, type Routes } from '../test/fakeApi'
+import { fakeLog, logEntries, logInfos, logLine, logRoutes, problem, type Routes } from '../test/fakeApi'
+import { answerFrame, downloadFrames } from '../test/frames'
 import { hidePage, returnToPage } from '../test/visibility'
 import { renderApp } from '../test/renderApp'
 import { slowAnswer } from '../test/slowAnswer'
@@ -84,6 +85,8 @@ async function expectNoAxeViolationsAtTheEnd(container: Element) {
   vi.useRealTimers()
   await expectNoAxeViolations(container)
 }
+
+const ROLLED = 'The log rolled over to a new file, so this starts again at its top. Show Earlier reads the lines before it.'
 
 /** `count` entries, the ones at the indexes `errorsAt` keeps errors, the rest the Indexer's runs, each saying its number */
 function manyEntries(count: number, errorsAt: (index: number) => boolean = () => false): A['LogLine'][] {
@@ -166,14 +169,62 @@ describe("The Server Log's choices", () => {
     expect(reads(api, 'Nope')).toEqual([])
   })
 
-  it('offers Download, a link to the zip of the log shown', async () => {
-    await openLog()
-    const link = screen.getByRole('link', { name: 'Download' })
-    expect(link.getAttribute('href')).toBe('/api/v1/admin/logs/DMS/file')
-    expect(link.hasAttribute('download')).toBe(true)
+  it('downloads the zip of the log shown through a hidden frame, once the logs have been asked for through the app, never by a link', async () => {
+    const { api } = await openLog()
+    expect(screen.queryByRole('link', { name: 'Download' })).toBeNull()
+    const listed = api.callsTo('GET /v1/admin/logs').length
+    fireEvent.click(screen.getByRole('button', { name: 'Download' }))
+    await settle()
+    expect(api.callsTo('GET /v1/admin/logs')).toHaveLength(listed + 1)
+    expect(downloadFrames().map((frame) => frame.getAttribute('src'))).toEqual(['/api/v1/admin/logs/DMS/file'])
+    expect(document.querySelector('a[download]')).toBeNull()
+
     fireEvent.change(screen.getByRole('combobox', { name: 'Log' }), { target: { value: 'IndexerTask' } })
     await settle()
-    expect(screen.getByRole('link', { name: 'Download' }).getAttribute('href')).toBe('/api/v1/admin/logs/IndexerTask/file')
+    fireEvent.click(screen.getByRole('button', { name: 'Download' }))
+    await settle()
+    expect(downloadFrames().map((frame) => frame.getAttribute('src'))).toEqual(['/api/v1/admin/logs/DMS/file', '/api/v1/admin/logs/IndexerTask/file'])
+  })
+
+  it.each([
+    [401, 'unauthenticated', "You've been signed out."],
+    [403, 'admins-only', "You don't have access to Healdan Admin."],
+  ])("downloads nothing when the app's own call is refused %i, and the app says so in place of the screen", async (status, code, heading) => {
+    let refusing = false
+    await openLog('/server-log', { 'GET /v1/admin/logs': () => (refusing ? problem(status, code) : logInfos) })
+    refusing = true
+    fireEvent.click(screen.getByRole('button', { name: 'Download' }))
+    await settle()
+    expect(screen.getByRole('heading', { level: 1, name: heading })).toBeTruthy()
+    expect(downloadFrames()).toEqual([])
+  })
+
+  it('says beside Download what the server answered in place of the file', async () => {
+    await openLog()
+    fireEvent.click(screen.getByRole('button', { name: 'Download' }))
+    await settle()
+    act(() => answerFrame(downloadFrames()[0]!, JSON.stringify({ status: 404, code: 'not-found', detail: 'No log called DMS.' })))
+    expect(screen.getByRole('alert').textContent).toBe("Not found, or you can't see it.")
+    // Pressed again, it says nothing until there's something to say
+    fireEvent.click(screen.getByRole('button', { name: 'Download' }))
+    await settle()
+    expect(screen.queryByRole('alert')).toBeNull()
+    // Nor is one log's refusal said of another
+    // The first frame went once it had loaded the refusal
+    act(() => answerFrame(downloadFrames()[0]!, JSON.stringify({ status: 404, code: 'not-found', detail: 'No log called DMS.' })))
+    expect(screen.getByRole('alert')).toBeTruthy()
+    fireEvent.change(screen.getByRole('combobox', { name: 'Log' }), { target: { value: 'IndexerTask' } })
+    await settle()
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('reports a refusal for anyone but administrators that the frame met as the app does every other', async () => {
+    await openLog()
+    fireEvent.click(screen.getByRole('button', { name: 'Download' }))
+    await settle()
+    act(() => answerFrame(downloadFrames()[0]!, JSON.stringify({ status: 403, code: 'admins-only', detail: 'Only administrators can do that.' })))
+    await settle()
+    expect(screen.getByRole('heading', { level: 1, name: "You don't have access to Healdan Admin." })).toBeTruthy()
   })
 
   it("shows why the logs couldn't be listed, with Try Again", async () => {
@@ -236,6 +287,24 @@ describe("The Server Log's lines", () => {
     expect(rule('continuation')).toMatch(/overflow-wrap:\s*anywhere/)
     expect(rule('lines')).toMatch(/overflow:\s*auto/)
     expect(rule('lines')).toMatch(/min-width:\s*0/)
+  })
+
+  it('show an entry of a log that writes no level or source by its time and message alone, as an entry, not a stack line', async () => {
+    await openLog('/server-log', logRoutes([logLine('', { level: null, source: null, message: 'Digest sent to 4 people' })]))
+    const [entry] = entries()
+    expect(entry!.hasAttribute('data-continues')).toBe(false)
+    expect(entry!.querySelector('time')?.getAttribute('datetime')).toBe('2026-11-19T10:41:07Z')
+    expect(entry!.querySelector('[data-level]')).toBeNull()
+    expect(entry!.querySelector('[title]')).toBeNull()
+    expect(shown()).toEqual(['Digest sent to 4 people'])
+    expect(entry!.textContent).toBe(`${formatLogTime('2026-11-19T10:41:07Z')}Digest sent to 4 people`)
+  })
+
+  it('show a level they have no words for as the log writes it, and the rest of the box as ever', async () => {
+    await openLog('/server-log', logRoutes([logLine('', { level: 'NOTICE' as A['LogLine']['level'], message: 'A new kind of line' }), logLine('', { level: 'WARN' })]))
+    expect(shown()).toEqual(['A new kind of line', 'Finished indexing 5 documents in 4.2 s'])
+    expect(entries()[0]!.querySelector('[data-level]')?.textContent).toBe('NOTICE')
+    expect(entries()[1]!.querySelector('[data-level]')?.textContent).toBe('Warn')
   })
 
   it('show what the log holds as text, never as markup', async () => {
@@ -404,6 +473,32 @@ describe('Following', () => {
     expect(follows(api).at(-1)).toEqual({ after: 'p9', level: 'error' })
   })
 
+  it.each([
+    ['log', () => fireEvent.change(screen.getByRole('combobox', { name: 'Log' }), { target: { value: 'IndexerTask' } }), 'Indexer'],
+    ['level', () => fireEvent.click(screen.getByRole('radio', { name: 'Errors' })), 'Main Log'],
+  ])("shows Loading, never the old lines, and reads nothing more for the old ones, when the %s changes with the box read further up", async (_, choose, label) => {
+    const slow = slowAnswer<A['LogLines']>()
+    const main = fakeLog(manyEntries(250))
+    const { api } = await openLog('/server-log', {
+      'GET /v1/admin/logs/*/lines': (request: Request) => (request.params[0] === 'IndexerTask' || request.query?.level === 'error' ? slow.answered : main(request)),
+    })
+    // Reading further up: the entry at the box's top is the one kept in place
+    layOut(box()).scrollTo(40)
+    await settle()
+    const old = () => reads(api).filter((query) => query?.level === 'all')
+    const asked = old()
+    choose()
+    await settle()
+    // Nothing more of the main log at Everything, as Show Earlier's read would be
+    expect(old()).toEqual(asked)
+    expect(entries(label)).toEqual([])
+    expect(within(box(label)).getByText('Loading…')).toBeTruthy()
+
+    await act(async () => slow.answer({ lines: [logLine('n0', { level: 'ERROR', message: 'Indexing failed' })], before: 'n0', after: 'n1', atStart: true, atEnd: true, rolled: false }))
+    await settle()
+    expect(shown(label)).toEqual(['Indexing failed'])
+  })
+
   it("asks again at once while an answer isn't at the end, at most five times in a row, then every 3 seconds", async () => {
     let next = 100
     const { api } = await openLog('/server-log', {
@@ -445,6 +540,41 @@ describe('Following', () => {
     expect(follows(api).at(-1)).toEqual({ after: 'n2', level: 'all' })
   })
 
+  it.each([
+    ['Show Earlier reads before the new top', async () => {
+      fireEvent.click(within(box()).getByRole('button', { name: 'Show Earlier' }))
+      await settle()
+    }],
+    ['Follow goes back to the newest after a pause', async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Pause' }))
+      await settle()
+      expect(screen.getByText(ROLLED)).toBeTruthy()
+      fireEvent.click(screen.getByRole('button', { name: 'Follow' }))
+      await settle()
+    }],
+    ['the new top is dropped as more come', async () => {
+      await wait(FOLLOW_MS)
+      await settle()
+    }],
+  ])("stops saying the log rolled over once it's no longer so: %s", async (_, then) => {
+    const newFile = Array.from({ length: MAX_KEPT }, (_, i) => logLine(`n${i}`, { message: `New file ${i}` }))
+    await openLog('/server-log', {
+      'GET /v1/admin/logs/*/lines': (request: Request) => {
+        if (request.query?.after === 'p9') return { lines: newFile.slice(0, 2), before: 'n0', after: 'n2', atStart: false, atEnd: true, rolled: true } satisfies A['LogLines']
+        // Then the rest of the new file, past what's kept, so its top is dropped
+        if (request.query?.after === 'n2') return { lines: newFile.slice(2).concat(logLine('n1000', { message: 'Newest' })), before: 'n2', after: 'n1001', atStart: false, atEnd: true, rolled: false } satisfies A['LogLines']
+        if (request.query?.after !== undefined) return { lines: [], before: String(request.query.after), after: String(request.query.after), atStart: false, atEnd: true, rolled: false } satisfies A['LogLines']
+        if (request.query?.before === 'n0') return { lines: logEntries().slice(0, 3).map((entry, i) => ({ ...entry, position: `o${i}` })), before: 'o0', after: 'n0', atStart: true, atEnd: false, rolled: false } satisfies A['LogLines']
+        return fakeLog(logEntries())(request)
+      },
+    })
+    await wait(FOLLOW_MS)
+    await settle()
+    expect(screen.getByText(ROLLED)).toBeTruthy()
+    await then()
+    expect(screen.queryByText(ROLLED)).toBeNull()
+  })
+
   it("keeps the log's menu when a new read of it fails, saying it couldn't refresh, with Try Again", async () => {
     let failing = false
     await openLog('/server-log', { 'GET /v1/admin/logs': () => (failing ? problem(500, 'server-error') : logRoutes()['GET /v1/admin/logs']) })
@@ -472,15 +602,112 @@ describe('Following', () => {
     // Said once as it comes, not again at each try
     expect(note.closest('[role="status"]')).toBeTruthy()
     expect(shown()).toHaveLength(9)
-    await wait(FOLLOW_MS)
+    // The next try waits twice as long
+    await wait(FOLLOW_MS * 2)
     await settle()
     expect(follows(api)).toHaveLength(2)
     failing = false
-    await wait(FOLLOW_MS)
+    await wait(FOLLOW_MS * 4)
     await settle()
     expect(follows(api)).toHaveLength(3)
     expect(screen.queryByText("Couldn't read the newest lines, so this shows what was read last. Healdan keeps trying.")).toBeNull()
     expect(shown().at(-1)).toBe('Session opened for treeve')
+  })
+
+  it('waits twice as long after each read that fails, a minute at most, and every 3 seconds again once one is answered', async () => {
+    let failing = true
+    const read = fakeLog(logEntries())
+    const { api } = await openLog('/server-log', { 'GET /v1/admin/logs/*/lines': (request: Request) => (failing && request.query?.after !== undefined ? problem(500, 'server-error') : read(request)) })
+    await wait(FOLLOW_MS)
+    await settle()
+    expect(follows(api)).toHaveLength(1)
+    // Each wait after a failure, then the try it ends in: ten failed tries in all
+    for (const [index, waited] of [6_000, 12_000, 24_000, 48_000, 60_000, 60_000, 60_000, 60_000, 60_000].entries()) {
+      await wait(waited - 1_000)
+      expect(follows(api)).toHaveLength(index + 1)
+      await wait(1_000)
+      expect(follows(api)).toHaveLength(index + 2)
+    }
+    // Every 3 seconds, ten failures would have been some 130 tries by now
+    expect(follows(api)).toHaveLength(10)
+    failing = false
+    await wait(60_000)
+    await settle()
+    expect(follows(api)).toHaveLength(11)
+    expect(screen.queryByText("Couldn't read the newest lines, so this shows what was read last. Healdan keeps trying.")).toBeNull()
+    await wait(FOLLOW_MS)
+    await settle()
+    expect(follows(api)).toHaveLength(12)
+  })
+
+  it("waits twice as long after a quick re-read that fails, as after any follow's", async () => {
+    let next = 100
+    const { api } = await openLog('/server-log', {
+      'GET /v1/admin/logs/*/lines': (request: Request) => {
+        if (request.query?.after === undefined) return fakeLog(logEntries())(request)
+        const at = next++
+        // The read on the clock isn't at the end, so the next is asked at once, and fails
+        if (at > 100) return problem(500, 'server-error')
+        return { lines: [logLine(`q${at}`, { message: `Catching up ${at}` })], before: `q${at}`, after: `q${at + 1}`, atStart: false, atEnd: false, rolled: false } satisfies A['LogLines']
+      },
+    })
+    await wait(FOLLOW_MS)
+    await settle()
+    expect(follows(api)).toHaveLength(2)
+    await wait(FOLLOW_MS * 2 - 100)
+    expect(follows(api)).toHaveLength(2)
+    await wait(100)
+    await settle()
+    expect(follows(api)).toHaveLength(3)
+  })
+
+  it.each([
+    [404, 'not-found'],
+    [400, 'bad-request'],
+  ])('ends the follow when the server answers %i, saying so, and Follow starts again from the newest lines', async (status, code) => {
+    let gone = true
+    const log = logEntries()
+    const read = fakeLog(log)
+    const { api } = await openLog('/server-log', { 'GET /v1/admin/logs/*/lines': (request: Request) => (gone && request.query?.after !== undefined ? problem(status, code) : read(request)) })
+    await wait(FOLLOW_MS)
+    await settle()
+    expect(follows(api)).toHaveLength(1)
+    const note = screen.getByText("The server no longer knows this log, or the place it was read to, so following has stopped. Follow starts again from the newest lines.")
+    expect(note.closest('[role="status"]')).toBeTruthy()
+    expect(screen.queryByText("Couldn't read the newest lines, so this shows what was read last. Healdan keeps trying.")).toBeNull()
+    expect(screen.getByText('Paused')).toBeTruthy()
+    // What was read stays, and nothing more is asked
+    expect(shown()).toHaveLength(9)
+    await wait(5 * 60_000)
+    expect(reads(api)).toHaveLength(2)
+
+    gone = false
+    log.push(logLine('', { message: 'Session opened for treeve' }))
+    const follow = screen.getByRole('button', { name: 'Follow' })
+    follow.focus()
+    fireEvent.click(follow)
+    await settle()
+    // The newest lines, read afresh, then followed from there
+    expect(reads(api).at(-1)).toEqual({ level: 'all' })
+    expect(shown().at(-1)).toBe('Session opened for treeve')
+    expect(screen.queryByText(/so following has stopped/)).toBeNull()
+    expect(screen.getByText('Following Live')).toBeTruthy()
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Pause' }))
+    await wait(FOLLOW_MS)
+    await settle()
+    expect(follows(api).at(-1)).toEqual({ after: 'p10', level: 'all' })
+  })
+
+  it('stops for good when a follow is refused as admins only: the app says so, and nothing more is asked', async () => {
+    const read = fakeLog(logEntries())
+    const { api } = await openLog('/server-log', { 'GET /v1/admin/logs/*/lines': (request: Request) => (request.query?.after !== undefined ? problem(403, 'admins-only') : read(request)) })
+    await wait(FOLLOW_MS)
+    await settle()
+    expect(screen.getByRole('heading', { level: 1, name: "You don't have access to Healdan Admin." })).toBeTruthy()
+    expect(screen.queryByRole('region', { name: 'Lines of Main Log' })).toBeNull()
+    const asked = api.calls.length
+    await wait(5 * 60_000)
+    expect(api.calls).toHaveLength(asked)
   })
 
   it(`keeps ${MAX_KEPT} entries at most, the oldest dropped as new ones come, and Show Earlier reads back from the first kept`, async () => {
@@ -600,6 +827,33 @@ describe('Earlier lines', () => {
     expect(scroll.top).toBe(52 * 20)
     expect(within(box()).getByText('This is the start of the log: it holds nothing older.')).toBeTruthy()
     expect(within(box()).queryByRole('button', { name: 'Show Earlier' })).toBeNull()
+  })
+
+  it('give the focus Show Earlier had to the box when it goes at the start of the log', async () => {
+    await openLog('/server-log', logRoutes(manyEntries(250)))
+    const earlierButton = within(box()).getByRole('button', { name: 'Show Earlier' })
+    earlierButton.focus()
+    fireEvent.click(earlierButton)
+    await settle()
+    expect(within(box()).getByText('This is the start of the log: it holds nothing older.')).toBeTruthy()
+    expect(earlierButton.isConnected).toBe(false)
+    expect(document.activeElement).toBe(box())
+  })
+
+  it('take no focus when the log opens at its start', async () => {
+    await openLog()
+    expect(within(box()).getByText('This is the start of the log: it holds nothing older.')).toBeTruthy()
+    expect(document.activeElement).toBe(document.body)
+  })
+
+  it('leave the focus where it is when the start of the log is reached with the focus elsewhere', async () => {
+    await openLog('/server-log', logRoutes(manyEntries(250)))
+    const words = screen.getByRole('textbox', { name: 'Search the Log' })
+    words.focus()
+    fireEvent.click(within(box()).getByRole('button', { name: 'Show Earlier' }))
+    await settle()
+    expect(within(box()).getByText('This is the start of the log: it holds nothing older.')).toBeTruthy()
+    expect(document.activeElement).toBe(words)
   })
 
   it('come as the box is scrolled to its top', async () => {

@@ -1063,7 +1063,7 @@ export function groupRoutes(): Routes {
 // Monitoring (Phase 5): the faults the server logged and its logs, what was done, and the background jobs, each screen's
 // fixtures in a section of its own.
 
-// Monitoring: Errors and the Server Log (Task 32b)
+// Monitoring: Errors and the Server Log
 
 /** A kind of fault as the Errors list gives it: the preview that timed out, seen 6 times today, unless `over` says otherwise */
 export function errorRow(over: Partial<A['ErrorRow']> = {}): A['ErrorRow'] {
@@ -1087,12 +1087,14 @@ export const errorRows: A['ErrorRow'][] = [
   errorRow({ id: 15, message: 'Outgoing email refused: authentication failed', area: 'Email', times: 1, firstSeen: '2026-11-18T17:20:00Z', lastSeen: '2026-11-18T17:20:00Z', resolved: true }),
 ]
 
-/** GET /v1/admin/errors over `rows`: those its words, area and Unresolved keep, a page from `offset`, their times added up */
+/**
+ * GET /v1/admin/errors over `rows`: those its words (in the message or the logger's name, as errorDetails gives it), area
+ * and Unresolved keep, a page from `offset`, their times added up. The window isn't looked at: the fake has no hour counts.
+ */
 export function errorList(query?: Record<string, unknown>, rows: A['ErrorRow'][] = errorRows): A['ErrorList'] {
   const q = String(query?.q ?? '').trim().toLowerCase()
-  const kept = rows.filter(
-    (row) => (q === '' || row.message.toLowerCase().includes(q)) && (query?.area === undefined || row.area === query.area) && (query?.unresolved !== true || !row.resolved),
-  )
+  const said = (row: A['ErrorRow']) => [row.message, errorDetails[row.id]?.logger ?? ''].some((text) => text.toLowerCase().includes(q))
+  const kept = rows.filter((row) => (q === '' || said(row)) && (query?.area === undefined || row.area === query.area) && (query?.unresolved !== true || !row.resolved))
   const offset = Number(query?.offset ?? 0)
   const limit = Number(query?.limit ?? 100)
   return { items: kept.slice(offset, offset + limit).map((row) => ({ ...row })), offset, limit, total: kept.length, errors: kept.reduce((sum, row) => sum + row.times, 0) }
@@ -1218,7 +1220,8 @@ export function logKeeps(entry: A['LogLine'], query?: Record<string, unknown>): 
  * A log for GET /v1/admin/logs/{name}/lines over `entries`, which a test may add to as the log grows. Each entry's
  * position is `p<its index>`, whatever it was given, and so are `before` and `after`: before `p4` are entries 0 to 3, and
  * after it entries 4 on. Each read looks through at most `scan` entries, as the server looks through at most 5 MiB, so a
- * level or words can make an answer short, or empty, before the start; it keeps 200 at most.
+ * level or words can make an answer short, or empty, before the start; it keeps 200 at most, as the server does: going
+ * back, the last 200 it found, and going forward the first 200, ending at the entry after them.
  */
 export function fakeLog(entries: A['LogLine'][], scan = 200) {
   const at = (index: number) => `p${index}`
@@ -1228,8 +1231,10 @@ export function fakeLog(entries: A['LogLine'][], scan = 200) {
     const kept = (from: number, to: number) => all.slice(from, to).filter((entry) => logKeeps(entry, query)).slice(-200)
     if (query?.after !== undefined) {
       const from = Math.min(indexOf(query.after), all.length)
-      const to = Math.min(all.length, from + scan)
-      return { lines: kept(from, to), before: at(from), after: at(to), atStart: false, atEnd: to === all.length, rolled: false }
+      const found = all.slice(from, Math.min(all.length, from + scan)).filter((entry) => logKeeps(entry, query))
+      // Past 200, the read ends at the entry after the 200th kept
+      const to = found.length > 200 ? indexOf(found[200]!.position) : Math.min(all.length, from + scan)
+      return { lines: found.slice(0, 200), before: at(from), after: at(to), atStart: false, atEnd: to === all.length, rolled: false }
     }
     const to = query?.before === undefined ? all.length : Math.min(indexOf(query.before), all.length)
     const from = Math.max(0, to - scan)
@@ -1247,7 +1252,7 @@ export function logRoutes(main: A['LogLine'][] = logEntries()): Routes {
   }
 }
 
-// Monitoring: the Audit Trail and Activity (Task 32c)
+// Monitoring: the Audit Trail and Activity
 
 /** A row of the Audit Trail: Tom Reeve downloading # 10388 of 1001.1 at 10:33 on 19 November 2026, unless `over` says otherwise */
 export function auditRow(over: Partial<A['AuditRow']> = {}): A['AuditRow'] {
@@ -1267,7 +1272,11 @@ export function auditRow(over: Partial<A['AuditRow']> = {}): A['AuditRow'] {
   }
 }
 
-/** The morning of 19 November 2026, newest first: a row of each kind, a sign-in that names no one, and a secret changed */
+/**
+ * The morning of 19 November 2026, newest first: a row of each kind, a secret changed, and as the server answers them, a
+ * failed sign-in for a username no account has (no one named, its typed text not answered), a change an administrator
+ * made to another's account (Who is who made it, the Detail the account), and one whose row names no author
+ */
 export const auditRows: A['AuditRow'][] = [
   auditRow({
     id: 'a41',
@@ -1309,13 +1318,28 @@ export const auditRows: A['AuditRow'][] = [
     folderId: null,
     changes: { description: { before: null, after: 'Shipping and charters' }, name: { before: 'Saltmarsh Shipping', after: 'Saltmarsh Shipping Ltd' } },
   }),
-  auditRow({ id: 'u16', when: '2026-11-19T09:47:00Z', who: null, kind: 'sign-in', event: 'event.user.login.failed', what: 'Failed to sign in', detail: null, from: '192.0.2.21', docNumber: null, folderId: null }),
-  auditRow({ id: 'u15', when: '2026-11-19T09:12:00Z', who: 'Jamie Clarke', kind: 'user', event: 'event.user.passwordchanged', what: 'Changed their password', detail: null, from: null, docNumber: null, folderId: null }),
+  auditRow({ id: 'u16', when: '2026-11-19T09:47:00Z', who: null, kind: 'sign-in', event: 'event.user.login.failed', what: 'Failed to sign in', detail: 'Unknown username', from: '192.0.2.21', docNumber: null, folderId: null }),
+  auditRow({
+    id: 'u15',
+    when: '2026-11-19T09:12:00Z',
+    who: 'Sam Okafor',
+    kind: 'user',
+    event: 'event.user.passwordchanged',
+    what: 'Password changed',
+    detail: 'Jamie Clarke (jclarke): By sokafor in the Admin app',
+    from: '192.0.2.9',
+    docNumber: null,
+    folderId: null,
+  }),
+  auditRow({ id: 'u14', when: '2026-11-19T08:50:00Z', who: null, kind: 'user', event: 'event.user.disabled', what: 'Account disabled', detail: 'Ben Hollis (bhollis)', from: null, docNumber: null, folderId: null }),
 ]
 
-/** A page of the Audit Trail: its rows, and where the next one starts (none, the end, unless given) */
-export function auditPage(items: A['AuditRow'][], nextCursor: string | null = null): A['AuditPage'] {
-  return { items, nextCursor }
+/**
+ * A page of the Audit Trail: its rows, where the next one starts (none, the end, unless given), and how far back its
+ * reading reached, null exactly at the end, as the server says, and otherwise 1 November 2026 unless given
+ */
+export function auditPage(items: A['AuditRow'][], nextCursor: string | null = null, readBackTo = '2026-11-01T00:00:00Z'): A['AuditPage'] {
+  return { items, nextCursor, readBackTo: nextCursor === null ? null : readBackTo }
 }
 
 /** GET /v1/admin/audit over `rows`: those of the kinds asked for (every kind without), in one page, the end */
@@ -1345,7 +1369,7 @@ export function auditRoutes(): Routes {
   }
 }
 
-// Monitoring: Background Jobs (Task 32d)
+// Monitoring: Background Jobs
 
 /**
  * A job as GET /v1/admin/jobs gives it: LogicalDOC's Indexer, enabled and idle, its last run a success, every 30 minutes,

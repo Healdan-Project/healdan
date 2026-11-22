@@ -567,6 +567,32 @@ describe("A person's Activity", () => {
     expect(within(main()).getByRole('region', { name: 'Details' })).toBeTruthy()
   })
 
+  it('asks the list again after a change made on the page, as the change is recorded', async () => {
+    const { api } = await renderApp(`/users/${priyaRow.id}?tab=activity`, {
+      ...peopleRoutes(),
+      ...audit,
+      'POST /v1/admin/users/7/disable': () => userOf({ ...priyaRow, status: 'disabled', devices: 0 }),
+    })
+    await within(main()).findByRole('grid', { name: 'Activity of Priya Nair' })
+    await waitFor(() => expect(asked(api)).toHaveLength(1))
+    await userEvent.click(action('Disable')!)
+    await userEvent.click(within(await screen.findByRole('alertdialog', { name: 'Disable Priya Nair?' })).getByRole('button', { name: 'Disable' }))
+    await waitFor(() => expect(asked(api)).toHaveLength(2))
+    expect(asked(api).at(-1)).toEqual({ userId: priyaRow.id, zone: ZONE, limit: AUDIT_PAGE_SIZE })
+  })
+
+  it('asks the list again with Refresh, which holds while it reads and keeps the focus', async () => {
+    const { api } = await renderApp(`/users/${priyaRow.id}?tab=activity`, { ...peopleRoutes(), ...audit })
+    const panel = await within(main()).findByRole('tabpanel', { name: 'Activity' })
+    await within(panel).findByRole('grid', { name: 'Activity of Priya Nair' })
+    await waitFor(() => expect(asked(api)).toHaveLength(1))
+    const refresh = within(panel).getByRole('button', { name: 'Refresh' })
+    await userEvent.click(refresh)
+    await waitFor(() => expect(asked(api)).toHaveLength(2))
+    await waitFor(() => expect(refresh.hasAttribute('data-pending')).toBe(false))
+    expect(document.activeElement).toBe(refresh)
+  })
+
   it('opens at Activity when the address names it', async () => {
     await renderApp(`/users/${priyaRow.id}?tab=activity`, { ...peopleRoutes(), ...audit })
     expect(await within(main()).findByRole('grid', { name: 'Activity of Priya Nair' })).toBeTruthy()

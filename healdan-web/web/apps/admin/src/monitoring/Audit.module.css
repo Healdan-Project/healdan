@@ -1,8 +1,8 @@
 /* SPDX-FileCopyrightText: 2026 The Healdan Project
    SPDX-License-Identifier: LGPL-3.0-only */
 
-/* The Audit Trail, as 03-monitoring.html draws it, and the Activity tabs: the heading with Export CSV at the end of its
-   line, the filters, then the list, which fills what they leave of the main area and scrolls inside, with Show More or the
+/* The Audit Trail, as 03-monitoring.html draws it, and the Activity tabs: the heading with Refresh and Export CSV at the end
+   of its line, the filters, then the list, which fills what they leave of the main area and scrolls inside, with Show More or the
    end under it and the selected row's details under that. In a tab the page scrolls as a whole, so the list has a height
    of its own. */
 
@@ -37,26 +37,12 @@
   margin-inline-start: auto;
 }
 
-/* Export CSV, a link that looks like a button */
-.export {
+/* A button's icon and words: Refresh and Export CSV */
+.label {
   display: inline-flex;
   align-items: center;
   gap: var(--hd-space-2);
-  box-sizing: border-box;
-  min-height: 26px;
-  padding: 0 var(--hd-space-4);
-  border: 1px solid var(--hd-button-secondary-line);
-  border-radius: var(--hd-radius);
-  background: var(--hd-button-secondary);
-  color: var(--hd-text);
-  text-decoration: none;
   white-space: nowrap;
-}
-
-.export:focus-visible {
-  outline: var(--hd-focus-outline);
-  outline-offset: var(--hd-focus-offset);
-  box-shadow: 0 0 0 5px var(--hd-focus-ring);
 }
 
 /* The filters: the kinds on a line of their own, the searches, the days and the words under them */
@@ -217,7 +203,8 @@
   border-radius: var(--hd-radius-small);
 }
 
-/* An Activity tab: its kinds, with the way to the whole Audit Trail at the end of their line, over the list */
+/* An Activity tab: its kinds and days, with Refresh and the way to the whole Audit Trail at the end of their line, over the
+   list */
 .activity {
   display: flex;
   flex-direction: column;
@@ -232,4 +219,19 @@
   gap: var(--hd-space-3) var(--hd-space-5);
   padding-bottom: var(--hd-space-3);
   border-bottom: 1px solid var(--hd-line);
+}
+
+.activityLinks {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--hd-space-3) var(--hd-space-5);
+}
+
+.activityDays {
+  display: flex;
+  flex-basis: 100%;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--hd-space-3);
 }

@@ -4,12 +4,12 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { adminComponents } from '@healdan/api'
 import { ErrorPanel } from '@healdan/shell'
-import { Button, formatDateTime, Table, type TableColumn, type TableRow } from '@healdan/ui'
+import { Button, formatDateTime, Table, VisuallyHidden, type TableColumn, type TableRow } from '@healdan/ui'
 import { userAppDocHref, userAppFolderHref } from '../addresses'
 import { focusLost } from '../focus'
 import type { CursorListing } from '../lists/useCursorList'
 import { StaleNote } from '../people/StaleNote'
-import { t } from '../strings'
+import { plural, t } from '../strings'
 import { useAuditList, type AuditQuery } from './queries'
 import { changeLines, detailCell, fullTime, kindLabel } from './text'
 import styles from './Audit.module.css'
@@ -32,7 +32,8 @@ function tableRowOf(row: A['AuditRow']): AuditTableRow {
 function auditColumns(): TableColumn<AuditTableRow>[] {
   return [
     { id: 'time', name: t('admin.audit.column.time'), isRowHeader: true, width: 170, minWidth: 140, cell: ({ row }) => formatDateTime(row.when) },
-    { id: 'who', name: t('admin.audit.column.who'), width: '1fr', minWidth: 120, cell: ({ row }) => row.who ?? '' },
+    // A row that names no one, as a change to an account its row names no author of, says so as its details do
+    { id: 'who', name: t('admin.audit.column.who'), width: '1fr', minWidth: 120, cell: ({ row }) => row.who ?? t('admin.audit.notRecorded') },
     { id: 'kind', name: t('admin.audit.column.kind'), width: 130, minWidth: 110, cell: ({ row }) => kindLabel(row.kind) },
     { id: 'what', name: t('admin.audit.column.what'), width: '1.5fr', minWidth: 140, cell: ({ row }) => row.what },
     { id: 'detail', name: t('admin.audit.column.detail'), width: '3fr', minWidth: 200, cell: ({ row }) => detailCell(row) },
@@ -130,8 +131,9 @@ export interface AuditListProps {
 /**
  * The Audit Trail's list (spec 8.8), for its screen and the Activity tabs: the rows the filters keep, newest first, a page
  * at a time by cursor (P5-R22), the next as the end of the list comes into view, or with Show More, and the end said so.
- * Selecting a row shows it whole below the list. While a new read fails, the rows it had stay, with a note that it
- * couldn't refresh (P4-R15).
+ * How far back the reading has reached (`readBackTo`, P5-R33) is said beside Show More, and by a list that has found
+ * nothing yet; how a run of Show More ended is said to a screen reader. Selecting a row shows it whole below the list.
+ * While a new read fails, the rows it had stay, with a note that it couldn't refresh (P4-R15).
  */
 export function AuditList({ query, filtered, label, fill = false }: AuditListProps) {
   const listing = useAuditList(query)
@@ -143,6 +145,9 @@ export function AuditList({ query, filtered, label, fill = false }: AuditListPro
   const selected = listing.items.find((row) => row.id === selectedId)
 
   const { offering, following, empty: emptyKind } = readingOf(listing)
+  // How far back the last page read: every row the filters keep that's newer has been given. Null at the end.
+  const readBackTo = listing.last?.readBackTo ?? null
+  const noneYet = readBackTo === null ? t('admin.audit.noneYet') : t('admin.audit.noneBackTo', { when: formatDateTime(readBackTo) })
   // Show More goes at the end: the focus it had then goes to what says so, or to the list when there's nothing in it
   const frame = useRef<HTMLDivElement>(null)
   const end = useRef<HTMLParagraphElement>(null)
@@ -156,8 +161,27 @@ export function AuditList({ query, filtered, label, fill = false }: AuditListPro
     if (focusLost()) (end.current ?? frame.current?.querySelector<HTMLElement>('[role="grid"]'))?.focus()
   }, [offering])
 
+  // How a run of Show More ended, said once it has: so many more rows, nothing found back to where it read, or the end.
+  // A run is these filters'; a failed one is said by the note that the list couldn't refresh.
+  const question = JSON.stringify(query)
+  const run = useRef<{ question: string; count: number } | undefined>(undefined)
+  const [said, setSaid] = useState<{ question: string; text: string }>()
+  const { items, atEnd, isError, last } = listing
+  useEffect(() => {
+    const started = run.current
+    if (started === undefined || following) return
+    run.current = undefined
+    if (started.question !== question || isError) return
+    const added = items.length - started.count
+    setSaid({ question, text: added > 0 ? plural('admin.audit.moreRows', added) : atEnd ? t('admin.audit.end') : noneYet })
+  }, [following, items.length, atEnd, isError, last, question, noneYet])
+
   const empty =
-    emptyKind === 'loading' ? t('common.loading') : <p className={styles.empty}>{t(emptyKind === 'noneYet' ? 'admin.audit.noneYet' : filtered ? 'admin.audit.noneMatch' : 'admin.audit.none')}</p>
+    emptyKind === 'loading' ? (
+      t('common.loading')
+    ) : (
+      <p className={styles.empty}>{emptyKind === 'noneYet' ? noneYet : t(filtered ? 'admin.audit.noneMatch' : 'admin.audit.none')}</p>
+    )
 
   return (
     <div className={fill ? `${styles.list} ${styles.fill}` : `${styles.list} ${styles.fixed}`}>
@@ -188,17 +212,23 @@ export function AuditList({ query, filtered, label, fill = false }: AuditListPro
                 isPending={following}
                 onPress={() => {
                   pressed.current = true
+                  run.current = { question, count: listing.items.length }
+                  setSaid(undefined)
                   listing.showMore()
                 }}
               >
                 {t('admin.audit.showMore')}
               </Button>
             )}
+            {offering && listing.items.length > 0 && readBackTo !== null && <p className={styles.end}>{t('admin.audit.reach', { when: formatDateTime(readBackTo) })}</p>}
             {listing.atEnd && listing.items.length > 0 && (
               <p ref={end} tabIndex={-1} className={styles.end}>
                 {t('admin.audit.end')}
               </p>
             )}
+            <VisuallyHidden>
+              <span role="status">{said?.question === question ? said.text : ''}</span>
+            </VisuallyHidden>
           </div>
           {selected && <RowDetails row={selected} />}
         </>

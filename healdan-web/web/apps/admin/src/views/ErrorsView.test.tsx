@@ -126,6 +126,21 @@ describe('The Errors list', () => {
     await waitFor(() => expect(router.state.location.search).toEqual({}))
     await waitFor(() => expect(messages()).toHaveLength(errorRows.length))
     expect((screen.getByRole('checkbox', { name: 'Unresolved Only' }) as HTMLInputElement).checked).toBe(false)
+    // Clear Filters went with the filters, and the focus it had is on the words
+    expect(screen.queryByRole('button', { name: 'Clear Filters' })).toBeNull()
+    expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Message or Logger' }))
+  })
+
+  it('shows an area it has no words for as the server names it, and the rest of the screen as ever', async () => {
+    const unknown = errorRow({ id: 16, message: 'Workflow step failed', area: 'Workflow' as A['ErrorArea'] })
+    await openErrors('/errors?id=16', {
+      'GET /v1/admin/errors': errorList(undefined, [unknown, ...errorRows]),
+      'GET /v1/admin/errors/*': errorDetailOf(unknown),
+    })
+    expect(cells('Workflow step failed')[0]).toBe('Workflow')
+    const region = await screen.findByRole('region', { name: 'Error Details' })
+    expect((await within(region).findByText('Area', { selector: 'dt' })).nextElementSibling?.textContent).toBe('Workflow')
+    expect(messages()).toHaveLength(errorRows.length + 1)
   })
 
   it('offers every area by its name, as the server names them', async () => {
@@ -255,10 +270,11 @@ describe("A fault's details", () => {
     await waitFor(() => expect(document.activeElement).toBe(region))
   })
 
-  it('says so when the fault the address names is there no more', async () => {
+  it('says so when the fault the address names is there no more, taking no focus', async () => {
     await openErrors('/errors?id=99')
     const region = await screen.findByRole('region', { name: 'Error Details' })
     expect(await within(region).findByText("This error isn't there any more: the server deletes a resolved error once it hasn't been seen for 90 days.")).toBeTruthy()
+    expect(document.activeElement).toBe(document.body)
   })
 
   it("says the fault has gone when a re-read finds it no more, rather than that it couldn't refresh", async () => {
@@ -334,6 +350,31 @@ describe('Mark Resolved and Reopen', () => {
     expect(await within(region).findByRole('button', { name: 'Reopen' })).toBeTruthy()
   })
 
+  it('says the fault has gone when Mark Resolved finds it deleted meanwhile, and the focus the button had goes to the details', async () => {
+    let gone = false
+    const routes = errorRoutes()
+    const detail = routes['GET /v1/admin/errors/*'] as (request: { params: string[] }) => unknown
+    const { api } = await openErrors('/errors?id=12', {
+      'GET /v1/admin/errors/*': (request: { params: string[] }) => (gone ? problem(404, 'not-found') : detail(request)),
+      'POST /v1/admin/errors/*/resolve': () => {
+        gone = true
+        return problem(404, 'not-found')
+      },
+    })
+    const region = await screen.findByRole('region', { name: 'Error Details' })
+    const resolve = await within(region).findByRole('button', { name: 'Mark Resolved' })
+    const reads = api.callsTo('GET /v1/admin/errors/12').length
+    resolve.focus()
+    await userEvent.keyboard('{Enter}')
+    // The fault is asked again, and said to have gone, as the server no longer has it
+    expect(await within(region).findByText("This error isn't there any more: the server deletes a resolved error once it hasn't been seen for 90 days.")).toBeTruthy()
+    expect(api.callsTo('GET /v1/admin/errors/12').length).toBeGreaterThan(reads)
+    expect(within(region).queryByRole('group', { name: 'Latest Message' })).toBeNull()
+    expect(within(region).queryByRole('alert')).toBeNull()
+    expect(screen.queryByText("Couldn't refresh this, so it shows what was read last.")).toBeNull()
+    await waitFor(() => expect(document.activeElement).toBe(region))
+  })
+
   it("says a refusal in the rule's words, and leaves the fault as it was", async () => {
     await openErrors('/errors?id=12', { 'POST /v1/admin/errors/*/resolve': problem(409, 'refused', 'Only an administrator can mark an error resolved.') })
     const region = await screen.findByRole('region', { name: 'Error Details' })
@@ -362,6 +403,16 @@ describe('Show in Server Log', () => {
     const search = new URL(link.getAttribute('href')!, 'http://localhost').searchParams
     expect(search.get('log')).toBe('IndexerTask')
     expect(search.get('q')).toBe(long.slice(0, 100))
+  })
+
+  it('never cuts its words inside a character, as one with an emoji across the cut would be', async () => {
+    // 99 characters, then an emoji of two UTF-16 units, the second of which a cut at 100 would leave out
+    const long = `${'x'.repeat(99)}\u{1F4C4} and the rest`
+    await openErrors('/errors?id=14', { 'GET /v1/admin/errors/*': { ...errorDetails[14]!, message: long } })
+    const link = await within(await screen.findByRole('region', { name: 'Error Details' })).findByRole('link', { name: 'Show in Server Log' })
+    const q = new URL(link.getAttribute('href')!, 'http://localhost').searchParams.get('q')!
+    expect(q).toBe('x'.repeat(99))
+    expect(q).not.toContain('\uFFFD')
   })
 
   it('is left out when no log listed holds its lines', async () => {

@@ -21,7 +21,7 @@ export function useLogs() {
   })
 }
 
-/** Download's link: the log's files, zipped, as the server keeps them, by the log's name and never a path */
+/** Download's address: the log's files, zipped, as the server keeps them, by the log's name and never a path */
 export function logFileUrl(url: (path: string) => string, name: string): string {
   return url(apiPath`/v1/admin/logs/${name}/file`)
 }

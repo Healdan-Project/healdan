@@ -19,9 +19,10 @@ const AREAS: Record<A['ErrorArea'], AdminStringKey> = {
   Server: 'admin.errors.area.server',
 }
 
-/** A fault's area, by its name */
+/** A fault's area, by its name; one the app has no words for, as after a server's upgrade, as the server names it */
 export function areaWords(area: A['ErrorArea']): string {
-  return t(AREAS[area])
+  const key: AdminStringKey | undefined = AREAS[area]
+  return key === undefined ? area : t(key)
 }
 
 /** The level a fault was first logged at, in words */
@@ -44,13 +45,15 @@ export function statusWords(detail: A['ErrorDetail']): string {
 
 /**
  * The words Show in Server Log searches the log for: the first line of the fault's latest message with words on it, cut as
- * the Server Log's text filter takes it (TYPED_MAX, 100 characters). The log writes that line as its entry's message, so
- * the search finds the latest time it was logged; the server compares it with each line's message as answered, which has
- * the same URL credentials cut out as the fault's.
+ * the Server Log's text filter takes it (TYPED_MAX, 100 characters), never inside a character: a character of two UTF-16
+ * units across the cut, as an emoji is, is left out whole, as half of it would be sent as U+FFFD and match nothing. The
+ * log writes that line as its entry's message, so the search finds the latest time it was logged; the server compares it
+ * with each line's message as answered, which has the same URL credentials cut out as the fault's.
  */
 export function logSearchWords(message: string): string {
   const line = message.split(/\r?\n/).find((one) => one.trim() !== '') ?? ''
-  return typed(line)
+  const cut = typed(line)
+  return /[\uD800-\uDBFF]$/.test(cut) ? cut.slice(0, -1).trim() : cut
 }
 
 /** The facts of the details, in their order: each name with its value, as the page shows them and Copy Details copies them */

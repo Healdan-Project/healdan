@@ -4,6 +4,7 @@
 import { cleanup } from '@testing-library/react'
 import { clearToasts, resetAnnouncer, setLabels } from '@healdan/ui'
 import { afterEach, vi } from 'vitest'
+import { removeDownloadFrames } from './frames'
 import { installIntersectionObserver } from './intersection'
 import { resetListSize } from './listSize'
 import { showPage } from './visibility'
@@ -17,6 +18,8 @@ window.scrollTo = () => {}
 // Vitest has no globals here, so Testing Library can't register its own cleanup.
 afterEach(() => {
   cleanup()
+  // A download's frame is the page's, not the app's, so it outlives the app drawn
+  removeDownloadFrames()
   // React Aria's first announcement waits 100 ms, which can outlast the test file's page
   resetAnnouncer()
   vi.useRealTimers()

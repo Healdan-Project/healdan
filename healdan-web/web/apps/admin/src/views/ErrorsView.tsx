@@ -2,12 +2,12 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { useNavigate } from '@tanstack/react-router'
-import { useEffect, useId, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef } from 'react'
 import type { adminComponents, adminPaths } from '@healdan/api'
 import { ErrorPanel, idFrom } from '@healdan/shell'
 import { Button, CheckField, SelectField, Table, TextField, ToggleButtons } from '@healdan/ui'
 import { routes, searchId } from '../addresses'
-import { focusLost } from '../focus'
+import { focusLost, useFocusWhenGone } from '../focus'
 import { useWords } from '../lists/useWords'
 import { errorColumns, errorRowOf } from '../monitoring/errorColumns'
 import { ErrorDetails } from '../monitoring/ErrorDetails'
@@ -90,6 +90,16 @@ export function ErrorsView({ search }: { search: ErrorsSearch }) {
 
   const words = useWords(search.q ?? '', (q) => change({ q: q === '' ? undefined : q }))
 
+  // Clear Filters goes once nothing is filtered, so the focus it had goes to the words
+  const wordsInput = useRef<HTMLInputElement | null>(null)
+  const wordsBox = useCallback((element: HTMLDivElement | null) => {
+    wordsInput.current = element?.querySelector('input') ?? null
+  }, [])
+  useFocusWhenGone(!filtered, wordsInput)
+  // A fault shown, then found gone, takes the details' buttons with it, so the focus they had goes to the details, which say
+  // so; one the address names that's gone from the start takes no focus
+  useFocusWhenGone(search.id !== undefined && isGone(detail.error) && detail.data !== undefined, region)
+
   useEffect(() => {
     if (search.id === undefined) {
       // Close Details went with the details: its row takes the focus, or the list when it isn't drawn
@@ -160,7 +170,7 @@ export function ErrorsView({ search }: { search: ErrorsSearch }) {
         }}
       />
       <div role="group" aria-label={t('admin.errors.filters')} className={listStyles.filters}>
-        <div className={`${listStyles.filter} ${listStyles.words}`}>
+        <div ref={wordsBox} className={`${listStyles.filter} ${listStyles.words}`}>
           <TextField label={t('admin.errors.text')} value={words.text} onChange={words.type} />
         </div>
         <div className={listStyles.filter}>

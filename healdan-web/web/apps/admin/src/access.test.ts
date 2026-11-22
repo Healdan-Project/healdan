@@ -63,6 +63,20 @@ describe('The Admin app\'s calls', () => {
     expect(api.calls).toHaveLength(sent)
   })
 
+  it('tell the app of each change that succeeds, and of no read and no change refused', async () => {
+    const signedOut = createSignedOut()
+    const api = fakeApi({ 'POST /v1/admin/x': { done: true }, 'POST /v1/admin/refused': problem(409, 'refused', 'No.') }, signedOut.mark)
+    const changed = vi.fn()
+    const client = guardApi(api, createAccess(), signedOut, changed)
+    await client.get('/v1/me')
+    await client.getResponse('/v1/me')
+    expect(changed).not.toHaveBeenCalled()
+    await client.send('POST', '/v1/admin/x', { a: 1 })
+    expect(changed).toHaveBeenCalledOnce()
+    await expect(client.send('POST', '/v1/admin/refused')).rejects.toMatchObject({ status: 409 })
+    expect(changed).toHaveBeenCalledOnce()
+  })
+
   it('make addresses as the API does, refused or not', () => {
     const { access, guarded: client } = guarded()
     expect(client.url('/v1/documents/1/preview')).toBe('/api/v1/documents/1/preview')

@@ -30,9 +30,9 @@ function row(n: number): A['AuditRow'] {
   }
 }
 
-/** A page: its rows by number, and where the next one starts */
+/** A page: its rows by number, where the next one starts, and how far back it read (as far as its cursor, null at the end) */
 function page(numbers: number[], nextCursor: string | null): A['AuditPage'] {
-  return { items: numbers.map(row), nextCursor }
+  return { items: numbers.map(row), nextCursor, readBackTo: nextCursor === null ? null : `2026-11-${String(10 + numbers.length).padStart(2, '0')}T00:00:00Z` }
 }
 
 /** The Audit Trail's route, answering each cursor with its page from `pages`, the first page under '' */
@@ -194,6 +194,52 @@ describe('A list paged by cursor', () => {
     expect(ids()).toEqual(['d1', 'd2', 'd3'])
     act(() => hook.result.current.showMore())
     await waitFor(() => expect(ids()).toEqual(['d1', 'd2', 'd3', 'd4', 'd5', 'd6']))
+  })
+
+  it("drops a row a later page gives again, by its id, keeping the first, and says nothing of it", async () => {
+    const { hook, ids } = renderList(byCursor({ '': page([1, 2, 3], 'b'), b: page([3, 4, 1], null) }))
+    await waitFor(() => expect(ids()).toEqual(['d1', 'd2', 'd3']))
+    act(() => hook.result.current.showMore())
+    await waitFor(() => expect(hook.result.current.atEnd).toBe(true))
+    expect(ids()).toEqual(['d1', 'd2', 'd3', 'd4'])
+    expect(hook.result.current.isError).toBe(false)
+  })
+
+  it("gives the last page as the server gave it, for what it says beyond its rows, and none while the rows are another question's", async () => {
+    let answer: (one: A['AuditPage']) => void = () => {}
+    const routes: Routes = {
+      'GET /v1/admin/audit': ({ query }: { query?: Record<string, unknown> }) => {
+        if (query?.q === 'new') return new Promise((resolve) => (answer = resolve))
+        return query?.cursor === undefined ? page([1, 2, 3], 'b') : page([4], null)
+      },
+    }
+    const { hook } = renderList(routes, { q: 'old' })
+    await waitFor(() => expect(hook.result.current.last?.readBackTo).toBe('2026-11-13T00:00:00Z'))
+    act(() => hook.result.current.showMore())
+    await waitFor(() => expect(hook.result.current.atEnd).toBe(true))
+    expect(hook.result.current.last).toMatchObject({ nextCursor: null, readBackTo: null })
+    hook.rerender({ query: { q: 'new' } })
+    await waitFor(() => expect(hook.result.current.isStale).toBe(true))
+    expect(hook.result.current.last).toBeUndefined()
+    await act(async () => answer(page([9], 'n')))
+    await waitFor(() => expect(hook.result.current.last?.nextCursor).toBe('n'))
+  })
+
+  it('asks again each time it is shown, however fresh its answer', async () => {
+    const api = fakeApi(byCursor({ '': page([1, 2, 3], 'b') }))
+    const queryClient = createQueryClient({ retry: false })
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <ServicesProvider api={api} signedOut={createSignedOut()}>
+        <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+      </ServicesProvider>
+    )
+    const first = renderHook(() => useCursorList('/v1/admin/audit', {}, PAGE_SIZE), { wrapper })
+    await waitFor(() => expect(first.result.current.items).toHaveLength(3))
+    first.unmount()
+    const again = renderHook(() => useCursorList('/v1/admin/audit', {}, PAGE_SIZE), { wrapper })
+    // The rows it had show at once, and are asked for again
+    expect(again.result.current.items).toHaveLength(3)
+    await waitFor(() => expect(api.callsTo('GET /v1/admin/audit')).toHaveLength(2))
   })
 
   it('says so when the first page fails, with nothing to keep', async () => {
