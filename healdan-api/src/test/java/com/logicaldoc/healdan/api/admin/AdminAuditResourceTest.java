@@ -159,6 +159,7 @@ public class AdminAuditResourceTest extends ApiTestCase {
 		// A day before every row keeps none
 		ApiResponse before = get(AUDIT + "?zone=Asia/Tokyo&from=2020-01-01&to=2020-01-01").webSession(session)
 				.send();
+		assertEquals(before.toString(), 200, before.status());
 		assertEquals(before.toString(), 0, before.json().path("items").size());
 		ApiResponse backwards = get(AUDIT + "?from=2026-11-22&to=2026-11-21").webSession(session).send();
 		assertEquals(backwards.toString(), 200, backwards.status());

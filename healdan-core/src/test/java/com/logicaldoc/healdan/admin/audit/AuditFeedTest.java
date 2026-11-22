@@ -89,6 +89,7 @@ public class AuditFeedTest extends AbstractHealdanTestCase {
 	@After
 	public void putBack() {
 		feed.scanPerSource = AuditFeed.SCAN_PER_SOURCE;
+		feed.sent = AuditFeed.NOBODY;
 		AdminContext.clear();
 	}
 
@@ -670,51 +671,126 @@ public class AuditFeedTest extends AbstractHealdanTestCase {
 	}
 
 	@Test
-	public void testEveryReadAnIndexServesUsesThatIndex() throws Exception {
+	public void testAReadAnIndexServesLooksThroughItsWindowAndItsOwnRowsOnly() throws Exception {
 		Folder store = fx.store("Client Work");
 		Matter matter = fx.matter(fx.client(1001, "Ashcombe"), 1, "Charter Dispute", store, "Documents");
-		Document letter = fx.upload(child(matter.getFolderId(), "Documents"), "letter.txt", "x", admin);
+		long workspace = matter.getFolderId();
+		long documents = child(workspace, "Documents").getId();
+		Document letter = fx.upload(child(workspace, "Documents"), "letter.txt", "x", admin);
 		HealdanFixtures.awaitVersionSaves();
-		// Statistics in which each document, person, folder and target holds few of a table's rows, and sequential
-		// scans off: the test is that the planner takes the filter's index, not the primary key read backwards
-		// until enough rows match, which is the scan a bound exists to prevent
+		empty();
+		// 40,000 rows a table, each about as wide as a real one. A person who left, the matter's two folders and the
+		// document hold the oldest: 400 rows (1%), 400 and 120 (0.3%), more than a page; the rest are 40 others',
+		// in 3,000 folders, 20,000 documents and 1,000 clients
 		for (String table : List.of("ld_history", "ld_folder_history", "ld_user_history"))
 			jdbc.update("insert into " + table + " (ld_id, ld_lastmodified, ld_creation, ld_recordversion,"
 					+ " ld_deleted, ld_tenantid, ld_notified, ld_date, ld_userid, ld_username, ld_event, ld_docid,"
-					+ " ld_folderid) select 100000 + n, current_timestamp, current_timestamp, 1, 0, 1, 0,"
-					+ " current_timestamp, 10000 + n % 2000, 'someone', 'event.x', 10000 + n % 2000,"
-					+ " 10000 + n % 2000 from generate_series(1, 20000) n");
+					+ " ld_folderid, ld_filename, ld_path, ld_comment, ld_sessionid, ld_ip, ld_device)"
+					+ " select 1000000 + n, current_timestamp, current_timestamp, 1, 0, 1, 0,"
+					+ " timestamp '2024-01-01 00:00:00' + n * interval '1 minute',"
+					+ " case when n <= 400 then 10007 else 20000 + n % 40 end, 'someone', 'event.viewed',"
+					+ " case when n <= 120 then ? else 40000 + n % 20000 end,"
+					+ " case when n <= 400 then case when n % 2 = 0 then ? else ? end else 30000 + n % 3000 end,"
+					+ " 'Skeleton Argument for the Hearing ' || n || '.docx',"
+					+ " '/Default/Client Work/1001.' || (n % 1000) || ' Charter Dispute with a Long Name/Documents'"
+					+ " || '/Correspondence/Letters to the Other Side', 'Saved from the Healdan Helper on a laptop,"
+					+ " version ' || n || ', with a comment as long as a real one is', 'session-' || md5(cast(n as text)),"
+					+ " '192.0.2.' || (n % 250), 'Safari v18 on macOS (computer)' from generate_series(1, 40000) n",
+					letter.getId(), workspace, documents);
 		jdbc.update("insert into hd_admin_event (hd_id, hd_tenantid, hd_date, hd_userid, hd_username, hd_area,"
-				+ " hd_action, hd_targetkind, hd_targetid) select 100000 + n, 1, current_timestamp, 10000 + n % 2000,"
-				+ " 'someone', 'MATTERS', 'x.y', case n % 3 when 0 then 'user' when 1 then 'folder' else 'matter' end,"
-				+ " 10000 + n % 2000 from generate_series(1, 20000) n");
+				+ " hd_action, hd_targetkind, hd_targetid, hd_targetname, hd_detail) select 1000000 + n, 1,"
+				+ " timestamp '2024-01-01 00:00:00' + n * interval '1 minute',"
+				+ " case when n <= 400 then 10007 else 20000 + n % 40 end, 'someone', 'MATTERS', 'folder.renamed',"
+				+ " case when n <= 400 then 'folder' else 'client' end,"
+				+ " case when n <= 400 then case when n % 2 = 0 then ? else ? end else n % 1000 end,"
+				+ " 'A target with a name as long as a real one', '{\"name\":{\"before\":\"Old name of it\","
+				+ "\"after\":\"New name of it\"}}' from generate_series(1, 40000) n", workspace, documents);
 		for (String table : TABLES)
 			jdbc.execute("analyze " + table);
-		AuditQuery byDocNumber = new AuditQuery(null, null, null, docNumber(letter), null, null, null, null, 50, null);
-		AuditQuery byPerson = new AuditQuery(null, 10007L, null, null, null, null, null, null, 50, null);
-		AuditQuery byMatter = new AuditQuery(null, null, matter.getId(), null, null, null, null, null, 50, null);
-		record Read(AuditQuery query, String source, String table, List<String> indexes) {
+		int window = 2_000;
+		feed.scanPerSource = window;
+		Long docNumber = docNumber(letter);
+		record Read(String name, AuditQuery query, String index, int own) {
 		}
-		TransactionTemplate transaction = new TransactionTemplate(Context.get(PlatformTransactionManager.class));
 
-		for (Read read : List.of(new Read(byDocNumber, "d", "ld_history", List.of("ld_hist_docid")),
-				new Read(byPerson, "d", "ld_history", List.of("ld_hist_uid")),
-				new Read(byPerson, "u", "ld_user_history", List.of("ld_uhist_uid")),
-				new Read(byPerson, "a", "hd_admin_event", List.of("hd_admin_event_user", "hd_admin_event_target")),
-				new Read(byMatter, "f", "ld_folder_history", List.of("ld_fhist_fid")),
-				new Read(byMatter, "a", "hd_admin_event", List.of("hd_admin_event_target")))) {
-			AuditFeed.Sql sql = feed.prepare(read.query(), admin).firstPageSql(read.source());
-			String plan = transaction.execute(status -> {
-				jdbc.execute("set local enable_seqscan = off");
-				return String.join("\n", jdbc.query("explain (costs off) " + sql.text(),
-						ps -> AuditFeed.bind(ps, sql.params()), (rs, n) -> rs.getString(1)));
-			});
-			for (String index : read.indexes())
-				assertTrue(read + ":\n" + plan, plan.contains(" " + index));
-			String key = jdbc.queryForObject("select c.conname from pg_constraint c join pg_class t on t.oid ="
-					+ " c.conrelid where t.relname = ? and c.contype = 'p'", String.class, read.table());
-			assertFalse(read + ":\n" + plan, plan.contains("Index Scan Backward using " + key));
+		List<Read> reads = List.of(
+				new Read("a person's documents", query(Set.of("document"), 10007L, null, null), "ld_hist_uid", 400),
+				new Read("a person's account", query(Set.of("sign-in", "user"), 10007L, null, null), "ld_uhist_uid",
+						400),
+				new Read("a person's administration", query(Set.of("administration"), 10007L, null, null),
+						"hd_admin_event_user", 400),
+				new Read("a matter's folders", query(Set.of("folder"), null, matter.getId(), null), "ld_fhist_fid",
+						400),
+				new Read("a matter's administration", query(Set.of("administration"), null, matter.getId(), null),
+						"hd_admin_event_target", 400),
+				new Read("a doc #", query(null, null, null, docNumber), "ld_hist_docid", 120));
+		for (Read read : reads) {
+			List<AuditFeed.Sql> statements = new ArrayList<>();
+			feed.sent = statements::add;
+			AuditPage page = feed.page(read.query(), admin);
+			feed.sent = AuditFeed.NOBODY;
+
+			// The oldest rows come in the first page, a page of them
+			assertEquals(read.name(), 50, page.items().size());
+			assertNotNull(read.name(), page.nextCursor());
+			String plans = "";
+			long removed = 0;
+			for (AuditFeed.Sql sql : statements) {
+				List<String> plan = analysed(sql);
+				plans += String.join("\n", plan) + "\n\n";
+				removed += removedByFilter(plan);
+			}
+			// Through the filter's index, looking through no more than the window and the value's own rows
+			assertTrue(read.name() + ":\n" + plans, plans.contains(" " + read.index()));
+			assertTrue(read.name() + ": " + removed + " rows looked through and left\n" + plans,
+					removed <= window + read.own());
 		}
+
+		// The single statement the two steps replaced walks the primary key back through the whole table
+		List<String> single = analysed(new AuditFeed.Sql("select t.ld_id from ld_history t where t.ld_tenantid = ?"
+				+ " and t.ld_id < ? and t.ld_userid = ? order by t.ld_id desc limit ?",
+				new Object[] { 1L, Long.MAX_VALUE, 10007L, 50 }));
+		assertTrue(String.join("\n", single), removedByFilter(single) > 30_000);
+	}
+
+	@Test
+	public void testAnActivePersonsRowsComeFromTheWindowAlone() throws Exception {
+		empty();
+		feed.scanPerSource = 100;
+		// 300 rows: someone else's, then the person's every other row among the newest 100
+		for (int i = 0; i < 300; i++)
+			history("ld_history", 1000 + i, T0.plusSeconds(i), i >= 200 && i % 2 == 0 ? 10007L : 10008L, "someone",
+					"event.viewed");
+		List<AuditFeed.Sql> statements = new ArrayList<>();
+		feed.sent = statements::add;
+
+		AuditPage page = feed.page(query(Set.of("document"), 10007L, null, null), admin);
+
+		// A page of them from the window, which didn't reach the end, with no read through the index after it
+		assertEquals(50, page.items().size());
+		assertNotNull(page.nextCursor());
+		assertEquals(statements.toString(), 1, statements.size());
+		assertFalse(statements.get(0).text(), statements.get(0).text().contains("array("));
+	}
+
+	@Test
+	public void testAStorageRecordOfTwinsIsReadAWindowAtATime() throws Exception {
+		empty();
+		feed.scanPerSource = 10;
+		// One shown from the Classic Interface, then 50 shown through the Admin app, each with its twin
+		storage(100, T0, 7L, 1L, "admin", "key-shown");
+		for (int i = 1; i <= 50; i++) {
+			storage(100 + 50L * i, T0.plusSeconds(60L * i), 7L, 1L, "admin", "key-shown");
+			adminRow(10 + i, T0.plusSeconds(60L * i + 1), 1L, "admin", "backend.recovery-key-shown", "backend", 7L,
+					"Wasabi EU", null);
+		}
+
+		AuditPage page = feed.page(kinds("administration"), admin);
+
+		// The first page looked through ten of the storage record's rows, all twins, and stopped there
+		assertEquals(List.of("a60", "a59", "a58", "a57"), ids(page.items()));
+		assertEquals(100 + 50 * 41, page.nextCursor().storage());
+		assertTrue(ids(all(kinds("administration"))).contains("s100"));
 	}
 
 	@Test
@@ -945,6 +1021,27 @@ public class AuditFeedTest extends AbstractHealdanTestCase {
 	}
 
 	// What the tests write and read
+
+	/** @return the statement's plan as it ran, with each node's rows */
+	private List<String> analysed(AuditFeed.Sql sql) {
+		return jdbc.query("explain (analyze, costs off, timing off, summary off) " + sql.text(),
+				ps -> AuditFeed.bind(ps, sql.params()), (rs, n) -> rs.getString(1));
+	}
+
+	/** @return how many rows the plan's nodes looked at and left out by a filter */
+	private static long removedByFilter(List<String> plan) {
+		long removed = 0;
+		for (String line : plan) {
+			int at = line.indexOf("Rows Removed by Filter: ");
+			if (at >= 0)
+				removed += Long.parseLong(line.substring(at + "Rows Removed by Filter: ".length()).strip());
+		}
+		return removed;
+	}
+
+	private static AuditQuery query(Set<String> kinds, Long userId, Long matterId, Long docNumber) {
+		return new AuditQuery(kinds, userId, matterId, docNumber, null, null, null, null, 50, null);
+	}
 
 	/** Writes rows of others, newer than the tests' own, with ids above theirs */
 	private void unrelated(String table, int count) {

@@ -53,15 +53,19 @@ import com.logicaldoc.util.spring.Context;
  * <p>
  * None of the tables has an index on its date, and Healdan adds none to LogicalDOC's, so each source is read newest
  * first by its primary key, below its place in the {@link AuditCursor}, and the sources are merged by date here. A
- * page reads at most as many rows of a source as it holds. A filter an index serves (ruling P5-R28) reads the source
- * through that index, still newest first by key, so a document's or a person's rows come in one request however old
- * they are: a doc # ({@code ld_history} by {@code ld_docid}), a person ({@code ld_history} and
- * {@code ld_user_history} by {@code ld_userid}, the administration record by {@code hd_userid} and by its target), a
- * matter ({@code ld_folder_history} by {@code ld_folderid}, the administration record by its target). Any other
- * filter looks through at most {@link #SCAN_PER_SOURCE} of a source's rows a page (ruling P5-R13), so one that keeps
- * few rows can't make one request read a whole table: such a page may be short, even empty, and still have a next
- * cursor. A row of one source is given only once every source that could still hold a newer row has been read that
- * far, so the order holds across short reads.
+ * page reads at most as many rows of a source as it holds. With a filter, a page looks through at most
+ * {@link #SCAN_PER_SOURCE} of a source's rows by its key (ruling P5-R13), so one that keeps few rows can't make one
+ * request read a whole table: such a page may be short, even empty, and still have a next cursor. A filter an index
+ * serves (ruling P5-R28, as amended) is read in two steps: that window first, which finds the rows of anyone or
+ * anything active; then, only when it didn't fill the page and didn't reach the source's end, the rows below it
+ * through the filter's index, in a statement that can't walk the key instead ({@link Prepared#belowSql}). So a
+ * page costs at most the window and the value's own rows, wherever they lie, and a document's or a person's rows
+ * come in one request however old they are: a doc # ({@code ld_history} by {@code ld_docid}, which reads through
+ * the index alone, a document's rows being few), a person ({@code ld_history} and {@code ld_user_history} by
+ * {@code ld_userid}, the administration record by {@code hd_userid} and by its target), a matter
+ * ({@code ld_folder_history} by {@code ld_folderid}, the administration record by its target). A row of one source
+ * is given only once every source that could still hold a newer row has been read that far, so the order holds
+ * across short reads.
  * <p>
  * A date range becomes an id range for each table (ruling P5-R12) by a binary search on the primary key, each probe
  * reading the row with the greatest id at or below a point, widened by {@link #DATE_SLACK} each side; the rows are
@@ -78,12 +82,12 @@ public class AuditFeed {
 	public static final int MAX_LIMIT = 1000;
 
 	/**
-	 * The most rows of a source a page looks through when no index serves its filter (ruling P5-R28): as many as one
-	 * request can afford. Measured on the test database (PostgreSQL 18, its data in memory, warm), on an
-	 * {@code ld_history} of 300,000 rows with a text filter that matches none, a page looked through rows at about
-	 * 0.9 microseconds each, linearly: 9 ms for 10,000, 48 ms for 50,000, 91 ms for 100,000, 183 ms for 200,000. So
-	 * a page whose five sources each look through this many takes about half a second there, and more on a server
-	 * reading from disk; an index-served page took 4 ms.
+	 * The most rows of a source a page looks through by its key when a filter is set (ruling P5-R28), the first step
+	 * of an index-served filter's read included: as many as one request can afford. Measured on the test database
+	 * (PostgreSQL 18, its data in memory, warm), on an {@code ld_history} of 300,000 rows with a text filter that
+	 * matches none, a page looked through rows at about 0.9 microseconds each, linearly: 9 ms for 10,000, 48 ms for
+	 * 50,000, 91 ms for 100,000, 183 ms for 200,000. So a page whose five sources each look through this many takes
+	 * about half a second there, and more on a server reading from disk; an index-served page took 4 ms.
 	 */
 	static final int SCAN_PER_SOURCE = 100_000;
 
@@ -193,6 +197,13 @@ public class AuditFeed {
 
 	/** The most rows of a source a bounded page looks through, {@link #SCAN_PER_SOURCE}; a seam for tests */
 	volatile int scanPerSource = SCAN_PER_SOURCE;
+
+	/** Told of each statement that reads a source's rows, just before it's sent; a seam for tests */
+	volatile Consumer<Sql> sent = NOBODY;
+
+	/** The {@link #sent} that's told of nothing */
+	static final Consumer<Sql> NOBODY = sql -> {
+	};
 
 	private final JdbcTemplate jdbc;
 
@@ -436,15 +447,36 @@ public class AuditFeed {
 			if (upper <= floor)
 				return Read.done(source);
 
-			Frontier frontier = bounded(source) ? frontier(source, upper, floor, scan) : null;
+			// A doc # reads through its index alone: a document's own rows are few
+			if (source == Source.DOCUMENT && documents != null)
+				return complete(source, query(source, belowSql(source, upper, floor, limit)), limit);
+			if (!bounded(source) && !indexed(source))
+				return complete(source, query(source, rowsSql(source, upper, floor, limit)), limit);
+
+			Frontier frontier = frontier(source, upper, floor, scan);
 			List<Raw> rows = query(source, rowsSql(source, upper, frontier != null ? frontier.id() : floor, limit));
-			if (rows.size() == limit) {
-				Raw last = rows.get(rows.size() - 1);
-				return new Read(source, rows, true, last.id(), last.when());
-			}
-			if (frontier != null)
+			if (rows.size() == limit || frontier == null)
+				return complete(source, rows, limit);
+			if (!indexed(source))
 				return new Read(source, rows, true, frontier.id(), frontier.when());
-			return new Read(source, rows, false, 0, null);
+			// The window found fewer than a page and didn't reach the end: the rest of a page from below it, through
+			// the filter's index. The window's rows and these are then every matching row from the place down to
+			// the last of them, or to the source's end when they're fewer than a page
+			List<Raw> all = new ArrayList<>(rows);
+			all.addAll(query(source, belowSql(source, frontier.id(), floor, limit - rows.size())));
+			return complete(source, all, limit);
+		}
+
+		/**
+		 * @param rows every matching row from the source's place down, newest first, to the source's end or to a
+		 *        page of them
+		 * @return the read: open below its last row when it holds a page; at its end otherwise
+		 */
+		private Read complete(Source source, List<Raw> rows, int limit) {
+			if (rows.size() < limit)
+				return new Read(source, rows, false, 0, null);
+			Raw last = rows.get(rows.size() - 1);
+			return new Read(source, rows, true, last.id(), last.when());
 		}
 
 		/**
@@ -524,31 +556,12 @@ public class AuditFeed {
 				where.add(query.keeps(AuditRow.SIGN_IN) ? signIns : "(t.ld_event is null or not " + signIns + ")");
 				params.addAll(SIGN_INS);
 			}
-			if (query.userId() != null) {
-				if (source == Source.ADMIN) {
-					where.add("(t.hd_userid = ? or (t.hd_targetkind = 'user' and t.hd_targetid = ?))");
-					params.add(query.userId());
-					params.add(query.userId());
-				} else {
-					where.add(source.history() ? "t.ld_userid = ?" : "t.hd_userid = ?");
-					params.add(query.userId());
-				}
-			}
-			if (tree != null) {
-				if (source == Source.ADMIN) {
-					where.add("((t.hd_targetkind = 'matter' and t.hd_targetid = ?)"
-							+ " or (t.hd_targetkind in ('folder', 'search-folder') and t.hd_targetid = any(?)))");
-					params.add(query.matterId());
-					params.add(tree);
-				} else {
-					where.add("t.ld_folderid = any(?)");
-					params.add(tree);
-				}
-			}
-			if (documents != null) {
-				where.add("t.ld_docid = any(?)");
-				params.add(documents);
-			}
+			if (query.userId() != null)
+				person(source, "t", where, params);
+			if (tree != null)
+				matter(source, "t", where, params);
+			if (documents != null)
+				document("t", where, params);
 			if (from != null) {
 				where.add(source.date + " >= ?");
 				params.add(from);
@@ -582,7 +595,79 @@ public class AuditFeed {
 				where.add(TWIN);
 		}
 
+		/** Adds the person filter's condition on the source's rows, named by the alias {@code a} */
+		private void person(Source source, String a, List<String> where, List<Object> params) {
+			if (source == Source.ADMIN) {
+				where.add("(%1$s.hd_userid = ? or (%1$s.hd_targetkind = 'user' and %1$s.hd_targetid = ?))".formatted(a));
+				params.add(query.userId());
+				params.add(query.userId());
+			} else {
+				where.add("%s.%s = ?".formatted(a, source.history() ? "ld_userid" : "hd_userid"));
+				params.add(query.userId());
+			}
+		}
+
+		/** Adds the matter filter's condition on the source's rows, named by the alias {@code a} */
+		private void matter(Source source, String a, List<String> where, List<Object> params) {
+			if (source == Source.ADMIN) {
+				where.add(("((%1$s.hd_targetkind = 'matter' and %1$s.hd_targetid = ?) or (%1$s.hd_targetkind in"
+						+ " ('folder', 'search-folder') and %1$s.hd_targetid = any(?)))").formatted(a));
+				params.add(query.matterId());
+				params.add(tree);
+			} else {
+				where.add(a + ".ld_folderid = any(?)");
+				params.add(tree);
+			}
+		}
+
+		/** Adds the doc # filter's condition on the document rows, named by the alias {@code a} */
+		private void document(String a, List<String> where, List<Object> params) {
+			where.add(a + ".ld_docid = any(?)");
+			params.add(documents);
+		}
+
+		/**
+		 * The statement for a source's rows below {@code upper} and at or above {@code low}, newest first, through
+		 * the index of the filters it serves on the source ({@link #indexed}): the ids an inner select finds by the
+		 * indexed columns alone, which PostgreSQL reads through their index as it can't serve them by the key, then
+		 * the rows with those ids and every filter, sorted and cut to a page. Its cost is the value's own rows
+		 * below {@code upper}, wherever they lie; the single statement it replaces could be planned as the key read
+		 * backwards through the whole table.
+		 */
+		Sql belowSql(Source source, long upper, long low, int limit) {
+			String id = source.id.substring(2);
+			List<String> inner = new ArrayList<>();
+			List<Object> innerParams = new ArrayList<>();
+			inner.add("s.%s = ?".formatted(source.tenant.substring(2)));
+			innerParams.add(tenantId);
+			inner.add("s.%s < ?".formatted(id));
+			innerParams.add(upper);
+			if (low != Long.MIN_VALUE) {
+				inner.add("s.%s >= ?".formatted(id));
+				innerParams.add(low);
+			}
+			if (query.userId() != null && source != Source.FOLDER && source != Source.STORAGE)
+				person(source, "s", inner, innerParams);
+			if (tree != null && (source == Source.FOLDER || source == Source.ADMIN))
+				matter(source, "s", inner, innerParams);
+			if (documents != null && source == Source.DOCUMENT)
+				document("s", inner, innerParams);
+
+			List<String> where = new ArrayList<>();
+			List<Object> params = new ArrayList<>();
+			where.add(source.tenant + " = ?");
+			params.add(tenantId);
+			where.add("%s = any(array(select s.%s from %s s where %s))".formatted(source.id, id, source.table,
+					String.join(" and ", inner)));
+			params.addAll(innerParams);
+			filters(source, where, params);
+			params.add(limit);
+			return new Sql("select %s from %s t where %s order by %s desc limit ?".formatted(source.columns,
+					source.table, String.join(" and ", where), source.id), params.toArray());
+		}
+
 		private List<Raw> query(Source source, Sql sql) {
+			sent.accept(sql);
 			return jdbc.query(sql.text(), ps -> bind(ps, sql.params()), (rs, n) -> raw(source, rs));
 		}
 
