@@ -45,6 +45,7 @@ import com.logicaldoc.healdan.AbstractHealdanTestCase;
 import com.logicaldoc.healdan.admin.dashboard.DashboardService.Dashboard;
 import com.logicaldoc.healdan.admin.dashboard.DashboardService.Space;
 import com.logicaldoc.healdan.admin.errors.CapturedError;
+import com.logicaldoc.healdan.admin.errors.ErrorReview;
 import com.logicaldoc.healdan.admin.errors.ErrorStore;
 import com.logicaldoc.healdan.admin.jobs.JobStatus;
 import com.logicaldoc.healdan.admin.storage.OverviewPort;
@@ -568,6 +569,42 @@ public class DashboardServiceTest extends AbstractHealdanTestCase {
 				DashboardService.MAIL_LOGGER);
 		errors.resolve(id, fx.admin());
 		assertEquals(HealthTile.OK, tile(read(), HealthTile.OUTGOING_EMAIL).status());
+	}
+
+	// A fault marked resolved, or unresolved again, is counted afresh at the next read, not once what's kept is old
+	@Test
+	public void testAFaultMarkedResolvedIsCountedAtTheNextRead() throws Exception {
+		service.clock = Clock.fixed(Instant.now(), ZoneOffset.UTC);
+		set("default.smtp.host", "mail.example.com");
+		set("default.smtp.sender", "office@example.com");
+		ErrorStore errors = ErrorStore.get();
+		Instant now = service.clock.instant();
+		errors.add(new CapturedError(now.minus(2, ChronoUnit.HOURS), "ERROR", "com.example.Previews", "Timed out", null));
+		errors.add(new CapturedError(now.minus(1, ChronoUnit.HOURS), "ERROR", DashboardService.MAIL_LOGGER,
+				"Couldn't connect to host", null));
+		long mail = jdbc.queryForObject("select hd_id from hd_error where hd_logger = ?", Long.class,
+				DashboardService.MAIL_LOGGER);
+		Dashboard kept = read();
+		assertEquals(2, item(kept, AttentionItem.ERRORS).count());
+		assertEquals(HealthTile.ATTENTION, tile(kept, HealthTile.OUTGOING_EMAIL).status());
+
+		// Resolved: the next read, kept a moment ago, has it
+		ErrorReview.get().resolve(mail, fx.admin());
+		Dashboard resolved = service.read();
+		assertEquals(1, item(resolved, AttentionItem.ERRORS).count());
+		assertEquals(HealthTile.OK, tile(resolved, HealthTile.OUTGOING_EMAIL).status());
+
+		// Reopened: back
+		ErrorReview.get().reopen(mail, fx.admin());
+		Dashboard reopened = service.read();
+		assertEquals(2, item(reopened, AttentionItem.ERRORS).count());
+		assertEquals(HealthTile.ATTENTION, tile(reopened, HealthTile.OUTGOING_EMAIL).status());
+
+		// A change that changes nothing leaves what's kept, which an error seen since isn't in yet
+		ErrorReview.get().reopen(mail, fx.admin());
+		errors.add(new CapturedError(now.minus(30, ChronoUnit.MINUTES), "ERROR", "com.example.Other", "New", null));
+		assertEquals(2, item(service.read(), AttentionItem.ERRORS).count());
+		assertEquals(3, item(read(), AttentionItem.ERRORS).count());
 	}
 
 	// What's costly is kept: a second read within the minute answers from it, without asking again

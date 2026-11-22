@@ -313,12 +313,13 @@ public class DashboardService {
 		indexCounts = new Cached<>("the search index's counts", MAX_AGE, index::counts, now);
 		previewCounts = new Cached<>("the previews' counts", MAX_AGE,
 				() -> new Previews(previews.countWaiting(), previews.countGivenUp()), now);
-		errorCounts = new Cached<>("the errors", MAX_AGE, this::readErrors, now);
+		// A fault marked resolved or unresolved again counts at the next read, as the Errors screen asks again then
+		errorCounts = new Cached<>("the errors", MAX_AGE, this::readErrors, now, errors::reviews);
 		jobViews = new Cached<>("the background jobs", MAX_AGE, jobs::all, now);
 		volumes = new Cached<>("the disks", MAX_AGE, this::readVolumes, now);
 		database = new Cached<>("the database", DATABASE_MAX_AGE, this::readDatabase, now);
 		signIn = new Cached<>("the sign-in providers", MAX_AGE, this::readSignIn, now);
-		mail = new Cached<>("outgoing email", MAX_AGE, this::readMail, now);
+		mail = new Cached<>("outgoing email", MAX_AGE, this::readMail, now, errors::reviews);
 	}
 
 	/**

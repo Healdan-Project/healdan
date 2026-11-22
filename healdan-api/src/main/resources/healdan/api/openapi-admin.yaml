@@ -4432,11 +4432,13 @@ paths:
         line not yet ended is left for the next read. A line longer than
         10,000 characters is cut there.
 
-        A read looks through at most 5 MiB of the log, so with `level` or
-        `q` it may give fewer than 200 entries, or none, before it reaches
-        the start of the oldest file (`atStart`), or, with `after`, the end
-        of the current file (`atEnd`): ask again from the answer's `before`
-        or `after`.
+        A read looks through at most 5 MiB of the log, and 50,000 lines, so
+        with `level` or `q` it may give fewer than 200 entries, or none,
+        before it reaches the start of the oldest file (`atStart`), or, with
+        `after`, the end of the current file (`atEnd`): ask again from the
+        answer's `before` or `after`. A read forward that stops there gives
+        none of the entry it was reading, which the next read gives whole,
+        but for the first it read, which is longer than a read looks through.
 
         - `400 bad-request` for both `before` and `after`, a position that
           isn't one this route gives, or a `level` that isn't one of these.
@@ -8327,10 +8329,12 @@ components:
           type: string
           description: |
             Where this read ended, as a position: when it stopped at 200
-            entries, the start of the entry after the last it gave;
-            otherwise just past the last whole line it looked at, the end of
-            the current file when it got there. Send it as `after` for the
-            entries after these, as they're written.
+            entries, the start of the entry after the last it gave; when it
+            stopped at the most it looks through, inside an entry that isn't
+            the first it read, the start of that entry, which the next read
+            gives whole; otherwise just past the last whole line it looked
+            at, the end of the current file when it got there. Send it as
+            `after` for the entries after these, as they're written.
         atStart:
           type: boolean
           description: |

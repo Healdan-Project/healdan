@@ -7,6 +7,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.LongSupplier;
 import java.util.function.Supplier;
 
 import org.slf4j.Logger;
@@ -83,6 +84,12 @@ final class Cached<T> {
 	/** Moved on by {@link #forget()}, so a refresh begun before it is kept by nobody but its own readers */
 	private long generation;
 
+	/** A count that moves on when what the source reads changes in a way a person waits to see */
+	private final LongSupplier changes;
+
+	/** The count {@link #changes} gave when the outcomes kept began */
+	private long changesSeen;
+
 	/**
 	 * @param name what the source is, for the log
 	 * @param maxAge how long an outcome is kept
@@ -90,10 +97,25 @@ final class Cached<T> {
 	 * @param now the time
 	 */
 	Cached(String name, Duration maxAge, Callable<T> source, Supplier<Instant> now) {
+		this(name, maxAge, source, now, () -> 0);
+	}
+
+	/**
+	 * @param name what the source is, for the log
+	 * @param maxAge how long an outcome is kept
+	 * @param source what it reads
+	 * @param now the time
+	 * @param changes a count that moves on when what the source reads changes in a way a person waits to see, such
+	 *        as an administrator marking a fault resolved: the next read after it moves on forgets what's kept, as
+	 *        {@link #forget()} does, and works the source out afresh
+	 */
+	Cached(String name, Duration maxAge, Callable<T> source, Supplier<Instant> now, LongSupplier changes) {
 		this.name = name;
 		this.maxAge = maxAge;
 		this.source = source;
 		this.now = now;
+		this.changes = changes;
+		this.changesSeen = changes.getAsLong();
 	}
 
 	/**
@@ -103,6 +125,11 @@ final class Cached<T> {
 	 */
 	CompletableFuture<Outcome<T>> outcome() {
 		synchronized (lock) {
+			long seen = changes.getAsLong();
+			if (seen != changesSeen) {
+				changesSeen = seen;
+				forgetLocked();
+			}
 			Duration age = last != null ? age(last) : null;
 			if (age != null && age.compareTo(maxAge) < 0)
 				return CompletableFuture.completedFuture(last);
@@ -146,10 +173,14 @@ final class Cached<T> {
 	 */
 	void forget() {
 		synchronized (lock) {
-			last = null;
-			refreshing = null;
-			generation++;
+			forgetLocked();
 		}
+	}
+
+	private void forgetLocked() {
+		last = null;
+		refreshing = null;
+		generation++;
 	}
 
 	/** @return how old the outcome is; a clock set back makes it as old as can be */

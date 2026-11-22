@@ -14,10 +14,14 @@ import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicLong;
 
 import javax.sql.DataSource;
 
@@ -27,11 +31,14 @@ import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.healdan.admin.Page;
 import com.logicaldoc.healdan.listing.ListingSql;
+import com.logicaldoc.healdan.trash.TrashRecorder;
 import com.logicaldoc.util.spring.Context;
 
 /**
@@ -94,6 +101,9 @@ public class ErrorStore {
 	private final NamedParameterJdbcTemplate named;
 
 	private final TransactionTemplate transaction;
+
+	/** How many faults were marked resolved or unresolved, each counted once its change committed */
+	private final AtomicLong reviews = new AtomicLong();
 
 	@Autowired
 	public ErrorStore(DataSource dataSource, PlatformTransactionManager transactions) {
@@ -172,14 +182,15 @@ public class ErrorStore {
 	 * out: {@link #find} has it.
 	 *
 	 * @param query the window, the filters and the page
-	 * @return the page, with how many faults the filters select
+	 * @return the page, with how many faults the filters select and how many
+	 *         times they were seen in the window, every page's together
 	 */
-	public Page<ErrorGroup> list(ErrorQuery query) {
+	public ErrorPage list(ErrorQuery query) {
 		return list(query, Instant.now());
 	}
 
 	/** {@link #list(ErrorQuery)} at a time */
-	Page<ErrorGroup> list(ErrorQuery query, Instant now) {
+	ErrorPage list(ErrorQuery query, Instant now) {
 		Instant since = now.minus(query.window().length());
 		MapSqlParameterSource params = new MapSqlParameterSource().addValue("since", Timestamp.from(since))
 				.addValue("hour", hour(since))
@@ -201,8 +212,11 @@ public class ErrorStore {
 		List<ErrorGroup> items = named.query("select " + COLUMNS + ", " + times + where
 				+ " order by e.hd_lastseen desc, e.hd_id desc" + ListingSql.PAGE, params,
 				(rs, n) -> group(rs, null, rs.getLong(13)));
-		Long total = named.queryForObject("select count(*)" + where, params, Long.class);
-		return new Page<>(items, query.offset(), query.limit(), total != null ? total : 0);
+		// The faults and their times together, counted as the page's are
+		long[] counts = named.queryForObject(
+				"select count(*), coalesce(sum(f.times), 0) from (select " + times + " as times" + where + ") f",
+				params, (rs, n) -> new long[] { rs.getLong(1), rs.getLong(2) });
+		return new ErrorPage(new Page<>(items, query.offset(), query.limit(), counts[0]), counts[1]);
 	}
 
 	/**
@@ -245,22 +259,77 @@ public class ErrorStore {
 	 *
 	 * @param id the fault's id
 	 * @param by who resolved it
+	 * @return whether it changed the fault: false for one already resolved,
+	 *         or no fault
 	 */
-	public void resolve(long id, User by) {
+	public boolean resolve(long id, User by) {
 		Objects.requireNonNull(by, "by");
-		jdbc.update("update hd_error set hd_resolved = 1, hd_resolvedby = ?, hd_resolvedat = ?"
+		return reviewed(jdbc.update("update hd_error set hd_resolved = 1, hd_resolvedby = ?, hd_resolvedat = ?"
 				+ " where hd_id = ? and hd_resolved = 0", CapturedError.fit(by.getUsername(), CapturedError.NAME_LIMIT),
-				Timestamp.from(Instant.now().truncatedTo(ChronoUnit.MILLIS)), id);
+				Timestamp.from(Instant.now().truncatedTo(ChronoUnit.MILLIS)), id) > 0);
 	}
 
 	/**
-	 * Marks a fault unresolved, forgetting who resolved it and when.
+	 * Marks a resolved fault unresolved, forgetting who resolved it and when.
 	 *
 	 * @param id the fault's id
+	 * @return whether it changed the fault: false for one that isn't resolved,
+	 *         or no fault
 	 */
-	public void reopen(long id) {
-		jdbc.update("update hd_error set hd_resolved = 0, hd_resolvedby = null, hd_resolvedat = null where hd_id = ?",
-				id);
+	public boolean reopen(long id) {
+		return reviewed(jdbc.update("update hd_error set hd_resolved = 0, hd_resolvedby = null, hd_resolvedat = null"
+				+ " where hd_id = ? and hd_resolved = 1", id) > 0);
+	}
+
+	/**
+	 * @return how many times a fault has been marked resolved or unresolved since the server started, each counted
+	 *         once its change has committed: what the Dashboard's sources of unresolved errors compare, so that their
+	 *         next read has the change
+	 */
+	public long reviews() {
+		return reviews.get();
+	}
+
+	/**
+	 * Counts a change of whether a fault is resolved once it commits, or at once outside a transaction.
+	 *
+	 * @return whether it changed the fault, as given
+	 */
+	private boolean reviewed(boolean changed) {
+		if (!changed)
+			return false;
+		if (TransactionSynchronizationManager.isSynchronizationActive())
+			TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+				@Override
+				public void afterCommit() {
+					reviews.incrementAndGet();
+				}
+			});
+		else
+			reviews.incrementAndGet();
+		return true;
+	}
+
+	/**
+	 * The documents a fault's message names, by their LogicalDOC ids, in one
+	 * query: deleted ones too, as a document a message names may be in the
+	 * Trash since.
+	 *
+	 * @param ids the documents' ids, in the order the message names them
+	 * @return each, in the same order, with its doc # and file name, both
+	 *         null for an id no document has
+	 */
+	public List<ErrorDocument> findDocuments(List<Long> ids) {
+		if (ids.isEmpty())
+			return List.of();
+		Map<Long, ErrorDocument> found = new HashMap<>();
+		named.query("select ld_id, ld_customid, ld_filename from ld_document where ld_id in (:ids)",
+				new MapSqlParameterSource("ids", List.copyOf(new LinkedHashSet<>(ids))), rs -> {
+					String number = TrashRecorder.docNumber(rs.getString(2));
+					found.put(rs.getLong(1), new ErrorDocument(rs.getLong(1),
+							number != null ? Long.valueOf(number) : null, rs.getString(3)));
+				});
+		return ids.stream().map(id -> found.getOrDefault(id, new ErrorDocument(id, null, null))).toList();
 	}
 
 	/**
