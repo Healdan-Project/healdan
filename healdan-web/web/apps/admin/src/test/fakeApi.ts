@@ -1065,6 +1065,188 @@ export function groupRoutes(): Routes {
 
 // Monitoring: Errors and the Server Log (Task 32b)
 
+/** A kind of fault as the Errors list gives it: the preview that timed out, seen 6 times today, unless `over` says otherwise */
+export function errorRow(over: Partial<A['ErrorRow']> = {}): A['ErrorRow'] {
+  return {
+    id: 12,
+    message: 'Preview conversion timed out after 180 seconds, doc 10412 version 3',
+    area: 'Previews',
+    times: 6,
+    firstSeen: '2026-11-18T14:02:00Z',
+    lastSeen: '2026-11-19T10:41:00Z',
+    resolved: false,
+    ...over,
+  }
+}
+
+/** The four kinds of fault seen in the last 24 hours, the one last seen first: 14 errors of 4 kinds, the last resolved */
+export const errorRows: A['ErrorRow'][] = [
+  errorRow(),
+  errorRow({ id: 13, message: 'Upload to Wasabi EU failed: connection reset\nThe mover tries again in 5 minutes.', area: 'Storage', times: 5, firstSeen: '2026-11-19T09:12:00Z', lastSeen: '2026-11-19T10:37:00Z' }),
+  errorRow({ id: 14, message: "Couldn't read PDF text: the file is encrypted", area: 'Search Index', times: 2, firstSeen: '2026-11-19T08:30:00Z', lastSeen: '2026-11-19T08:31:00Z' }),
+  errorRow({ id: 15, message: 'Outgoing email refused: authentication failed', area: 'Email', times: 1, firstSeen: '2026-11-18T17:20:00Z', lastSeen: '2026-11-18T17:20:00Z', resolved: true }),
+]
+
+/** GET /v1/admin/errors over `rows`: those its words, area and Unresolved keep, a page from `offset`, their times added up */
+export function errorList(query?: Record<string, unknown>, rows: A['ErrorRow'][] = errorRows): A['ErrorList'] {
+  const q = String(query?.q ?? '').trim().toLowerCase()
+  const kept = rows.filter(
+    (row) => (q === '' || row.message.toLowerCase().includes(q)) && (query?.area === undefined || row.area === query.area) && (query?.unresolved !== true || !row.resolved),
+  )
+  const offset = Number(query?.offset ?? 0)
+  const limit = Number(query?.limit ?? 100)
+  return { items: kept.slice(offset, offset + limit).map((row) => ({ ...row })), offset, limit, total: kept.length, errors: kept.reduce((sum, row) => sum + row.times, 0) }
+}
+
+/** A fault, for its details: its row's facts, logged through the preview worker into the main log, unless `over` says otherwise */
+export function errorDetailOf(row: A['ErrorRow'], over: Partial<A['ErrorDetail']> = {}): A['ErrorDetail'] {
+  return {
+    id: row.id,
+    level: 'ERROR',
+    area: row.area,
+    logger: 'com.logicaldoc.healdan.preview.PreviewWorker',
+    message: row.message,
+    stack: null,
+    documents: [],
+    total: row.times,
+    firstSeen: row.firstSeen,
+    lastSeen: row.lastSeen,
+    resolved: row.resolved,
+    resolvedBy: row.resolved ? 'sam' : null,
+    resolvedAt: row.resolved ? '2026-11-19T09:00:00Z' : null,
+    log: 'DMS',
+    ...over,
+  }
+}
+
+/** Each fault of errorRows, as GET /v1/admin/errors/{id} gives it */
+export const errorDetails: Record<number, A['ErrorDetail']> = {
+  12: errorDetailOf(errorRows[0]!, {
+    stack: [
+      'com.logicaldoc.healdan.preview.PreviewTimeoutException: soffice did not finish within 180 s',
+      '\tat com.logicaldoc.healdan.preview.OfficeConverter.convert(OfficeConverter.java:142)',
+      '\tat com.logicaldoc.healdan.preview.PreviewWorker.run(PreviewWorker.java:366)',
+    ].join('\n'),
+    documents: [
+      { id: 5012, docNumber: 10412, fileName: 'Witness Statement.docx' },
+      { id: 5013, docNumber: null, fileName: 'Board Minutes.xlsx' },
+      { id: 4999, docNumber: null, fileName: null },
+    ],
+    total: 31,
+  }),
+  13: errorDetailOf(errorRows[1]!, { logger: 'com.logicaldoc.healdan.storage.Mover', stack: 'java.net.SocketException: Connection reset' }),
+  14: errorDetailOf(errorRows[2]!, { level: 'FATAL', logger: 'com.logicaldoc.core.parser.PDFParser', log: 'IndexerTask' }),
+  15: errorDetailOf(errorRows[3]!, { logger: 'com.logicaldoc.core.communication.EMailSender', log: null }),
+}
+
+/**
+ * The Errors screen's routes, to spread over the defaults: the list and each fault over copies of errorRows and
+ * errorDetails of their own, which Mark Resolved and Reopen change, so the list read after one follows it
+ */
+export function errorRoutes(): Routes {
+  const rows = errorRows.map((row) => ({ ...row }))
+  const details = new Map(Object.values(errorDetails).map((detail) => [detail.id, { ...detail }]))
+  function mark(id: number, resolved: boolean): A['ErrorDetail'] | ApiError {
+    const detail = details.get(id)
+    if (detail === undefined) return notFound()
+    const changed = { ...detail, resolved, resolvedBy: resolved ? 'admin' : null, resolvedAt: resolved ? '2026-11-19T10:45:00Z' : null }
+    details.set(id, changed)
+    // A row of its own, as a server's answer is: the list's answer read before keeps what it said
+    rows.forEach((row, index) => {
+      if (row.id === id) rows[index] = { ...row, resolved }
+    })
+    return changed
+  }
+  return {
+    'GET /v1/admin/errors': ({ query }: { query?: Record<string, unknown> }) => errorList(query, rows),
+    'GET /v1/admin/errors/*': ({ params }: { params: string[] }) => details.get(Number(params[0])) ?? notFound(),
+    'POST /v1/admin/errors/*/resolve': ({ params }: { params: string[] }) => mark(Number(params[0]), true),
+    'POST /v1/admin/errors/*/reopen': ({ params }: { params: string[] }) => mark(Number(params[0]), false),
+  }
+}
+
+/** The server's logs, as GET /v1/admin/logs lists them: the main log first, then the Indexer's */
+export const logInfos: A['LogInfo'][] = [
+  { name: 'DMS', label: 'Main Log', size: 31_457_280, modified: '2026-11-19T10:41:07Z' },
+  { name: 'IndexerTask', label: 'Indexer', size: 524_288, modified: '2026-11-19T10:41:07Z' },
+]
+
+/** An entry of a log, at the position given: the Indexer's last run, unless `over` says otherwise */
+export function logLine(position: string, over: Partial<A['LogLine']> = {}): A['LogLine'] {
+  return {
+    position,
+    time: '2026-11-19T10:41:07Z',
+    level: 'INFO',
+    source: 'com.logicaldoc.core.searchengine.IndexerTask:212',
+    message: 'Finished indexing 5 documents in 4.2 s',
+    continuation: [],
+    ...over,
+  }
+}
+
+/** The main log's last entries, oldest first, as the mockup draws them (newest at the top there); fakeLog gives the positions */
+export function logEntries(): A['LogLine'][] {
+  return [
+    logLine('', { time: '2026-11-19T10:24:58Z', level: 'WARN', source: 'com.logicaldoc.core.stats.StatsCollector:118', message: 'Statistics took longer than expected: 42 s' }),
+    logLine('', { time: '2026-11-19T10:28:12Z', source: 'com.logicaldoc.healdan.api.ApiTokens:77', message: 'Device token issued to treeve for MacBook' }),
+    logLine('', { time: '2026-11-19T10:30:00Z', source: 'com.logicaldoc.core.task.TaskScheduler:54', message: 'Task IndexOptimizer started' }),
+    logLine('', { time: '2026-11-19T10:36:10Z', source: 'com.logicaldoc.healdan.storage.Mover:301', message: 'Moved 18 files to Wasabi EU' }),
+    logLine('', {
+      time: '2026-11-19T10:37:44Z',
+      level: 'ERROR',
+      source: 'com.logicaldoc.healdan.storage.Mover:322',
+      message: 'Upload to Wasabi EU failed: connection reset, will retry in 5 minutes',
+      continuation: ['java.net.SocketException: Connection reset', '\tat java.base/sun.nio.ch.NioSocketImpl.implRead(NioSocketImpl.java:318)'],
+    }),
+    logLine('', { time: '2026-11-19T10:39:30Z', source: 'com.logicaldoc.core.security.SessionManager:140', message: 'Session opened for pnair' }),
+    logLine('', { time: '2026-11-19T10:40:51Z', level: 'WARN', source: 'com.logicaldoc.healdan.signin.HealdanThrottle:90', message: 'Sign-in failed for username jclarke (2 of 5)' }),
+    logLine('', { time: '2026-11-19T10:41:02Z', level: 'ERROR', source: 'com.logicaldoc.healdan.preview.PreviewWorker:366', message: 'Preview conversion timed out after 180 seconds, doc 10412 version 3' }),
+    logLine('', {}),
+  ]
+}
+
+/** What GET /v1/admin/logs/{name}/lines keeps of an entry: its level at `level` or above, and `q` in its text, in any case */
+export function logKeeps(entry: A['LogLine'], query?: Record<string, unknown>): boolean {
+  const levels: Record<string, readonly string[]> = { warn: ['WARN', 'ERROR', 'FATAL'], error: ['ERROR', 'FATAL'] }
+  const level = String(query?.level ?? 'all')
+  if (level !== 'all' && (entry.level === null || !levels[level]?.includes(entry.level))) return false
+  const q = String(query?.q ?? '').trim().toLowerCase()
+  return q === '' || [entry.message, entry.source ?? '', ...entry.continuation].some((text) => text.toLowerCase().includes(q))
+}
+
+/**
+ * A log for GET /v1/admin/logs/{name}/lines over `entries`, which a test may add to as the log grows. Each entry's
+ * position is `p<its index>`, whatever it was given, and so are `before` and `after`: before `p4` are entries 0 to 3, and
+ * after it entries 4 on. Each read looks through at most `scan` entries, as the server looks through at most 5 MiB, so a
+ * level or words can make an answer short, or empty, before the start; it keeps 200 at most.
+ */
+export function fakeLog(entries: A['LogLine'][], scan = 200) {
+  const at = (index: number) => `p${index}`
+  const indexOf = (position: unknown) => Number(String(position).slice(1))
+  return ({ query }: { query?: Record<string, unknown> }): A['LogLines'] => {
+    const all = entries.map((entry, index) => ({ ...entry, position: at(index) }))
+    const kept = (from: number, to: number) => all.slice(from, to).filter((entry) => logKeeps(entry, query)).slice(-200)
+    if (query?.after !== undefined) {
+      const from = Math.min(indexOf(query.after), all.length)
+      const to = Math.min(all.length, from + scan)
+      return { lines: kept(from, to), before: at(from), after: at(to), atStart: false, atEnd: to === all.length, rolled: false }
+    }
+    const to = query?.before === undefined ? all.length : Math.min(indexOf(query.before), all.length)
+    const from = Math.max(0, to - scan)
+    return { lines: kept(from, to), before: at(from), after: at(to), atStart: from === 0, atEnd: to === all.length, rolled: false }
+  }
+}
+
+/** The Server Log's routes, to spread over the defaults: the logs, and each one's entries, over `main` for the main log */
+export function logRoutes(main: A['LogLine'][] = logEntries()): Routes {
+  const indexer = [logLine('', { message: 'Indexing started' }), logLine('', {})]
+  const logs: Record<string, ReturnType<typeof fakeLog>> = { DMS: fakeLog(main), IndexerTask: fakeLog(indexer) }
+  return {
+    'GET /v1/admin/logs': logInfos,
+    'GET /v1/admin/logs/*/lines': ({ params, query }: { params: string[]; query?: Record<string, unknown> }) => logs[params[0]!]?.({ query }) ?? notFound(),
+  }
+}
+
 // Monitoring: the Audit Trail and Activity (Task 32c)
 
 // Monitoring: Background Jobs (Task 32d)

@@ -1,0 +1,324 @@
+/* SPDX-FileCopyrightText: 2026 The Healdan Project
+   SPDX-License-Identifier: LGPL-3.0-only */
+
+/* Errors and the Server Log, as the first and third drawings of 03-monitoring.html have them, in the User app's colours
+   and type. The page's heading, filters and list are the Matters list's (Matters.module.css); these are what's theirs:
+   a fault's details below the list, and the box of a log's lines. */
+
+/* The list takes what the details leave it, and never less than a few rows */
+.list {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-height: 170px;
+}
+
+/* What a row of the list shows after its message: Resolved */
+.cellMessage {
+  display: flex;
+  align-items: baseline;
+  gap: var(--hd-space-3);
+  min-width: 0;
+}
+
+.cellText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tag {
+  flex: none;
+  padding: 0 var(--hd-space-2);
+  border-radius: var(--hd-radius-small);
+  background: var(--hd-pill);
+  color: var(--hd-text);
+  font-size: var(--hd-font-size-small);
+}
+
+/* A fault's details: a region of its own below the list, which scrolls inside when it's long */
+.details {
+  display: flex;
+  flex: 0 1 auto;
+  flex-direction: column;
+  gap: var(--hd-space-4);
+  max-height: 55%;
+  min-height: 0;
+  margin: 0 calc(var(--hd-space-6) * -1);
+  padding: var(--hd-space-4) var(--hd-space-6) var(--hd-space-5);
+  overflow: auto;
+  border-top: 1px solid var(--hd-line);
+  background: var(--hd-sidebar);
+  color: var(--hd-text);
+}
+
+.details:focus-visible {
+  outline: var(--hd-focus-outline);
+  outline-offset: calc(var(--hd-focus-offset) * -1);
+}
+
+.detailsHead {
+  display: flex;
+  align-items: center;
+  gap: var(--hd-space-3);
+}
+
+.detailsTitle {
+  margin: 0;
+  font-size: var(--hd-font-size);
+  font-weight: var(--hd-weight-bold);
+}
+
+.close {
+  margin-inline-start: auto;
+}
+
+/* Each name before what it says, in two columns */
+.facts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: var(--hd-space-2) var(--hd-space-5);
+  margin: 0;
+}
+
+.facts dt {
+  color: var(--hd-text-secondary);
+}
+
+.facts dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.documents {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.partTitle {
+  margin: 0 0 var(--hd-space-2);
+  color: var(--hd-text-secondary);
+  font-size: var(--hd-font-size-small);
+  font-weight: var(--hd-weight-bold);
+}
+
+/* The latest message and the stack, as the server logged them: their own lines kept, wrapped where they're long */
+.text {
+  margin: 0;
+  padding: var(--hd-space-3) var(--hd-space-4);
+  overflow-wrap: anywhere;
+  border: 1px solid var(--hd-line);
+  border-radius: var(--hd-radius);
+  background: var(--hd-window);
+  color: var(--hd-text);
+  font-family: ui-monospace, "SF Mono", menlo, consolas, monospace;
+  font-size: var(--hd-font-size-small);
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.note {
+  margin: 0;
+  color: var(--hd-text-secondary);
+}
+
+.buttons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--hd-space-3);
+}
+
+.row {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--hd-space-2);
+}
+
+/* A link with a button's face: Show in Server Log, and the log's Download */
+.linkButton {
+  display: inline-flex;
+  box-sizing: border-box;
+  align-items: center;
+  gap: var(--hd-space-2);
+  min-height: 26px;
+  padding: 0 var(--hd-space-4);
+  border: 1px solid var(--hd-button-secondary-line);
+  border-radius: var(--hd-radius);
+  background: var(--hd-button-secondary);
+  color: var(--hd-text);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.linkButton:focus-visible {
+  outline: var(--hd-focus-outline);
+  outline-offset: var(--hd-focus-offset);
+}
+
+/* The Server Log's choices, under its heading: the log, the level, the words, and whether it follows */
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--hd-space-3) var(--hd-space-4);
+  padding-bottom: var(--hd-space-3);
+}
+
+.level {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hd-space-1);
+}
+
+.levelLabel {
+  color: var(--hd-text-secondary);
+  font-size: var(--hd-font-size-small);
+}
+
+.follow {
+  align-self: center;
+  margin-inline-start: auto;
+}
+
+.notes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hd-space-2);
+  margin-bottom: var(--hd-space-3);
+}
+
+/* Drawn, to be a live region before it has words, but taking no room */
+.notes:empty {
+  margin: 0;
+}
+
+/* The box of lines fills the rest of the page and scrolls inside: the keyboard reaches it, and its arrows scroll it. Long
+   lines wrap in it, so it never scrolls the page sideways. */
+.lines {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 160px;
+  margin-bottom: var(--hd-space-5);
+  overflow: auto;
+  border: 1px solid var(--hd-line);
+  border-radius: var(--hd-radius-large);
+  background: var(--hd-window);
+  color: var(--hd-text);
+}
+
+.lines:focus-visible {
+  outline: var(--hd-focus-outline);
+  outline-offset: calc(var(--hd-focus-offset) * -1);
+}
+
+/* Above the lines: Show Earlier, or that the log holds nothing older */
+.top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--hd-space-3);
+  padding: var(--hd-space-3) var(--hd-space-4);
+  border-bottom: 1px solid var(--hd-line);
+  color: var(--hd-text-secondary);
+}
+
+.top p {
+  margin: 0;
+}
+
+.entries {
+  margin: 0;
+  padding: 0;
+  font-family: ui-monospace, "SF Mono", menlo, consolas, monospace;
+  font-size: var(--hd-font-size-small);
+  line-height: 1.45;
+  list-style: none;
+}
+
+/* An entry: its time, level, source and message in a row, and any stack under it */
+.entry {
+  display: grid;
+  grid-template-columns: max-content 5.5em minmax(0, 13em) minmax(0, 1fr);
+  gap: 0 var(--hd-space-4);
+  align-items: baseline;
+  padding: var(--hd-space-1) var(--hd-space-4);
+}
+
+.entry:nth-child(even) {
+  background: var(--hd-row-alt);
+}
+
+.time,
+.source {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--hd-text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A level is said in its word, which takes its colour, and has a frame of the same */
+.badge {
+  justify-self: start;
+  padding: 0 var(--hd-space-2);
+  border: 1px solid currentColor;
+  border-radius: var(--hd-radius-small);
+  color: var(--hd-text-secondary);
+  font-family: var(--hd-font);
+  font-size: 11px;
+  font-weight: var(--hd-weight-bold);
+}
+
+.badge[data-level='WARN'] {
+  color: var(--hd-caution-text);
+}
+
+.badge[data-level='ERROR'],
+.badge[data-level='FATAL'] {
+  color: var(--hd-theirs);
+}
+
+.message {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+/* A line that starts no entry, as the rest of a stack: under the message, with nothing before it */
+.continues {
+  grid-column: 1 / -1;
+  padding-inline-start: var(--hd-space-6);
+  color: var(--hd-text-secondary);
+}
+
+.continuation {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding-inline-start: var(--hd-space-6);
+  overflow-wrap: anywhere;
+  color: var(--hd-text-secondary);
+  font: inherit;
+  white-space: pre-wrap;
+}
+
+.empty {
+  margin: 0;
+  padding: var(--hd-space-4);
+  color: var(--hd-text-secondary);
+}
+
+/* A narrow window puts the message under its time, level and source */
+@media (max-width: 760px) {
+  .entry {
+    grid-template-columns: max-content max-content minmax(0, 1fr);
+  }
+
+  .entry > .message {
+    grid-column: 1 / -1;
+  }
+}

@@ -8,9 +8,9 @@ import type { AdminAnswer } from '../queries'
 
 /**
  * The lists that come a page at a time: clients and matters, each with when their figures were worked out, people, groups,
- * and a group's members, whose route names the group by its `{id}`
+ * a group's members, whose route names the group by its `{id}`, and the faults the server logged
  */
-export type PagedPath = '/v1/admin/clients' | '/v1/admin/matters' | '/v1/admin/users' | '/v1/admin/groups' | '/v1/admin/groups/{id}/members'
+export type PagedPath = '/v1/admin/clients' | '/v1/admin/matters' | '/v1/admin/users' | '/v1/admin/groups' | '/v1/admin/groups/{id}/members' | '/v1/admin/errors'
 
 /** Which way a list's server sorts it */
 export type SortOrder = 'asc' | 'desc'
@@ -25,6 +25,8 @@ export interface PagedListing<T> {
   total?: number
   /** When the summary that gives the list's figures was worked out; null until it has been; undefined for a list with none */
   figuresAt?: string | null
+  /** How many times the faults that match were seen, every page's together (the Errors list's); undefined for another list */
+  errors?: number
   /** Loads the next page; undefined once every row is loaded, and while the rows are an older question's */
   loadMore?: () => void
   isLoadingMore: boolean
@@ -82,6 +84,7 @@ export function usePagedList<P extends PagedPath>(path: P, query: object, pageSi
     items,
     total: last?.total ?? undefined,
     figuresAt: last !== undefined && 'figuresAt' in last ? last.figuresAt : undefined,
+    errors: last !== undefined && 'errors' in last ? last.errors : undefined,
     // Asked again while a page is coming, it waits for that one rather than asking twice
     loadMore: asked.hasNextPage && !asked.isPlaceholderData ? () => void asked.fetchNextPage({ cancelRefetch: false }) : undefined,
     isLoadingMore: asked.isFetchingNextPage,
