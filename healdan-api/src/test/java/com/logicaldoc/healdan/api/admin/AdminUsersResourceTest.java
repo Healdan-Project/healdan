@@ -252,9 +252,10 @@ public class AdminUsersResourceTest extends ApiTestCase {
 		UserDAO.get().evict(elsewhere.getId());
 		jdbc().update("delete from hd_admin_event");
 
+		// The route's own answer, not an address that has none
 		for (long id : List.of(robot.getId(), gone.getId(), elsewhere.getId(), 999_999L))
 			for (ApiCall call : personRoutes(id, 1))
-				assertProblem(call.webSession(web).send(), 404, "not-found", null);
+				assertProblem(call.webSession(web).send(), 404, "not-found", "There's no person %d.".formatted(id));
 		// LogicalDOC's own system account has a negative id, which no path takes
 		assertProblem(get(USERS + "/-1010").webSession(web).send(), 404, "not-found", null);
 		assertEquals(List.of(), records());

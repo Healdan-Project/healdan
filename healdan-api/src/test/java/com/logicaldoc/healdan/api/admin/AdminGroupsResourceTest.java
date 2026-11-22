@@ -224,9 +224,10 @@ public class AdminGroupsResourceTest extends ApiTestCase {
 		long deleted = jdbc().queryForObject("select ld_id from ld_group where ld_name like 'Old Partners.%'",
 				Long.class);
 
+		// The route's own answer, not an address that has none
 		for (long id : List.of(ownGroup(carol), deleted, elsewhere.getId(), 999_999L))
 			for (ApiCall call : groupRoutes(id, carol.getId()))
-				assertProblem(call.webSession(web).send(), 404, "not-found", null);
+				assertProblem(call.webSession(web).send(), 404, "not-found", "There's no group %d.".formatted(id));
 		assertEquals(List.of(), records());
 	}
 
