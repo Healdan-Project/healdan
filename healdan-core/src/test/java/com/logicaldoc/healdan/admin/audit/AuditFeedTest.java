@@ -671,7 +671,7 @@ public class AuditFeedTest extends AbstractHealdanTestCase {
 	}
 
 	@Test
-	public void testAReadAnIndexServesLooksThroughItsWindowAndItsOwnRowsOnly() throws Exception {
+	public void testEveryStatementKeepsItsBoundUnderACustomPlanAndAGenericOne() throws Exception {
 		Folder store = fx.store("Client Work");
 		Matter matter = fx.matter(fx.client(1001, "Ashcombe"), 1, "Charter Dispute", store, "Documents");
 		long workspace = matter.getFolderId();
@@ -705,15 +705,27 @@ public class AuditFeedTest extends AbstractHealdanTestCase {
 				+ " case when n <= 400 then case when n % 2 = 0 then ? else ? end else n % 1000 end,"
 				+ " 'A target with a name as long as a real one', '{\"name\":{\"before\":\"Old name of it\","
 				+ "\"after\":\"New name of it\"}}' from generate_series(1, 40000) n", workspace, documents);
+		// And a storage record as large, older than the rest, none of it the person's: a window of it is read
+		jdbc.update("insert into hd_storage_event (ld_id, ld_lastmodified, ld_creation, ld_recordversion, ld_deleted,"
+				+ " ld_tenantid, hd_backendid, hd_event, hd_date, hd_userid, hd_username) select 1000000 + n,"
+				+ " current_timestamp, current_timestamp, 1, 0, 1, n % 10, 'key-shown',"
+				+ " timestamp '2023-01-01 00:00:00' + n * interval '1 second', 20000 + n % 40, 'someone'"
+				+ " from generate_series(1, 40000) n");
 		for (String table : TABLES)
 			jdbc.execute("analyze " + table);
 		int window = 2_000;
 		feed.scanPerSource = window;
 		Long docNumber = docNumber(letter);
-		record Read(String name, AuditQuery query, String index, int own) {
+		record Read(String name, AuditQuery query, String index, int own, int items) {
+
+			Read(String name, AuditQuery query, String index, int own) {
+				this(name, query, index, own, 50);
+			}
 		}
 
-		List<Read> reads = List.of(
+		List<Read> reads = List.of(new Read("a page with no filter", query(Set.of("document"), null, null, null), null, 0),
+				new Read("a file name, which no index serves", new AuditQuery(Set.of("document"), null, null, null, null,
+						null, null, "Hearing 5.docx", 50, null), null, 0, 0),
 				new Read("a person's documents", query(Set.of("document"), 10007L, null, null), "ld_hist_uid", 400),
 				new Read("a person's account", query(Set.of("sign-in", "user"), 10007L, null, null), "ld_uhist_uid",
 						400),
@@ -731,20 +743,38 @@ public class AuditFeedTest extends AbstractHealdanTestCase {
 			feed.sent = AuditFeed.NOBODY;
 
 			// The oldest rows come in the first page, a page of them
-			assertEquals(read.name(), 50, page.items().size());
+			assertEquals(read.name(), read.items(), page.items().size());
 			assertNotNull(read.name(), page.nextCursor());
-			String plans = "";
-			long removed = 0;
-			for (AuditFeed.Sql sql : statements) {
-				List<String> plan = analysed(sql);
-				plans += String.join("\n", plan) + "\n\n";
-				removed += removedByFilter(plan);
+			boolean unfiltered = read.query().text() == null && read.index() == null;
+			// Each statement as a one-off sends it, and as a statement prepared on a connection runs it once its plan
+			// is the generic one, which pgjdbc's server-side prepare reaches after five executions
+			for (boolean generic : List.of(false, true)) {
+				String mode = read.name() + (generic ? ", generic plan" : ", custom plan");
+				String plans = "";
+				long removed = 0;
+				for (AuditFeed.Sql sql : statements) {
+					List<String> plan = generic ? analysedGeneric(sql) : analysed(sql);
+					String shown = sql.text() + "\n" + String.join("\n", plan);
+					plans += shown + "\n\n";
+					removed += removedByFilter(plan);
+					// A window is a range of the key by design: it looks at no more than the window's rows; a page
+					// with no filter, at no more than a page's
+					if (!sql.text().contains("array(select"))
+						assertTrue(mode + ": looked at " + examined(plan) + "\n" + shown,
+								examined(plan) <= (unfiltered && !sql.text().contains(" offset ") ? 50 : window));
+				}
+				// Through the filter's index, looking through no more than a window for each source read a window
+				// at a time, and the value's own rows
+				long windows = statements.stream().filter(sql -> sql.text().contains(" offset ")).count();
+				if (read.index() != null)
+					assertTrue(mode + ":\n" + plans, plans.contains(" " + read.index()));
+				assertTrue(mode + ": " + removed + " rows looked through and left\n" + plans,
+						removed <= windows * window + read.own());
 			}
-			// Through the filter's index, looking through no more than the window and the value's own rows
-			assertTrue(read.name() + ":\n" + plans, plans.contains(" " + read.index()));
-			assertTrue(read.name() + ": " + removed + " rows looked through and left\n" + plans,
-					removed <= window + read.own());
 		}
+		// The statement for a plan test is a bounded or unfiltered read's: an index-served one sends two
+		assertThrows(IllegalArgumentException.class,
+				() -> feed.prepare(query(Set.of("document"), 10007L, null, null), admin).firstPageSql("d"));
 
 		// The single statement the two steps replaced walks the primary key back through the whole table
 		List<String> single = analysed(new AuditFeed.Sql("select t.ld_id from ld_history t where t.ld_tenantid = ?"
@@ -769,8 +799,9 @@ public class AuditFeedTest extends AbstractHealdanTestCase {
 		// A page of them from the window, which didn't reach the end, with no read through the index after it
 		assertEquals(50, page.items().size());
 		assertNotNull(page.nextCursor());
-		assertEquals(statements.toString(), 1, statements.size());
-		assertFalse(statements.get(0).text(), statements.get(0).text().contains("array("));
+		// The window's end and the window's rows, and nothing through the index after them
+		assertEquals(statements.toString(), 2, statements.size());
+		assertTrue(statements.stream().noneMatch(sql -> sql.text().contains("array(")));
 	}
 
 	@Test
@@ -1026,6 +1057,71 @@ public class AuditFeedTest extends AbstractHealdanTestCase {
 	private List<String> analysed(AuditFeed.Sql sql) {
 		return jdbc.query("explain (analyze, costs off, timing off, summary off) " + sql.text(),
 				ps -> AuditFeed.bind(ps, sql.params()), (rs, n) -> rs.getString(1));
+	}
+
+	/**
+	 * @return the statement's plan as it ran under a generic plan: prepared on one connection with
+	 *         {@code plan_cache_mode = force_generic_plan}, then executed with the statement's values
+	 */
+	private List<String> analysedGeneric(AuditFeed.Sql sql) {
+		StringBuilder numbered = new StringBuilder();
+		int n = 0;
+		for (char c : sql.text().toCharArray())
+			if (c == '?')
+				numbered.append('$').append(++n);
+			else
+				numbered.append(c);
+		String values = java.util.Arrays.stream(sql.params()).map(AuditFeedTest::literal)
+				.collect(Collectors.joining(", "));
+		String execute = "execute audit_generic" + (n > 0 ? "(" + values + ")" : "");
+		TransactionTemplate transaction = new TransactionTemplate(Context.get(PlatformTransactionManager.class));
+		return transaction.execute(status -> {
+			jdbc.execute("set local plan_cache_mode = force_generic_plan");
+			jdbc.execute("prepare audit_generic as " + numbered);
+			try {
+				return jdbc.queryForList("explain (analyze, costs off, timing off, summary off) " + execute,
+						String.class);
+			} finally {
+				jdbc.execute("deallocate audit_generic");
+			}
+		});
+	}
+
+	/** @return a statement's value as an SQL literal, for {@code execute} */
+	private static String literal(Object value) {
+		return switch (value) {
+		case Long number -> number.toString();
+		case Integer number -> number.toString();
+		case String text -> "'" + text.replace("'", "''") + "'";
+		case Instant instant -> "'" + Timestamp.from(instant) + "'";
+		case AuditFeed.Ids ids -> "'{" + java.util.Arrays.stream(ids.ids()).map(String::valueOf)
+				.collect(Collectors.joining(",")) + "}'";
+		default -> throw new IllegalArgumentException("No literal for a " + value.getClass().getName());
+		};
+	}
+
+	/**
+	 * @return how many rows the plan's scans looked at: each scan's rows and the rows its filter left out, but for
+	 *         a bitmap index scan's entries, which its heap scan's rows count
+	 */
+	private static long examined(List<String> plan) {
+		java.util.regex.Pattern rows = java.util.regex.Pattern.compile("actual rows=([0-9.]+) loops=([0-9]+)");
+		long examined = 0;
+		boolean scan = false;
+		for (String line : plan) {
+			boolean node = line.contains("->") || line.strip().startsWith("InitPlan") || !line.startsWith(" ");
+			if (node) {
+				scan = (line.contains(" Scan ") || line.contains("Scan on") || line.contains("Scan using"))
+						&& !line.contains("Bitmap Index Scan");
+				java.util.regex.Matcher matcher = rows.matcher(line);
+				if (scan && matcher.find())
+					examined += Math.round(Double.parseDouble(matcher.group(1)) * Long.parseLong(matcher.group(2)));
+			} else if (scan && line.contains("Rows Removed by Filter: ")) {
+				examined += Long.parseLong(line.substring(line.indexOf("Rows Removed by Filter: ")
+						+ "Rows Removed by Filter: ".length()).strip());
+			}
+		}
+		return examined;
 	}
 
 	/** @return how many rows the plan's nodes looked at and left out by a filter */

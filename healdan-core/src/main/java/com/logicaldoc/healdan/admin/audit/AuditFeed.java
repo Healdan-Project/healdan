@@ -177,8 +177,8 @@ public class AuditFeed {
 	record Sql(String text, Object[] params) {
 	}
 
-	/** Ids bound as one array, so a long list is one parameter */
-	private record Ids(Long[] ids) {
+	/** Ids bound as one {@code bigint} array, so a long list is one parameter */
+	record Ids(Long[] ids) {
 
 		Ids(Collection<Long> ids) {
 			this(ids.toArray(Long[]::new));
@@ -198,7 +198,10 @@ public class AuditFeed {
 	/** The most rows of a source a bounded page looks through, {@link #SCAN_PER_SOURCE}; a seam for tests */
 	volatile int scanPerSource = SCAN_PER_SOURCE;
 
-	/** Told of each statement that reads a source's rows, just before it's sent; a seam for tests */
+	/**
+	 * Told of each statement that reads a source's rows or finds its window's end, just before it's sent; a seam for
+	 * tests
+	 */
 	volatile Consumer<Sql> sent = NOBODY;
 
 	/** The {@link #sent} that's told of nothing */
@@ -401,9 +404,17 @@ public class AuditFeed {
 			}
 		}
 
-		/** The first page's statement for a source's rows, for its plan; a bounded read's has its window's end too */
+		/**
+		 * The first page's statement for a source's rows, for its plan, when the source is read with no filter or
+		 * bounded; a bounded read's has its window's end too. An index-served read sends more than one statement,
+		 * which {@link AuditFeed#sent} shows.
+		 *
+		 * @throws IllegalArgumentException for a source an index serves the filter of
+		 */
 		Sql firstPageSql(String source) {
 			Source which = Source.of(source);
+			if (indexed(which))
+				throw new IllegalArgumentException("An index-served read of " + which.table + " sends two statements");
 			long[] range = ranges.get(which);
 			long upper = range != null ? range[1] + 1 : Long.MAX_VALUE;
 			long low = range != null ? range[0] : Long.MIN_VALUE;
@@ -526,6 +537,7 @@ public class AuditFeed {
 			}
 			sql += " order by %s desc offset ? limit 1".formatted(source.id);
 			params.add(scan - 1);
+			sent.accept(new Sql(sql, params.toArray()));
 			List<Frontier> found = jdbc.query(sql, ps -> bind(ps, params.toArray()),
 					(rs, n) -> new Frontier(rs.getLong(1), rs.getTimestamp(2).toInstant()));
 			return found.isEmpty() ? null : found.get(0);
@@ -631,8 +643,9 @@ public class AuditFeed {
 		 * the index of the filters it serves on the source ({@link #indexed}): the ids an inner select finds by the
 		 * indexed columns alone, which PostgreSQL reads through their index as it can't serve them by the key, then
 		 * the rows with those ids and every filter, sorted and cut to a page. Its cost is the value's own rows
-		 * below {@code upper}, wherever they lie; the single statement it replaces could be planned as the key read
-		 * backwards through the whole table.
+		 * below {@code upper}, wherever they lie, under a generic plan as under a custom one, as the inner select's
+		 * bounds on the key aren't ones an index can serve; the single statement it replaces could be planned as the
+		 * key read backwards through the whole table.
 		 */
 		Sql belowSql(Source source, long upper, long low, int limit) {
 			String id = source.id.substring(2);
@@ -640,10 +653,12 @@ public class AuditFeed {
 			List<Object> innerParams = new ArrayList<>();
 			inner.add("s.%s = ?".formatted(source.tenant.substring(2)));
 			innerParams.add(tenantId);
-			inner.add("s.%s < ?".formatted(id));
+			// The bounds are on the key plus nothing, which no index serves: a generic plan, which a statement
+			// prepared on a connection gets after five runs, would otherwise read the key's range and the whole table
+			inner.add("s.%s + 0 < ?".formatted(id));
 			innerParams.add(upper);
 			if (low != Long.MIN_VALUE) {
-				inner.add("s.%s >= ?".formatted(id));
+				inner.add("s.%s + 0 >= ?".formatted(id));
 				innerParams.add(low);
 			}
 			if (query.userId() != null && source != Source.FOLDER && source != Source.STORAGE)
