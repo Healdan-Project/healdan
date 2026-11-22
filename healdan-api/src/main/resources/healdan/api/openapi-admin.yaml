@@ -172,13 +172,15 @@ tags:
         you'd lose this app mid-change); and any change that would leave no
         enabled administrator, an enabled account in `admin`. Two such
         changes at the same moment are made one after the other, the second
-        counting the administrators the first left, so two administrators
-        can't take each other out. A person's `refusals` say beforehand
-        which of their page's actions would be refused, and why.
+        counting the administrators the first left and refusing a caller
+        whose own account the first disabled, so two administrators can't
+        take each other out. A person's `refusals` say beforehand which of
+        their page's actions would be refused, and why.
       - Disable, Reset Password and Sign Out Everywhere sign the person out
         everywhere: their device tokens are revoked, and once the change has
-        committed their open sessions on this server close, so every app and
-        device signed in as them is signed out at its next request.
+        committed every open session on this server that they opened, as
+        themselves or as another account, closes, so every app and device
+        signed in as them is signed out at its next request.
       - A temporary password, which New User and Reset Password make, is in
         that route's answer only, and only when it wasn't emailed: never in
         another answer, a problem, the administration record or a log line.
@@ -3259,9 +3261,10 @@ paths:
           `lastName` missing, null or blank, or `emailPassword` missing or
           null (`required`); a username, a name or an email over 255
           characters (`too-long`); a username with `>` or a control
-          character, an email that isn't an email address, a `language`
-          that isn't one of the options' `languages`, or a `timeZone` that
-          isn't one of their `timeZones` (`invalid`); and a username another
+          character, a first or last name with a control character or
+          markup, an email that isn't an email address, a `language` that
+          isn't one of the options' `languages`, or a `timeZone` that isn't
+          one of their `timeZones` (`invalid`); and a username another
           account has, in any case, a deleted or a system account's included
           (`taken`). Of two adds of one username at the same moment, in any
           case, the second is refused as taken.
@@ -3445,8 +3448,9 @@ paths:
         - `409 refused`, as `refusals.disable` says beforehand: for the
           `admin` account; for the caller's own; for a change that would
           leave no enabled administrator, counted once any other such change
-          at the same moment has committed; and for what Healdan's rules
-          refuse.
+          at the same moment has committed; for a caller whose own account
+          was disabled while the change waited its turn; and for what
+          Healdan's rules refuse.
 
         Recorded as `user.disabled`.
       tags: [People]
@@ -3643,11 +3647,11 @@ paths:
         `guest`, for a read-only one, whether or not the list names it. An
         empty list leaves them in no other group. A list that changes
         nothing is answered as it is, before the refusals below. For an
-        account linked to a sign-in provider, its
-        membership of each group the provider's group map names
-        (`Group.mappedBy`) may be set again from the provider at its next
-        sign-in there. Adding someone to `admin` lets them use this app and
-        read every document: the app asks first.
+        account linked to a sign-in provider, its membership of each group
+        the provider's group map names (`Group.mappedBy`) may be set again
+        from the provider at its next sign-in there. Adding someone to
+        `admin` lets them use this app and read every document: the app
+        asks first.
 
         - `400 bad-request` for a `groupIds` that names a group twice or
           holds a null.
@@ -3658,8 +3662,9 @@ paths:
           group but `guest`; for taking the `admin` account, or the caller,
           out of `admin`, as `refusals.leaveAdmin` says beforehand; for a
           change that would leave no enabled administrator, counted once any
-          other such change at the same moment has committed; and for what
-          Healdan's rules refuse.
+          other such change at the same moment has committed; for a caller
+          whose own account was disabled while the change waited its turn;
+          and for what Healdan's rules refuse.
 
         Recorded as `user.groups-changed`, with the groups before and after,
         by name. A change that changes nothing isn't recorded.
@@ -3850,7 +3855,8 @@ paths:
         - `422 validation`, each by its field: a name missing, null or blank
           (`required`); a name over 200 characters, or a description over 255
           (`too-long`); a name that starts with `_user_`, as a person's own
-          group's does (`invalid`); and a name another group has, in any
+          group's does, or holds a control character, and a description
+          that holds one (`invalid`); and a name another group has, in any
           case (`taken`).
         - `409 refused` for what Healdan's rules refuse.
 
@@ -4053,16 +4059,17 @@ paths:
       description: |
         Adds the person to the group, and answers `204` (Admin app spec
         section 8.7). Someone already in it changes nothing, before the
-        refusals below, and nothing is recorded. Adding someone to `admin` lets them use this app and read
-        every document: the app asks first. For an account linked to a
-        sign-in provider, its membership of a group the provider's group map
-        names (`mappedBy`) may be set again from the provider at its next
-        sign-in there. Takes no body.
+        refusals below, and nothing is recorded. Adding someone to `admin`
+        lets them use this app and read every document: the app asks first.
+        For an account linked to a sign-in provider, its membership of a
+        group the provider's group map names (`mappedBy`) may be set again
+        from the provider at its next sign-in there. Takes no body.
 
         - `404 not-found` as `adminGetGroup` answers for the group, and as
           `adminGetUser` answers for `userId`.
         - `409 refused` for a read-only account and any group but `guest`;
-          and for what Healdan's rules refuse.
+          for a caller whose own account was disabled while the change
+          waited its turn; and for what Healdan's rules refuse.
 
         Recorded as `group.member-added`, with the person, named as
         `Ann Lee (alee)`.
@@ -4089,20 +4096,22 @@ paths:
       description: |
         Takes the person out of the group, and answers `204` (Admin app spec
         section 8.7). Someone not in it changes nothing, before the refusals
-        below, and nothing is recorded. For an account linked to a sign-in provider, its
-        membership of a group the provider's group map names (`mappedBy`)
-        may be set again from the provider at its next sign-in there.
+        below, and nothing is recorded. For an account linked to a sign-in
+        provider, its membership of a group the provider's group map names
+        (`mappedBy`) may be set again from the provider at its next sign-in
+        there.
 
         - `404 not-found` as `adminGetGroup` answers for the group, and as
           `adminGetUser` answers for `userId`.
         - `409 refused` for Everyone, which every account but a read-only
           one is always in, and for `guest` and a read-only account, which
           is always in it, each with a sentence that says so; for taking the
-          `admin` account, or the caller, out of
-          `admin`, as the person's `refusals.leaveAdmin` says beforehand; for
-          a change that would leave no enabled administrator, counted once
-          any other such change at the same moment has committed; and for
-          what Healdan's rules refuse.
+          `admin` account, or the caller, out of `admin`, as the person's
+          `refusals.leaveAdmin` says beforehand; for a change that would
+          leave no enabled administrator, counted once any other such change
+          at the same moment has committed; for a caller whose own account
+          was disabled while the change waited its turn; and for what
+          Healdan's rules refuse.
 
         Recorded as `group.member-removed`, with the person, named as
         `Ann Lee (alee)`.
@@ -6768,8 +6777,8 @@ components:
           type: array
           description: |
             The time zones a person can be given: the IANA region names the
-            server knows, as `Europe/London`, sorted, leaving out older forms
-            such as `PST` and the `SystemV/` names
+            server knows, as `Europe/London`, and `UTC`, sorted, leaving out
+            older forms such as `PST` and the `SystemV/` names
           items:
             type: string
             examples: [Europe/London]
@@ -6869,13 +6878,13 @@ components:
       additionalProperties: false
       properties:
         firstName:
-          type: string
+          type: [string, 'null']
           description: |
             At most 255 characters; null or blank is `422 validation`
             (`required`), unless the person's first name is blank now, which then
             stays blank
         lastName:
-          type: string
+          type: [string, 'null']
           description: |
             At most 255 characters; null or blank is `422 validation`
             (`required`), unless the person's last name is blank now, which then
