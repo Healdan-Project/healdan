@@ -83,7 +83,8 @@ public class AdminLogsResource {
 	/**
 	 * Download: the log's files, as they are, zipped. They're opened and closed again before the answer starts, so a
 	 * file that can't be read fails the request rather than the download, and opened again only while the body is
-	 * written, which a {@code HEAD}'s answer leaves out.
+	 * written, which a {@code HEAD}'s answer leaves out. It's {@code no-store}, as the files hold what the server
+	 * logged, credentials and all, whatever the server's {@code cachecontrol} setting says.
 	 *
 	 * @param name the log's name
 	 * @param request the request, which JAX-RS answers with this method for a {@code HEAD} too
@@ -105,7 +106,7 @@ public class AdminLogsResource {
 		} : zip::writeTo;
 		return Response.ok(body, ZIP)
 				.header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"%s\"".formatted(zip.fileName()))
-				.build();
+				.header(HttpHeaders.CACHE_CONTROL, "no-store").build();
 	}
 
 	/**

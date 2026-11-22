@@ -287,6 +287,35 @@ public class JobControlTest extends AbstractHealdanTestCase {
 		assertEquals(List.of(record("job.run-requested", TrashStartup.JOB, null)), AdminRecord.events());
 	}
 
+	/**
+	 * Each action that changed a job, and the end of a task's run it started, moves the jobs' changes on, which the
+	 * Dashboard's jobs follow (ruling P5-R37); a refusal and an action that changes nothing don't
+	 */
+	@Test
+	public void testAnActionThatChangedAJobMovesTheChangesOn() throws Exception {
+		long before = jobs.changes();
+		control.enable(OPTIMIZER, admin);
+		assertEquals("enabled already", before, jobs.changes());
+		control.disable(OPTIMIZER, admin);
+		long disabled = jobs.changes();
+		assertTrue(disabled > before);
+		assertThrows(HealdanRuleException.class, () -> control.stop(OPTIMIZER, admin));
+		assertEquals("refused", disabled, jobs.changes());
+		control.enable(OPTIMIZER, admin);
+		long enabled = jobs.changes();
+		assertTrue(enabled > disabled);
+
+		held = new HeldTask();
+		JobsTestHooks.list(held);
+		control.run(HeldTask.NAME, admin);
+		long asked = jobs.changes();
+		assertTrue(asked > enabled);
+		held.awaitStarted();
+		// Its run's end, which nothing else of Healdan's hears of
+		held.release();
+		assertTrue(jobs.changes() > asked);
+	}
+
 	@Test
 	public void testEnableAndDisable() throws Exception {
 		ContextProperties config = Context.get().getConfig();

@@ -12,7 +12,9 @@ import java.util.List;
  * @param before where the read began: the start of the earliest entry it looked at, kept or not, or of its earliest
  *        line when it found no entry's start
  * @param after where it ended: when it stopped at {@link LogFiles#MAX_LINES} entries, the start of the entry after
- *        the last it gave; otherwise just past the last whole line it looked at
+ *        the last it gave; when it stopped at the most it looks through, inside an entry that isn't the first it
+ *        read, the start of that entry, which the next read gives whole; otherwise just past the last whole line it
+ *        looked at
  * @param atStart whether {@code before} is the start of the log's oldest file
  * @param atEnd whether the read reached the end of the current file as it was then
  * @param rolled whether the {@code after} it was given named a file that isn't the current one any more

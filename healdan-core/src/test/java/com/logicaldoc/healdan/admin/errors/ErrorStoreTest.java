@@ -28,6 +28,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
+import com.logicaldoc.core.security.Tenant;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.healdan.AbstractHealdanTestCase;
 import com.logicaldoc.healdan.admin.Page;
@@ -240,18 +241,22 @@ public class ErrorStoreTest extends AbstractHealdanTestCase {
 		Document unnumbered = fx.upload(documents, "note.txt", "Note", admin);
 		jdbc.update("update ld_document set ld_customid = 'A-12' where ld_id = ?", unnumbered.getId());
 		long missing = unnumbered.getId() + 1000;
+		Document elsewhere = fx.upload(documents, "other.txt", "Another tenant's", admin);
+		jdbc.update("update ld_document set ld_tenantid = 2 where ld_id = ?", elsewhere.getId());
 
-		List<ErrorDocument> found = store.findDocuments(
-				List.of(deleted.getId(), missing, named.getId(), unnumbered.getId(), named.getId()));
+		List<ErrorDocument> found = store.findDocuments(Tenant.DEFAULT_ID, List.of(deleted.getId(), missing,
+				named.getId(), unnumbered.getId(), named.getId(), elsewhere.getId()));
 
-		// In the order the message names them, a deleted one too, and an id no document has with nothing else
+		// In the order the message names them, a deleted one too, and an id no document of the reader's tenant has
+		// with nothing else
 		assertEquals(List.of(
 				new ErrorDocument(deleted.getId(), Long.valueOf(deleted.getCustomId()), "draft.txt"),
 				new ErrorDocument(missing, null, null),
 				new ErrorDocument(named.getId(), Long.valueOf(named.getCustomId()), "letter.txt"),
 				new ErrorDocument(unnumbered.getId(), null, "note.txt"),
-				new ErrorDocument(named.getId(), Long.valueOf(named.getCustomId()), "letter.txt")), found);
-		assertEquals(List.of(), store.findDocuments(List.of()));
+				new ErrorDocument(named.getId(), Long.valueOf(named.getCustomId()), "letter.txt"),
+				new ErrorDocument(elsewhere.getId(), null, null)), found);
+		assertEquals(List.of(), store.findDocuments(Tenant.DEFAULT_ID, List.of()));
 	}
 
 	@Test

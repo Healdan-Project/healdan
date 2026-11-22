@@ -5,7 +5,6 @@ package com.logicaldoc.healdan.api.admin;
 
 import java.io.BufferedWriter;
 import java.io.OutputStreamWriter;
-import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -13,10 +12,8 @@ import java.time.format.DateTimeParseException;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.regex.Pattern;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Component;
 
 import com.logicaldoc.core.PersistenceException;
@@ -31,14 +28,16 @@ import com.logicaldoc.healdan.api.ApiProblem;
 import com.logicaldoc.healdan.api.Caller;
 import com.logicaldoc.healdan.api.Paging;
 import com.logicaldoc.healdan.api.Zones;
-import com.logicaldoc.healdan.util.Texts;
 
 import jakarta.ws.rs.GET;
+import jakarta.ws.rs.HttpMethod;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.QueryParam;
+import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.Request;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.StreamingOutput;
 
@@ -55,7 +54,8 @@ public class AdminAuditResource {
 	/** The export's media type, as the contract writes it */
 	static final String CSV = "text/csv;charset=utf-8";
 
-	private static final Logger log = LoggerFactory.getLogger(AdminAuditResource.class);
+	/** A day as the contract's {@code date} writes it */
+	private static final Pattern DAY = Pattern.compile("[0-9]{4}-[0-9]{2}-[0-9]{2}");
 
 	/**
 	 * @return a page of the Audit Trail, and where the next starts
@@ -76,6 +76,12 @@ public class AdminAuditResource {
 	}
 
 	/**
+	 * Export CSV (ruling P5-R32). The filters are checked, and the first page read, before the answer starts, so a
+	 * refusal or a failure to read it is a problem, never a file of the columns alone; then {@link AuditCsv.Export}
+	 * writes the column names at once, and the rows as each page is read, and ends with a last line when it can't
+	 * finish. A {@code HEAD} answers the headers once the filters are checked, and reads no row.
+	 *
+	 * @param request the request, which JAX-RS answers with this method for a {@code HEAD} too
 	 * @return the rows the filters keep, as CSV, an attachment named after today in the zone
 	 */
 	@GET
@@ -84,27 +90,20 @@ public class AdminAuditResource {
 	public Response export(@QueryParam("kind") List<String> kinds, @QueryParam("userId") Long userId,
 			@QueryParam("matterId") Long matterId, @QueryParam("docNumber") Long docNumber,
 			@QueryParam("from") String from, @QueryParam("to") String to, @QueryParam("zone") String zone,
-			@QueryParam("q") String q) {
+			@QueryParam("q") String q, @Context Request request) {
 		AuditQuery query = query(kinds, userId, matterId, docNumber, from, to, zone, q, AuditFeed.MAX_LIMIT, null);
 		User actor = Caller.current().user();
-		AuditFeed.Prepared prepared;
+		boolean head = HttpMethod.HEAD.equals(request.getMethod());
+		AuditCsv.Export export;
 		try {
-			// What the filters name is worked out before the first byte, so a refusal or a failure is a problem
-			prepared = AuditFeed.get().prepare(query, actor);
+			AuditFeed.Prepared prepared = AuditFeed.get().prepare(query, actor);
+			export = head ? null : AuditCsv.open(prepared, AuditCsv.MAX_ROWS);
 		} catch (PersistenceException e) {
 			throw new IllegalStateException("Can't read the Audit Trail", e);
 		}
-		StreamingOutput body = out -> {
-			Writer writer = new BufferedWriter(new OutputStreamWriter(out, StandardCharsets.UTF_8));
-			try {
-				AuditCsv.write(prepared, AuditCsv.MAX_ROWS, writer);
-			} catch (DataAccessException e) {
-				// The answer has begun, so it can't become a problem: the file ends short, with no last line
-				log.error("The Audit Trail's export stopped before its end: {}", Texts.causes(e));
-				log.debug("The Audit Trail's export stopped before its end", e);
-			}
-			writer.flush();
-		};
+		// A HEAD's headers alone: CXF would write the body for it too
+		StreamingOutput body = export == null ? out -> {
+		} : out -> export.writeTo(new BufferedWriter(new OutputStreamWriter(out, StandardCharsets.UTF_8)));
 		String fileName = "audit-trail-%s.csv".formatted(LocalDate.now(query.zone()));
 		return Response.ok(body, CSV).header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"%s\""
 				.formatted(fileName)).header(HttpHeaders.CACHE_CONTROL, "no-store").build();
@@ -112,8 +111,8 @@ public class AdminAuditResource {
 
 	/**
 	 * @return the query the parameters ask for
-	 * @throws ApiProblem {@code 400 bad-request} for a kind that isn't one, an id below 0, a day that isn't one, or
-	 *         a zone the server doesn't know
+	 * @throws ApiProblem {@code 400 bad-request} for a kind that isn't one, an id below 0, a day that isn't one of
+	 *         the years 1 to 9999 written as {@code 2026-11-22}, or a zone the server doesn't know
 	 */
 	private static AuditQuery query(List<String> kinds, Long userId, Long matterId, Long docNumber, String from,
 			String to, String zone, String q, int limit, AuditCursor cursor) {
@@ -137,14 +136,24 @@ public class AdminAuditResource {
 			throw ApiProblem.badRequest("The %s can't be negative.".formatted(name));
 	}
 
+	/**
+	 * @return the day: four digits of year, from 1, as the contract's {@code date} writes one; a year beyond what the
+	 *         database's times or {@link LocalDate} hold is refused rather than failed
+	 */
 	private static LocalDate day(String name, String text) {
 		if (text == null)
 			return null;
-		try {
-			return LocalDate.parse(text);
-		} catch (DateTimeParseException e) {
-			throw ApiProblem.badRequest("The %s is a day, such as 2026-11-22.".formatted(name));
-		}
+		LocalDate day = null;
+		if (DAY.matcher(text).matches())
+			try {
+				day = LocalDate.parse(text);
+			} catch (DateTimeParseException e) {
+				// Not a day, such as 2026-02-30
+			}
+		if (day == null || day.getYear() < 1)
+			throw ApiProblem.badRequest("The %s is a day of the years 0001 to 9999, such as 2026-11-22."
+					.formatted(name));
+		return day;
 	}
 
 	private static AuditCursor cursor(String text) {

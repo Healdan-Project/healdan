@@ -10,8 +10,20 @@ package com.logicaldoc.healdan.admin;
  * by letters, digits, {@code +}, {@code -} or {@code .}, so in {@code jdbc:postgresql://…} the scheme is
  * {@code postgresql}. The authority ends at the first {@code /}, {@code ?}, {@code #}, whitespace, quote
  * ({@code "} or {@code '}), {@code <}, {@code >} or the text's end, and the user part ends at the last
- * {@code @} before that. Everything else stays byte for byte: an email address outside a URL, an {@code @} in a
- * URL's path or query, text with no URL.
+ * {@code @} before that. A URL that starts inside the authority of the one before it is a URL of its own, so in a
+ * list of hosts joined by commas ({@code amqp://u:p@h1,amqp://u:p@h2}), or a URL given as another's authority, each
+ * is cut. Everything else stays byte for byte: an email address outside a URL, an {@code @} in a URL's path or query,
+ * text with no URL.
+ * <p>
+ * What it doesn't recognise as a URL's user part stays as it is, so nothing that shows the result may promise more:
+ * <ul>
+ * <li>a password that itself holds a raw {@code /}, {@code ?}, {@code #}, whitespace, a quote or an angle bracket,
+ * which ends the authority before its {@code @};</li>
+ * <li>a URL that is JSON-escaped ({@code https:\/\/}) or percent-encoded ({@code https%3A%2F%2F}), which has no
+ * {@code ://};</li>
+ * <li>a URL cut short before its {@code @}, as a text capped at a length can end in one, whose user part and what's
+ * left of its password then stay.</li>
+ * </ul>
  * <p>
  * One pass over the text, with no regular expression, so a long line takes time in proportion to its length.
  */
@@ -46,8 +58,9 @@ public final class UrlCredentials {
 				out.append(text, copied, authority);
 				copied = lastAt + 1;
 			}
-			from = end;
-			at = text.indexOf("://", end);
+			// The next URL may start inside this authority, its scheme just before the end's slash
+			from = lastAt >= 0 ? lastAt + 1 : authority;
+			at = text.indexOf("://", end > authority ? end - 1 : end);
 		}
 		if (out == null)
 			return text;

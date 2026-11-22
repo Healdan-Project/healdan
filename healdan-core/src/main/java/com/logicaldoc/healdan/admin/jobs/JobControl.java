@@ -56,6 +56,8 @@ import com.logicaldoc.util.spring.Context;
  * Disable and the schedule only when they change something. A refusal changes and records nothing, and a save that
  * fails puts the task's scheduling and its settings in memory back as they were, so the same change asked again is
  * made. Enable, Disable and the schedule take turns, so two at once can't both find a task's scheduling as it was.
+ * Each action that changed a job, and the end of a task's run it started, moves {@link Jobs#changes()} on, so the
+ * Dashboard's next read has the job as it is now (ruling P5-R37).
  */
 @Component
 public class JobControl {
@@ -347,7 +349,14 @@ public class JobControl {
 				throw new HealdanRuleException(SCHEDULED_TASKS_OFF);
 			if (!task.getScheduling().isEnabled())
 				throw new HealdanRuleException(DISABLED);
-			Thread thread = new Thread(task, "healdan-run-now-" + task.getName());
+			// Its end, too, is a change the Dashboard's jobs follow
+			Thread thread = new Thread(() -> {
+				try {
+					task.run();
+				} finally {
+					jobs.changed();
+				}
+			}, "healdan-run-now-" + task.getName());
 			thread.setDaemon(true);
 			thread.start();
 			started.put(task.getName(), thread);
@@ -441,7 +450,12 @@ public class JobControl {
 		}
 	}
 
+	/**
+	 * Records an action that changed the job, which the Dashboard's jobs then follow at their next read (ruling
+	 * P5-R37)
+	 */
 	private void recorded(String action, String name, Map<String, Change> changes, User actor) {
+		jobs.changed();
 		events.recordAfter(new AdminEvent(AdminArea.MONITORING, action, TARGET_KIND, null, name, changes), actor);
 	}
 

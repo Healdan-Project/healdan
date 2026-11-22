@@ -33,6 +33,10 @@ import jakarta.servlet.http.HttpServletRequest;
  * </ul>
  * Which paths are files is decided by the path alone, never by what the build holds. Nothing is kept by a proxy:
  * hashed files are <code>private</code>, and the page and every refusal are <code>no-store</code>.
+ * <p>
+ * Its policy is the User app's without a worker ({@link #POLICY}). It allows a frame of the server's own, as the User
+ * app's does, and nothing else: the app's downloads, the Server Log's zip and the Audit Trail's CSV, go through a
+ * hidden frame at the API's address, a plain navigation that carries the web session the API takes (ruling P5-R38).
  */
 @WebServlet(urlPatterns = "/admin/*", loadOnStartup = 3)
 public class AdminAppServlet extends BuiltAppServlet {
@@ -43,10 +47,13 @@ public class AdminAppServlet extends BuiltAppServlet {
 
 	public static final String ROOT = "healdan/app/admin/";
 
-	/** The User app's {@link AppServlet#POLICY}, without PDF.js's worker and the email's frame */
+	/**
+	 * The User app's {@link AppServlet#POLICY}, without PDF.js's worker: a frame of the server's own is allowed, for
+	 * the downloads' hidden frame
+	 */
 	public static final String POLICY = "default-src 'self'; script-src 'self'; style-src 'self'; "
 			+ "img-src 'self' data: blob:; font-src 'self' data:; worker-src 'none'; connect-src 'self'; "
-			+ "frame-src 'none'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'";
+			+ "frame-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'";
 
 	@Override
 	String root() {

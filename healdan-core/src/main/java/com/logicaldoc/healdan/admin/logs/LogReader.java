@@ -34,11 +34,13 @@ import com.logicaldoc.healdan.util.Texts;
  * {@link LogFiles#MAX_CHARS} characters, and looks through the rest. A read looks through at most its budget, and
  * keeps at most {@link LogFiles#MAX_LINES} entries.
  * <p>
- * A line starts an entry when it starts as the server's logging writes one: its time, level and source, then
- * {@code " -- "} and the message ({@link #ENTRY}). Every other line continues the entry before it, but for the lines
- * at the start of what was read, or of a file, which are each an entry of their own: log4j writes each event whole to
- * one file, so an entry never spans two. A read going back stops at an entry's start, so an entry's lines come
- * together.
+ * A line starts an entry when it starts with the time as the server's logging writes it ({@link #ENTRY}), then, as
+ * the main log's pattern writes them, its level and source, {@code " -- "} and the message ({@link #FULL}); or, as a
+ * few of the shipped logs' patterns write them, its level and the message ({@link #LEVEL}), or the message alone
+ * after {@code "- "}. A level or source the line doesn't give is null. Every other line continues the entry before
+ * it, but for the lines at the start of what was read, or of a file, which are each an entry of their own: log4j
+ * writes each event whole to one file, so an entry never spans two. A read going back stops at an entry's start, so
+ * an entry's lines come together.
  * <p>
  * Going forward it reads one file, up to the size it had when it was opened, and leaves a last line not yet ended.
  * Going back it goes on into the next older file at the start of one.
@@ -52,13 +54,29 @@ final class LogReader {
 	private static final int CHUNK = 64 * 1024;
 
 	/**
-	 * A line that starts an entry, as the shipped pattern, {@code %d{dd.MM.yyyy HH:mm:ss,SSS} %-5p (%C:%4L) -- %m%n},
-	 * writes one. The message is whatever follows, whatever characters it holds: a line holds no line feed, and a
-	 * carriage return or a Unicode line separator in it is the message's
+	 * A line that starts an entry: the time as every shipped pattern writes it, {@code %d{dd.MM.yyyy HH:mm:ss,SSS}},
+	 * then a space and the rest, or nothing. What follows is whatever characters it holds: a line holds no line feed,
+	 * and a carriage return or a Unicode line separator in it is the message's
 	 */
 	private static final Pattern ENTRY = Pattern.compile(
-			"(\\d{2}\\.\\d{2}\\.\\d{4} \\d{2}:\\d{2}:\\d{2},\\d{3}) (TRACE|DEBUG|INFO|WARN|ERROR|FATAL)\\s*\\(([^)]*)\\) -- (.*)",
+			"(\\d{2}\\.\\d{2}\\.\\d{4} \\d{2}:\\d{2}:\\d{2},\\d{3})(?: (.*))?", Pattern.DOTALL);
+
+	/**
+	 * The rest of an entry's line as the main log's pattern, {@code %d{dd.MM.yyyy HH:mm:ss,SSS} %-5p (%C:%4L) -- %m%n},
+	 * writes it: the level, the source and the message
+	 */
+	private static final Pattern FULL = Pattern.compile("(TRACE|DEBUG|INFO|WARN|ERROR|FATAL)\\s*\\(([^)]*)\\) -- (.*)",
 			Pattern.DOTALL);
+
+	/**
+	 * The rest of an entry's line as a pattern with a level and no source, {@code %d{...} %-5p %m%n}, writes it: the
+	 * level, the spaces that pad it, and the message
+	 */
+	private static final Pattern LEVEL = Pattern.compile("(TRACE|DEBUG|INFO|WARN|ERROR|FATAL)(?: +(.*))?",
+			Pattern.DOTALL);
+
+	/** What starts the message of a pattern with neither level nor source, {@code %d{...} - %m%n} */
+	private static final String BARE = "- ";
 
 	private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("dd.MM.uuuu HH:mm:ss,SSS", Locale.ROOT)
 			.withResolverStyle(ResolverStyle.STRICT);
@@ -138,14 +156,24 @@ final class LogReader {
 			Matcher matcher = ENTRY.matcher(line.text());
 			if (!matcher.matches())
 				return null;
+			Instant time;
 			try {
-				Instant time = LocalDateTime.parse(matcher.group(1), TIME).atZone(ZoneId.systemDefault()).toInstant();
-				return new Entry(line.start(), time, matcher.group(2), matcher.group(3).replace(" ", ""),
-						shown(matcher.group(4)), false);
+				time = LocalDateTime.parse(matcher.group(1), TIME).atZone(ZoneId.systemDefault()).toInstant();
 			} catch (DateTimeParseException e) {
 				// Not a time the log writes, such as 31.02
 				return null;
 			}
+			String rest = matcher.group(2) != null ? matcher.group(2) : "";
+			Matcher full = FULL.matcher(rest);
+			if (full.matches())
+				return new Entry(line.start(), time, full.group(1), full.group(2).replace(" ", ""),
+						shown(full.group(3)), false);
+			Matcher level = LEVEL.matcher(rest);
+			if (level.matches())
+				return new Entry(line.start(), time, level.group(1), null,
+						shown(level.group(2) != null ? level.group(2) : ""), false);
+			return new Entry(line.start(), time, null, null, shown(rest.startsWith(BARE) ? rest.substring(BARE.length())
+					: rest), false);
 		}
 
 		/** @return a line that starts no entry, as an entry of its own */

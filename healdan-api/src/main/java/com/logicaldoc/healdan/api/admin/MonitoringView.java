@@ -18,8 +18,9 @@ import com.logicaldoc.healdan.admin.logs.LogLines;
 
 /**
  * The Monitoring routes' answers (Admin app spec section 8.8), {@code openapi-admin.yaml}'s schemas of the same names.
- * A fault's message and stack are answered with any URL's credentials taken out (ruling P5-R2), as the log's lines
- * already are.
+ * A fault's message and stack are answered with the credentials {@link UrlCredentials} recognises in its URLs taken
+ * out (rulings P5-R2 and P5-R26), as the log's lines already are; it doesn't recognise every credential a text can
+ * hold.
  */
 final class MonitoringView {
 

@@ -42,8 +42,8 @@ import com.logicaldoc.util.spring.Context;
  * {@link #MAX_REMEMBERED} the oldest go, which can only record a view again sooner.
  * <p>
  * The row is written in a transaction of its own, so a caller's transaction never holds it, and a failure to write it
- * never fails the read: it's logged at warn with the document's id and the failure's class, and isn't remembered, so
- * the next read tries again.
+ * never fails the read, whatever it is but a {@link VirtualMachineError}: it's logged at warn with the document's id
+ * and the failure's class, and isn't remembered, so the next read tries again.
  */
 @Component
 public class DocumentViews {
@@ -90,7 +90,8 @@ public class DocumentViews {
 	}
 
 	/**
-	 * Records that a person read a document, unless they did within {@link #WINDOW}. It never throws.
+	 * Records that a person read a document, unless they did within {@link #WINDOW}. It never throws, but for the
+	 * virtual machine's own errors ({@link VirtualMachineError}), which go on up.
 	 *
 	 * @param document the document read; for an email's attachment, the email
 	 * @param user who read it
@@ -114,7 +115,11 @@ public class DocumentViews {
 					throw new NotRecorded(e);
 				}
 			});
-		} catch (RuntimeException e) {
+		} catch (VirtualMachineError e) {
+			throw e;
+		} catch (Throwable e) {
+			// Any other failure, an error such as a class a plugin's zip left out included, as Cached.read draws the
+			// line: the write fails, and the read it rides on doesn't
 			forget(viewer, claimed);
 			Throwable failure = e instanceof NotRecorded && e.getCause() != null ? e.getCause() : e;
 			log.warn("Couldn't record a view of document {}: {}", document.getId(), failure.getClass().getName());

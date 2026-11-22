@@ -40,14 +40,19 @@ import com.logicaldoc.core.document.DocumentHistoryDAO;
 import com.logicaldoc.core.document.IndexingStatus;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
+import com.logicaldoc.core.searchengine.IndexOptimizer;
 import com.logicaldoc.core.security.Tenant;
+import com.logicaldoc.core.task.Task;
+import com.logicaldoc.core.task.TaskManager;
 import com.logicaldoc.healdan.AbstractHealdanTestCase;
 import com.logicaldoc.healdan.admin.dashboard.DashboardService.Dashboard;
 import com.logicaldoc.healdan.admin.dashboard.DashboardService.Space;
 import com.logicaldoc.healdan.admin.errors.CapturedError;
 import com.logicaldoc.healdan.admin.errors.ErrorReview;
 import com.logicaldoc.healdan.admin.errors.ErrorStore;
+import com.logicaldoc.healdan.admin.jobs.JobControl;
 import com.logicaldoc.healdan.admin.jobs.JobStatus;
+import com.logicaldoc.healdan.admin.jobs.Jobs;
 import com.logicaldoc.healdan.admin.storage.OverviewPort;
 import com.logicaldoc.healdan.admin.storage.StorageRecords.BackendInfo;
 import com.logicaldoc.healdan.admin.storage.StorageRecords.StorageOverview;
@@ -82,8 +87,8 @@ public class DashboardServiceTest extends AbstractHealdanTestCase {
 	/** The links to the Admin app's screens, by attention code and tile name; every other is the Classic Interface */
 	private static final Map<String, String> LINKS = Map.ofEntries(
 			Map.entry(AttentionItem.FILES_STUCK, "/admin/stores"), Map.entry(AttentionItem.BACKEND_UNREACHABLE, BACKENDS),
-			Map.entry(AttentionItem.DISK_LOW, BACKENDS),
-			Map.entry(AttentionItem.ERRORS, "/admin/errors"), Map.entry(AttentionItem.PREVIEWS_GIVEN_UP, JOBS),
+			Map.entry(AttentionItem.DISK_LOW, BACKENDS), Map.entry(AttentionItem.ERRORS, "/admin/errors?unresolved=true"),
+			Map.entry(AttentionItem.PREVIEWS_GIVEN_UP, JOBS),
 			Map.entry(AttentionItem.JOB_FAILED, JOBS), Map.entry(AttentionItem.JOB_OVERDUE, JOBS),
 			Map.entry(HealthTile.STORAGE_BACKENDS, BACKENDS), Map.entry(HealthTile.DISK, BACKENDS),
 			Map.entry(HealthTile.SERVER, SERVER_LOG), Map.entry(HealthTile.DATABASE, SERVER_LOG),
@@ -605,6 +610,49 @@ public class DashboardServiceTest extends AbstractHealdanTestCase {
 		errors.add(new CapturedError(now.minus(30, ChronoUnit.MINUTES), "ERROR", "com.example.Other", "New", null));
 		assertEquals(2, item(service.read(), AttentionItem.ERRORS).count());
 		assertEquals(3, item(read(), AttentionItem.ERRORS).count());
+	}
+
+	// A job's action that changed something, and a run that ends otherwise than the one before, are counted at the
+	// next read, not once what's kept is old (ruling P5-R37)
+	@Test
+	public void testAJobActionOrARunThatEndsIsCountedAtTheNextRead() throws Exception {
+		Instant now = Instant.now().truncatedTo(ChronoUnit.MILLIS);
+		service.clock = Clock.fixed(now, ZoneOffset.UTC);
+		Jobs jobs = Context.get(Jobs.class);
+		JobStatus status = JobStatus.get();
+
+		// One of Healdan's jobs fails: the next read, kept a moment ago, has it once it ends another way
+		status.started(PreviewWorker.JOB);
+		status.failed(PreviewWorker.JOB, new IllegalStateException("LibreOffice is gone"), now.plusSeconds(5));
+		assertEquals("Previews", item(read(), AttentionItem.JOB_FAILED).detail());
+		status.started(PreviewWorker.JOB);
+		status.finished(PreviewWorker.JOB, now.plusSeconds(5));
+		assertNull(item(service.read(), AttentionItem.JOB_FAILED));
+
+		// A run that ends as the one before did changes nothing the Dashboard counts, and nothing is read afresh
+		long seen = jobs.changes();
+		status.started(PreviewWorker.JOB);
+		status.finished(PreviewWorker.JOB, now.plusSeconds(10));
+		assertEquals(seen, jobs.changes());
+
+		// One of LogicalDOC's tasks failed in its last run, and is then disabled from Background Jobs
+		Task optimizer = Context.get(TaskManager.class).getTasks().stream()
+				.filter(task -> task.getName().equals(IndexOptimizer.NAME)).findFirst().orElseThrow();
+		assertTrue(optimizer.getScheduling().isEnabled());
+		Instant start = now.minusSeconds(60);
+		optimizer.getScheduling().setPreviousFireTime(Date.from(start));
+		ErrorStore.get().add(new CapturedError(start.plusSeconds(1), "ERROR", IndexOptimizer.class.getName(),
+				"The index can't be optimized", null));
+		AttentionItem failed = item(read(), AttentionItem.JOB_FAILED);
+		assertTrue(failed.detail(), failed.detail().contains(Jobs.label(IndexOptimizer.NAME)));
+		try {
+			JobControl.get().disable(IndexOptimizer.NAME, fx.admin());
+			assertNull(item(service.read(), AttentionItem.JOB_FAILED));
+		} finally {
+			JobControl.get().enable(IndexOptimizer.NAME, fx.admin());
+		}
+		// Enabled again, it counts again at the next read
+		assertEquals(failed.detail(), item(service.read(), AttentionItem.JOB_FAILED).detail());
 	}
 
 	// What's costly is kept: a second read within the minute answers from it, without asking again

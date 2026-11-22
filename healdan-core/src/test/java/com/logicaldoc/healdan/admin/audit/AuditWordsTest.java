@@ -7,8 +7,17 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.TreeSet;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 import org.junit.Test;
 
@@ -22,23 +31,51 @@ import com.logicaldoc.core.security.user.UserEvent;
  */
 public class AuditWordsTest {
 
-	/** Every action the administration record holds, Phase 5's own included */
-	static final List<String> ACTIONS = List.of("client.created", "client.renamed", "matter.created",
-			"matter.updated", "matter.moved", "matter.deleted", "folder.access-changed", "folder.access-applied",
-			"folder.created", "folder.renamed", "folder.moved", "folder.properties-changed", "folder.deleted",
-			"search-folder.created", "search-folder.rule-changed", "template.created", "template.renamed",
-			"template.deleted", "store.created", "store.access-changed", "store.renamed", "store.deleted",
-			"store.restored", "store.backend-changed", "backend.added", "backend.changed", "backend.removed",
-			"backend.recovery-key-shown", "backend.recovery-key-confirmed", "backend.recovery-key-entered",
-			"storage.stuck-retried", "storage.settings-changed", "user.created", "user.changed", "user.disabled",
-			"user.enabled", "user.groups-changed", "user.block-cleared", "user.password-reset", "user.signed-out",
-			"user.device-revoked", "group.created", "group.changed", "group.deleted", "group.member-added",
-			"group.member-removed", "error.resolved", "error.reopened", "job.run-requested", "job.stop-requested",
-			"job.enabled", "job.disabled", "job.schedule-changed");
+	/** The modules whose main sources record the administration record's rows */
+	private static final List<String> RECORDING = List.of("healdan-core", "healdan-storage", "healdan-api",
+			"healdan-web");
+
+	/** An action as the administration record names one: a kind and a verb, lower case, with hyphens */
+	private static final Pattern ACTION = Pattern.compile("\"([a-z]+(?:-[a-z]+)*\\.[a-z]+(?:-[a-z]+)*)\"");
+
+	/**
+	 * @return every action the modules record: each action-shaped text in a main source file that makes an
+	 *         {@code AdminEvent}, so one a helper in the file passes on counts too
+	 */
+	static Set<String> recordedActions() throws IOException {
+		Path modules = Path.of("").toAbsolutePath().getParent();
+		Set<String> actions = new TreeSet<>();
+		for (String module : RECORDING) {
+			Path sources = modules.resolve(module).resolve("src/main/java");
+			assertTrue(sources.toString(), Files.isDirectory(sources));
+			try (Stream<Path> files = Files.walk(sources)) {
+				for (Path file : files.filter(path -> path.toString().endsWith(".java")).toList()) {
+					String text = Files.readString(file, StandardCharsets.ISO_8859_1);
+					if (!text.contains("new AdminEvent("))
+						continue;
+					Matcher matcher = ACTION.matcher(text);
+					while (matcher.find())
+						actions.add(matcher.group(1));
+				}
+			}
+		}
+		return actions;
+	}
 
 	@Test
-	public void testEveryEventHasWords() {
-		List<String> events = new ArrayList<>(ACTIONS);
+	public void testTheRecordedActionsAreFound() throws IOException {
+		Set<String> actions = recordedActions();
+		// Each area's, so a scan that found less than it should fails here
+		for (String action : List.of("client.renamed", "store.created", "backend.recovery-key-shown",
+				"storage.settings-changed", "user.password-reset", "group.member-added", "error.resolved",
+				"job.stop-requested", "folder.access-applied", "template.deleted"))
+			assertTrue(action + " in " + actions, actions.contains(action));
+		assertTrue(actions.toString(), actions.size() >= 53);
+	}
+
+	@Test
+	public void testEveryEventHasWords() throws IOException {
+		List<String> events = new ArrayList<>(recordedActions());
 		for (DocumentEvent event : DocumentEvent.values())
 			events.add(event.toKey());
 		for (FolderEvent event : FolderEvent.values())
@@ -73,6 +110,23 @@ public class AuditWordsTest {
 		assertEquals("Renamed a client", AuditWords.what("client.renamed"));
 		assertEquals("Showed a recovery key", AuditWords.what("key-shown"));
 		assertEquals("Showed a recovery key", AuditWords.what("backend.recovery-key-shown"));
+	}
+
+	/** An account's events but its sign-ins read true whoever made them, as Who is whoever did (ruling P5-R30) */
+	@Test
+	public void testAnAccountsEventsAreTrueWhoeverMadeThem() {
+		assertEquals("Account disabled", AuditWords.what("event.user.disabled"));
+		assertEquals("Password changed", AuditWords.what("event.user.passwordchanged"));
+		assertEquals("Account created", AuditWords.what("event.user.created"));
+		assertEquals("Account deleted", AuditWords.what("event.user.deleted"));
+		assertEquals("Sign-in-as list changed", AuditWords.what("event.user.impersonators.changed"));
+	}
+
+	/** Run Now and Stop are requests: a run may do nothing, and a stop comes at the run's next check */
+	@Test
+	public void testAJobsRequestsReadAsRequests() {
+		assertEquals("Asked a job to stop", AuditWords.what("job.stop-requested"));
+		assertEquals("Asked a job to run", AuditWords.what("job.run-requested"));
 	}
 
 	@Test

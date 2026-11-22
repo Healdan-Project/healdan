@@ -121,6 +121,20 @@ public class Jobs {
 	}
 
 	/**
+	 * @return a count that moves on when a job changes in a way the Dashboard counts: an action on it, or a run of one
+	 *         of Healdan's that ended otherwise than the one before ({@link JobStatus#changes()}), which the
+	 *         Dashboard's jobs follow (ruling P5-R37)
+	 */
+	public long changes() {
+		return status.changes();
+	}
+
+	/** Moves {@link #changes()} on: a job changed, as by an action on it */
+	void changed() {
+		status.changed();
+	}
+
+	/**
 	 * @param name a job's name
 	 * @return the job, null if there's none of that name
 	 */

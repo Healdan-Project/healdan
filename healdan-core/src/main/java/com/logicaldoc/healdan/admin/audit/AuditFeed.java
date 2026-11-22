@@ -43,6 +43,7 @@ import com.logicaldoc.healdan.admin.AdminEvent.Change;
 import com.logicaldoc.healdan.admin.PersonNames;
 import com.logicaldoc.healdan.listing.ListingSql;
 import com.logicaldoc.healdan.rules.FilingRules;
+import com.logicaldoc.healdan.util.Texts;
 import com.logicaldoc.util.spring.Context;
 
 /**
@@ -74,6 +75,11 @@ import com.logicaldoc.util.spring.Context;
  * <p>
  * Every read takes the actor's tenant only, and only an administrator reads (ruling P5-R8). Every value a filter
  * gives is a bound parameter.
+ * <p>
+ * An account's history, but for its sign-ins, names who made the change, LogicalDOC's author of the row, and the
+ * account in the detail (ruling P5-R30); a sign-in names the account. A failed sign-in for a username no account has
+ * names nobody: what was typed, a password typed into the username box among it, is neither answered nor compared
+ * with the text filter (ruling P5-R31).
  */
 @Component
 public class AuditFeed {
@@ -96,6 +102,23 @@ public class AuditFeed {
 
 	public static final String ONLY_ADMINS = "Only an administrator can read the Audit Trail.";
 
+	/** A failed sign-in's detail when its username names no account, as what was typed isn't answered */
+	public static final String UNKNOWN_USERNAME = "Unknown username";
+
+	/** The most characters of LogicalDOC's note on an account's change a row's detail gives */
+	static final int COMMENT_LIMIT = 300;
+
+	/**
+	 * The account events whose note LogicalDOC writes as a short label, which a row's detail gives: an account created,
+	 * changed, disabled, enabled or deleted, a password changed, an API key made, a sign-in as another account, the
+	 * list of who can sign in as it changed, a legal notice confirmed. Any other's, a message's whole text or a
+	 * search's, isn't given (ruling P5-R30)
+	 */
+	static final Set<String> LABELLED = Set.of(UserEvent.CREATED.toKey(), UserEvent.UPDATED.toKey(),
+			UserEvent.DISABLED.toKey(), UserEvent.ENABLED.toKey(), UserEvent.DELETED.toKey(),
+			UserEvent.PASSWORDCHANGED.toKey(), UserEvent.NEWAPIKEY.toKey(), UserEvent.IMPERSONATION.toKey(),
+			UserEvent.IMPERSONATORS_CHANGED.toKey(), UserEvent.LEGAL_CONFIRMED.toKey());
+
 	/** The account events that are sign-ins, of the kind {@link AuditRow#SIGN_IN} */
 	static final Set<String> SIGN_INS = Set.of(UserEvent.LOGIN.toKey(), UserEvent.LOGOUT.toKey(),
 			UserEvent.TIMEOUT.toKey(), UserEvent.LOGIN_FAILED.toKey());
@@ -115,7 +138,11 @@ public class AuditFeed {
 
 	private static final String CE_COLUMNS = "t.ld_id, " + CE_DATE
 			+ ", t.ld_userid, t.ld_username, t.ld_event, t.ld_ip, t.ld_folderid, t.ld_docid, t.ld_filename,"
-			+ " t.ld_path, t.ld_device, t.ld_keylabel, t.ld_comment, ";
+			+ " t.ld_path, t.ld_device, t.ld_keylabel, t.ld_comment, t.ld_userlogin, ";
+
+	/** Whether a row of LogicalDOC's account history has a user id an account of its tenant has */
+	private static final String ACCOUNT = "exists (select 1 from ld_user p where p.ld_tenantid = t.ld_tenantid"
+			+ " and p.ld_id = t.ld_userid)";
 
 	/**
 	 * A storage row's twin: the administration record's row of the same showing or entering, made through the Admin
@@ -131,9 +158,9 @@ public class AuditFeed {
 
 	/** The five sources, in the order a tie between their rows is given */
 	enum Source {
-		DOCUMENT("d", "ld_history", "t.ld_id", CE_DATE, "t.ld_tenantid", CE_COLUMNS + "t.ld_version"),
-		FOLDER("f", "ld_folder_history", "t.ld_id", CE_DATE, "t.ld_tenantid", CE_COLUMNS + "null"),
-		USER("u", "ld_user_history", "t.ld_id", CE_DATE, "t.ld_tenantid", CE_COLUMNS + "null"),
+		DOCUMENT("d", "ld_history", "t.ld_id", CE_DATE, "t.ld_tenantid", CE_COLUMNS + "t.ld_version, null"),
+		FOLDER("f", "ld_folder_history", "t.ld_id", CE_DATE, "t.ld_tenantid", CE_COLUMNS + "null, null"),
+		USER("u", "ld_user_history", "t.ld_id", CE_DATE, "t.ld_tenantid", CE_COLUMNS + "null, t.ld_author"),
 		ADMIN("a", "hd_admin_event", "t.hd_id", "t.hd_date", "t.hd_tenantid",
 				"t.hd_id, t.hd_date, t.hd_userid, t.hd_username, t.hd_action, t.hd_address, t.hd_targetkind,"
 						+ " t.hd_targetid, t.hd_targetname, t.hd_detail"),
@@ -185,10 +212,35 @@ public class AuditFeed {
 		}
 	}
 
-	/** A row as its source holds it */
+	/** Texts bound as one {@code varchar} array */
+	record TextArray(String[] values) {
+
+		TextArray(Collection<String> values) {
+			this(values.toArray(String[]::new));
+		}
+	}
+
+	/**
+	 * A row as its source holds it: the person as the row kept them, {@code username} (LogicalDOC's history keeps
+	 * their name at the time, Healdan's records their username) and {@code login} (their username, in LogicalDOC's
+	 * history), and an account history's {@code author}, who made the change
+	 */
 	private record Raw(Source source, long id, Instant when, Long userId, String username, String event, String from,
 			Long folderId, Long docId, String fileName, String path, String device, String keyLabel, String comment,
-			String version, String targetKind, Long targetId, String targetName, String detail, Long backendId) {
+			String version, String targetKind, Long targetId, String targetName, String detail, Long backendId,
+			String login, String author) {
+	}
+
+	/** An account's names, as it holds them now */
+	private record Person(String firstName, String lastName, String username) {
+
+		String name() {
+			return PersonNames.of(firstName, lastName, username);
+		}
+
+		String recorded() {
+			return PersonNames.recorded(firstName, lastName, username);
+		}
 	}
 
 	/** Where a source's window of rows looked through ends */
@@ -206,6 +258,10 @@ public class AuditFeed {
 
 	/** The {@link #sent} that's told of nothing */
 	static final Consumer<Sql> NOBODY = sql -> {
+	};
+
+	/** Told of each page about to be read, by its cursor, before any of its statements; a seam for tests */
+	volatile Consumer<AuditCursor> paged = cursor -> {
 	};
 
 	private final JdbcTemplate jdbc;
@@ -261,7 +317,7 @@ public class AuditFeed {
 		Objects.requireNonNull(query, "query");
 		if (actor == null || !FilingRules.get().isAdmin(actor))
 			throw new HealdanRuleException(ONLY_ADMINS);
-		return new Prepared(query, actor.getTenantId());
+		return new Prepared(query, actor);
 	}
 
 	/**
@@ -270,6 +326,8 @@ public class AuditFeed {
 	public final class Prepared {
 
 		private final AuditQuery query;
+
+		private final User actor;
 
 		private final long tenantId;
 
@@ -292,9 +350,10 @@ public class AuditFeed {
 		/** What the text filter's columns are compared with, in lower case */
 		private final String pattern;
 
-		private Prepared(AuditQuery query, long tenantId) {
+		private Prepared(AuditQuery query, User actor) {
 			this.query = query;
-			this.tenantId = tenantId;
+			this.actor = actor;
+			this.tenantId = actor.getTenantId();
 			this.from = query.from() != null ? query.from().atStartOfDay(query.zone()).toInstant() : null;
 			this.to = query.to() != null ? query.to().plusDays(1).atStartOfDay(query.zone()).toInstant() : null;
 			this.pattern = query.text() != null ? ListingSql.containing(query.text().toLowerCase(Locale.ROOT)) : null;
@@ -309,6 +368,10 @@ public class AuditFeed {
 				skipped.add(Source.ADMIN);
 				skipped.add(Source.STORAGE);
 			}
+			// A person's rows are an account's: an id no account of the tenant has, 0 included, keeps none
+			if (query.userId() != null && jdbc.queryForObject("select count(*) from ld_user where ld_tenantid = ?"
+					+ " and ld_id = ?", Long.class, tenantId, query.userId()) == 0)
+				skipped.addAll(EnumSet.allOf(Source.class));
 			// A matter's rows are its folders' and those aimed at it or them: no account's or storage's
 			if (query.matterId() != null) {
 				skipped.add(Source.USER);
@@ -354,6 +417,7 @@ public class AuditFeed {
 			Objects.requireNonNull(cursor, "cursor");
 			if (limit < 1 || limit > MAX_LIMIT)
 				throw new IllegalArgumentException("A page holds 1 to %d rows".formatted(MAX_LIMIT));
+			paged.accept(cursor);
 			int scan = Math.max(1, scanPerSource);
 			List<Read> reads = new ArrayList<>();
 			for (Source source : Source.values())
@@ -376,7 +440,32 @@ public class AuditFeed {
 
 			AuditCursor next = new AuditCursor(reads.get(0).place(), reads.get(1).place(), reads.get(2).place(),
 					reads.get(3).place(), reads.get(4).place());
-			return new AuditPage(rows(taken), next.atEnd() ? null : next);
+			if (next.atEnd())
+				return new AuditPage(rows(taken), null, null);
+			// How far back the reading reached (ruling P5-R33): every row not given yet is no newer than the next row
+			// a source holds, or than where an open source's read ended, so the newest of those
+			Instant reached = null;
+			for (Read read : reads) {
+				Instant at = read.hasNext() ? read.peek().when() : read.open ? read.horizonDate : null;
+				if (at != null && (reached == null || at.isAfter(reached)))
+					reached = at;
+			}
+			return new AuditPage(rows(taken), next, reached);
+		}
+
+		/** @return the filters, and where the first page starts */
+		AuditQuery query() {
+			return query;
+		}
+
+		/**
+		 * Asks again whether the reader is an administrator, as an export does at each page (ruling P5-R32).
+		 *
+		 * @return whether they still are
+		 * @throws PersistenceException if that can't be read
+		 */
+		public boolean readerIsAdmin() throws PersistenceException {
+			return FilingRules.get().isAdmin(actor);
 		}
 
 		/**
@@ -596,10 +685,20 @@ public class AuditFeed {
 							+ " hd_storage_backend b where b.ld_tenantid = ? and lower(b.hd_name)" + like + "))");
 					params.addAll(List.of(pattern, tenantId, pattern));
 				}
+				case USER -> {
+					// The person as the row kept them, but where no account has the row's user id: what was typed
+					// at a failed sign-in (ruling P5-R31). The account is looked for only where the text matches
+					where.add("(lower(t.ld_filename)" + like + " or lower(t.ld_path)" + like + " or lower(t.ld_ip)"
+							+ like + " or (coalesce(lower(t.ld_userlogin)" + like + " or lower(t.ld_username)" + like
+							+ ", false) and " + ACCOUNT + "))");
+					params.addAll(List.of(pattern, pattern, pattern, pattern, pattern));
+				}
 				default -> {
-					where.add("(lower(t.ld_username)" + like + " or lower(t.ld_filename)" + like
-							+ " or lower(t.ld_path)" + like + " or lower(t.ld_ip)" + like + ")");
-					params.addAll(List.of(pattern, pattern, pattern, pattern));
+					// The person as the row kept them: their username, and their name at the time (ruling P5-R29)
+					where.add("(lower(t.ld_userlogin)" + like + " or lower(t.ld_username)" + like
+							+ " or lower(t.ld_filename)" + like + " or lower(t.ld_path)" + like + " or lower(t.ld_ip)"
+							+ like + ")");
+					params.addAll(List.of(pattern, pattern, pattern, pattern, pattern));
 				}
 				}
 			}
@@ -763,27 +862,34 @@ public class AuditFeed {
 			return List.copyOf(folders);
 		}
 
-		/** @return the rows as the Audit Trail gives them, with the names, doc #s and backends read in one go each */
+		/**
+		 * @return the rows as the Audit Trail gives them, with the people, the authors, doc #s and backends read in one
+		 *         go each
+		 */
 		private List<AuditRow> rows(List<Raw> raws) {
 			Set<Long> userIds = new LinkedHashSet<>();
+			Set<String> authors = new LinkedHashSet<>();
 			Set<Long> docIds = new LinkedHashSet<>();
 			Set<Long> backendIds = new LinkedHashSet<>();
 			for (Raw raw : raws) {
 				if (raw.userId() != null)
 					userIds.add(raw.userId());
+				if (raw.source() == Source.USER && raw.author() != null && !raw.author().isBlank())
+					authors.add(raw.author());
 				if (raw.source() == Source.DOCUMENT && raw.docId() != null)
 					docIds.add(raw.docId());
 				if (raw.backendId() != null)
 					backendIds.add(raw.backendId());
 			}
-			Map<Long, String> names = names(userIds);
+			Map<Long, Person> people = people(userIds);
+			Map<String, Person> byUsername = byUsername(authors);
 			Map<Long, Long> docNumbers = docNumbers(docIds);
 			Map<Long, String> backends = backends(backendIds);
 
 			List<AuditRow> rows = new ArrayList<>(raws.size());
 			for (Raw raw : raws) {
-				String who = raw.userId() != null && names.containsKey(raw.userId()) ? names.get(raw.userId())
-						: blankToNull(raw.username());
+				Person person = raw.userId() != null ? people.get(raw.userId()) : null;
+				String who = person != null ? person.name() : blankToNull(raw.username());
 				String event = Objects.requireNonNullElse(raw.event(), "");
 				String id = raw.source().letter + raw.id();
 				rows.add(switch (raw.source()) {
@@ -796,10 +902,19 @@ public class AuditFeed {
 				case FOLDER -> new AuditRow(id, raw.when(), who, AuditRow.FOLDER, event, AuditWords.what(event),
 						oneLine(raw.path()), blankToNull(raw.from()), null, raw.folderId(), null);
 				case USER -> {
-					boolean signIn = SIGN_INS.contains(event);
-					String detail = signIn ? firstOf(raw.device(), raw.keyLabel(), raw.comment()) : raw.comment();
-					yield new AuditRow(id, raw.when(), who, signIn ? AuditRow.SIGN_IN : AuditRow.USER, event,
-							AuditWords.what(event), oneLine(detail), blankToNull(raw.from()), null, null, null);
+					if (SIGN_INS.contains(event)) {
+						// A sign-in names the account; one for a username no account has names nobody, and what was
+						// typed isn't given
+						boolean known = person != null;
+						String detail = !known && event.equals(UserEvent.LOGIN_FAILED.toKey()) ? UNKNOWN_USERNAME
+								: firstOf(raw.device(), raw.keyLabel(), raw.comment());
+						yield new AuditRow(id, raw.when(), known ? who : null, AuditRow.SIGN_IN, event,
+								AuditWords.what(event), oneLine(detail), blankToNull(raw.from()), null, null, null);
+					}
+					// The rest of the account's history: who made the change, and the account it was made to
+					yield new AuditRow(id, raw.when(), author(raw.author(), byUsername), AuditRow.USER, event,
+							AuditWords.what(event), oneLine(accountDetail(raw, person, event)),
+							blankToNull(raw.from()), null, null, null);
 				}
 				case ADMIN -> {
 					boolean folder = "folder".equals(raw.targetKind()) || "search-folder".equals(raw.targetKind());
@@ -816,15 +931,28 @@ public class AuditFeed {
 			return rows;
 		}
 
-		private Map<Long, String> names(Set<Long> userIds) {
-			Map<Long, String> names = new HashMap<>();
+		/** @return the accounts of the tenant with these ids, by id */
+		private Map<Long, Person> people(Set<Long> userIds) {
+			Map<Long, Person> people = new HashMap<>();
 			if (!userIds.isEmpty())
 				jdbc.query("select ld_id, ld_firstname, ld_name, ld_username from ld_user where ld_tenantid = ?"
 						+ " and ld_id = any(?)", ps -> bind(ps, new Object[] { tenantId, new Ids(userIds) }),
 						rs -> {
-							names.put(rs.getLong(1), PersonNames.of(rs.getString(2), rs.getString(3), rs.getString(4)));
+							people.put(rs.getLong(1), new Person(rs.getString(2), rs.getString(3), rs.getString(4)));
 						});
-			return names;
+			return people;
+		}
+
+		/** @return the accounts of the tenant with these usernames, by username */
+		private Map<String, Person> byUsername(Set<String> usernames) {
+			Map<String, Person> people = new HashMap<>();
+			if (!usernames.isEmpty())
+				jdbc.query("select ld_username, ld_firstname, ld_name from ld_user where ld_tenantid = ?"
+						+ " and ld_username = any(?)",
+						ps -> bind(ps, new Object[] { tenantId, new TextArray(usernames) }), rs -> {
+							people.put(rs.getString(1), new Person(rs.getString(2), rs.getString(3), rs.getString(1)));
+						});
+			return people;
 		}
 
 		private Map<Long, Long> docNumbers(Set<Long> docIds) {
@@ -913,6 +1041,10 @@ public class AuditFeed {
 				Array array = ps.getConnection().createArrayOf("bigint", ids.ids());
 				ps.setArray(i + 1, array);
 			}
+			case TextArray texts -> {
+				Array array = ps.getConnection().createArrayOf("varchar", texts.values());
+				ps.setArray(i + 1, array);
+			}
 			case Instant instant -> ps.setTimestamp(i + 1, Timestamp.from(instant));
 			case Long value -> ps.setLong(i + 1, value);
 			case Integer value -> ps.setInt(i + 1, value);
@@ -931,12 +1063,39 @@ public class AuditFeed {
 		return switch (source) {
 		case DOCUMENT, FOLDER, USER -> new Raw(source, id, when, userId, username, event, rs.getString(6),
 				longOrNull(rs, 7), longOrNull(rs, 8), rs.getString(9), rs.getString(10), rs.getString(11),
-				rs.getString(12), rs.getString(13), rs.getString(14), null, null, null, null, null);
+				rs.getString(12), rs.getString(13), rs.getString(15), null, null, null, null, null, rs.getString(14),
+				rs.getString(16));
 		case ADMIN -> new Raw(source, id, when, userId, username, event, rs.getString(6), null, null, null, null, null,
-				null, null, null, rs.getString(7), longOrNull(rs, 8), rs.getString(9), rs.getString(10), null);
+				null, null, null, rs.getString(7), longOrNull(rs, 8), rs.getString(9), rs.getString(10), null, null,
+				null);
 		case STORAGE -> new Raw(source, id, when, userId, username, event, null, null, null, null, null, null, null,
-				null, null, null, null, null, null, rs.getLong(6));
+				null, null, null, null, null, null, rs.getLong(6), null, null);
 		};
+	}
+
+	/**
+	 * @return who made a change to an account, named as any person is: the account with the author's username, or the
+	 *         author as the row kept them when none has it; null when the row names none
+	 */
+	private static String author(String author, Map<String, Person> byUsername) {
+		if (author == null || author.isBlank())
+			return null;
+		Person person = byUsername.get(author);
+		return person != null ? person.name() : author;
+	}
+
+	/**
+	 * @return an account history row's detail: the account, as the administration record names a person, then, for
+	 *         an event whose note is a label ({@link #LABELLED}), the note, cut to {@link #COMMENT_LIMIT} characters
+	 */
+	private static String accountDetail(Raw raw, Person account, String event) {
+		String named = account != null ? account.recorded() : firstOf(raw.login(), raw.username());
+		String note = LABELLED.contains(event) && raw.comment() != null && !raw.comment().isBlank()
+				? Texts.cut(raw.comment().strip(), COMMENT_LIMIT)
+				: null;
+		if (named == null)
+			return note;
+		return note != null ? named + ": " + note : named;
 	}
 
 	private static Long longOrNull(ResultSet rs, int column) throws SQLException {

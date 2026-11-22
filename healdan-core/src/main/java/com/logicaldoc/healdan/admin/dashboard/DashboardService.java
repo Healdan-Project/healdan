@@ -140,7 +140,8 @@ public class DashboardService {
 	 * The screens the Dashboard links to (spec section 8.1): the Admin app's address once a screen has shipped, and
 	 * the Classic Interface until then. Each phase that ships a screen changes its row; Phase 2 shipped Clients, Matters
 	 * and Workspace Templates, Phase 3 Stores and Backends, Phase 4 Users, and Phase 5 Errors, the Server Log, the
-	 * Audit Trail and Background Jobs (ruling P5-R19).
+	 * Audit Trail and Background Jobs (ruling P5-R19). The unresolved errors' item opens Errors with Unresolved Only
+	 * set, as the Errors screen's address takes it, since it counts those alone (ruling P5-R37).
 	 */
 	enum Screen {
 		DASHBOARD("/admin/"),
@@ -152,7 +153,7 @@ public class DashboardService {
 		USERS("/admin/users"),
 		SIGN_IN_PROVIDERS(Landing.CLASSIC),
 		SETTINGS(Landing.CLASSIC),
-		ERRORS("/admin/errors"),
+		UNRESOLVED_ERRORS("/admin/errors?unresolved=true"),
 		SERVER_LOG("/admin/server-log"),
 		AUDIT_TRAIL("/admin/audit"),
 		BACKGROUND_JOBS("/admin/jobs"),
@@ -315,7 +316,8 @@ public class DashboardService {
 				() -> new Previews(previews.countWaiting(), previews.countGivenUp()), now);
 		// A fault marked resolved or unresolved again counts at the next read, as the Errors screen asks again then
 		errorCounts = new Cached<>("the errors", MAX_AGE, this::readErrors, now, errors::reviews);
-		jobViews = new Cached<>("the background jobs", MAX_AGE, jobs::all, now);
+		// So does a job's action, and a run that ends otherwise than the one before, as Background Jobs asks again then
+		jobViews = new Cached<>("the background jobs", MAX_AGE, jobs::all, now, jobs::changes);
 		volumes = new Cached<>("the disks", MAX_AGE, this::readVolumes, now);
 		database = new Cached<>("the database", DATABASE_MAX_AGE, this::readDatabase, now);
 		signIn = new Cached<>("the sign-in providers", MAX_AGE, this::readSignIn, now);
@@ -386,7 +388,7 @@ public class DashboardService {
 		attend(AttentionItem.INDEX_FAILED, Screen.SEARCH_INDEX, indexNow,
 				counts -> found(counts.failed(), "The Indexer tries them again on its schedule"), attention,
 				unchecked);
-		attend(AttentionItem.ERRORS, Screen.ERRORS, errorsNow, e -> found(e.count(),
+		attend(AttentionItem.ERRORS, Screen.UNRESOLVED_ERRORS, errorsNow, e -> found(e.count(),
 				e.latest() != null ? "The latest seen " + Words.ago(e.latest(), now) : "In the last 24 hours"),
 				attention, unchecked);
 		attend(AttentionItem.PREVIEWS_GIVEN_UP, Screen.BACKGROUND_JOBS, previewsNow,
