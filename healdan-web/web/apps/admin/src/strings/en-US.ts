@@ -1107,6 +1107,102 @@ export const adminEnUS = {
   'admin.serverLog.title': 'Server Log',
 
   // Monitoring: Errors and the Server Log (Task 32b)
+  // Errors' windows, filters and list: how far back, the words, the area, Unresolved
+  'admin.errors.window': 'How Far Back',
+  'admin.errors.window.1h': '1 Hour',
+  'admin.errors.window.24h': '24 Hours',
+  'admin.errors.window.7d': '7 Days',
+  'admin.errors.window.30d': '30 Days',
+  'admin.errors.filters': 'Error Filters',
+  'admin.errors.text': 'Message or Logger',
+  'admin.errors.area': 'Area',
+  'admin.errors.allAreas': 'Every Area',
+  'admin.errors.area.previews': 'Previews',
+  'admin.errors.area.storage': 'Storage',
+  'admin.errors.area.searchIndex': 'Search Index',
+  'admin.errors.area.email': 'Email',
+  'admin.errors.area.signIn': 'Sign-In',
+  'admin.errors.area.backgroundJobs': 'Background Jobs',
+  'admin.errors.area.server': 'Server',
+  'admin.errors.unresolved': 'Unresolved Only',
+  'admin.errors.clear': 'Clear Filters',
+  'admin.errors.column.message': 'What Happened',
+  'admin.errors.column.area': 'Area',
+  'admin.errors.column.times': 'Times',
+  'admin.errors.column.firstSeen': 'First Seen',
+  'admin.errors.column.lastSeen': 'Last Seen',
+  // After a resolved fault's message in its row
+  'admin.errors.resolvedTag': 'Resolved',
+  // Beside the title: "14 Errors of 4 Kinds", each half a plural
+  'admin.errors.count': '{errors} of {kinds}',
+  'admin.errors.none.1h': 'No errors in the last hour.',
+  'admin.errors.none.24h': 'No errors in the last 24 hours.',
+  'admin.errors.none.7d': 'No errors in the last 7 days.',
+  'admin.errors.none.30d': 'No errors in the last 30 days.',
+  'admin.errors.noneMatch': 'No errors match these filters.',
+  // A fault's details, below the list
+  'admin.errors.details': 'Error Details',
+  'admin.errors.close': 'Close Details',
+  'admin.errors.level': 'Level',
+  'admin.errors.level.ERROR': 'Error',
+  'admin.errors.level.FATAL': 'Fatal',
+  'admin.errors.logger': 'Logger',
+  'admin.errors.seen': 'Seen',
+  'admin.errors.firstSeen': 'First Seen',
+  'admin.errors.lastSeen': 'Last Seen',
+  'admin.errors.status': 'Status',
+  'admin.errors.statusUnresolved': 'Unresolved',
+  'admin.errors.statusResolved': 'Resolved by {who}, {when}',
+  'admin.errors.documents': 'Documents Named',
+  'admin.errors.noDocuments': 'None',
+  'admin.errors.document': '# {number} {file}',
+  'admin.errors.documentNoNumber': '{file} (id {id})',
+  'admin.errors.documentGone': 'Id {id}, no longer there',
+  'admin.errors.message': 'Latest Message',
+  'admin.errors.stack': 'Stack',
+  'admin.errors.noStack': 'It was logged with no stack.',
+  'admin.errors.resolve': 'Mark Resolved',
+  'admin.errors.reopen': 'Reopen',
+  'admin.errors.showInLog': 'Show in Server Log',
+  'admin.errors.copy': 'Copy Details',
+  'admin.errors.copied': "Copied the error's details",
+  'admin.errors.copyFailed': "The browser didn't let Healdan copy the details. Select them and copy them yourself.",
+  'admin.errors.gone': "This error isn't there any more: the server deletes a resolved error once it hasn't been seen for 90 days.",
+  // Copy Details: the facts, a line each, as "Level: Error"
+  'admin.errors.copyFact': '{name}: {value}',
+  'admin.errors.copyStack': 'Stack:',
+  // The Server Log's choices and actions
+  'admin.serverLog.filters': 'Log Filters',
+  'admin.serverLog.log': 'Log',
+  'admin.serverLog.level': 'Level',
+  'admin.serverLog.level.all': 'Everything',
+  'admin.serverLog.level.warn': 'Warnings and Errors',
+  'admin.serverLog.level.error': 'Errors',
+  'admin.serverLog.text': 'Search the Log',
+  'admin.serverLog.pause': 'Pause',
+  'admin.serverLog.follow': 'Follow',
+  'admin.serverLog.download': 'Download',
+  'admin.serverLog.following': 'Following Live',
+  'admin.serverLog.paused': 'Paused',
+  'admin.serverLog.unknownLog': 'The server has no log called {name}. Pick one from the Log menu.',
+  'admin.serverLog.noLogs': 'The server writes no logs to files.',
+  // The box of lines, named after the log it shows
+  'admin.serverLog.lines': 'Lines of {log}',
+  'admin.serverLog.earlier': 'Show Earlier',
+  'admin.serverLog.atStart': 'This is the start of the log: it holds nothing older.',
+  'admin.serverLog.earlierFailed': "Couldn't read the earlier lines.",
+  'admin.serverLog.pollFailed': "Couldn't read the newest lines, so this shows what was read last. Healdan keeps trying.",
+  'admin.serverLog.rolled': 'The log rolled over to a new file, so this starts again at its top. Show Earlier reads the lines before it.',
+  'admin.serverLog.pausedToKeep': 'Following paused, so the earlier lines stay. Follow goes back to the newest.',
+  'admin.serverLog.empty': 'Nothing is in the log yet.',
+  'admin.serverLog.noneMatch': 'No lines match these filters in what was read.',
+  // An entry's level, said in words beside it
+  'admin.serverLog.entry.TRACE': 'Trace',
+  'admin.serverLog.entry.DEBUG': 'Debug',
+  'admin.serverLog.entry.INFO': 'Info',
+  'admin.serverLog.entry.WARN': 'Warn',
+  'admin.serverLog.entry.ERROR': 'Error',
+  'admin.serverLog.entry.FATAL': 'Fatal',
 
   // The Audit Trail (spec 8.8): what was done, newest first
   'admin.nav.audit': 'Audit Trail',
@@ -1174,6 +1270,79 @@ export const adminEnUS = {
   'admin.jobs.title': 'Background Jobs',
 
   // Monitoring: Background Jobs (Task 32d)
+  'admin.jobs.about':
+    "What each job last did since the server started, and when it runs next. Healdan's jobs keep their own times; LogicalDOC's tasks run on the schedule set here, while they're enabled.",
+  'admin.jobs.none': 'The server lists no background jobs.',
+  // The list's columns, and its two groups
+  'admin.jobs.column.name': 'Job',
+  'admin.jobs.column.lastRun': 'Last Run',
+  'admin.jobs.column.result': 'Result',
+  'admin.jobs.column.nextRun': 'Next Run',
+  'admin.jobs.column.enabled': 'Enabled',
+  'admin.jobs.column.schedule': 'Schedule',
+  'admin.jobs.column.actions': 'Actions',
+  'admin.jobs.healdan': "Healdan's Jobs",
+  'admin.jobs.logicalDoc': "LogicalDOC's Tasks",
+  // A job's last run and next run, when it has none
+  'admin.jobs.never': 'Never',
+  'admin.jobs.noNextRun': 'None',
+  // After a next run that's long past
+  'admin.jobs.overdue': 'Overdue',
+  // How its last run ended, or that it's running
+  'admin.jobs.result.running': 'Running',
+  'admin.jobs.result.succeeded': 'Succeeded',
+  'admin.jobs.result.failed': 'Failed',
+  'admin.jobs.result.done': 'Done',
+  'admin.jobs.result.none': 'Not Run Yet',
+  // Under a job whose last run failed, the error it failed with, as the server logged it
+  'admin.jobs.lastError': 'Last Error',
+  'admin.jobs.enabled.yes': 'Yes',
+  'admin.jobs.enabled.no': 'No',
+  // One of Healdan's jobs that doesn't run on this server, as the storage jobs where storage backends are off
+  'admin.jobs.enabled.off': 'Off on This Server',
+  // Before a LogicalDOC task's cron expression, which follows as it is
+  'admin.jobs.cron': 'Cron:',
+  // A row's actions, each named with its job for a screen reader
+  'admin.jobs.run': 'Run Now',
+  'admin.jobs.runName': 'Run Now: {name}',
+  'admin.jobs.stop': 'Stop',
+  'admin.jobs.stopName': 'Stop {name}',
+  'admin.jobs.enable': 'Enable',
+  'admin.jobs.enableName': 'Enable {name}',
+  'admin.jobs.disable': 'Disable',
+  'admin.jobs.disableName': 'Disable {name}',
+  'admin.jobs.schedule': 'Schedule…',
+  'admin.jobs.scheduleName': 'Schedule of {name}',
+  'admin.jobs.runAsked': 'Asked {name} to run now',
+  'admin.jobs.stopAsked': 'Asked {name} to stop',
+  'admin.jobs.enabledDone': 'Enabled {name}',
+  'admin.jobs.disabledDone': 'Disabled {name}',
+  // Stop's and Disable's questions
+  'admin.jobs.stopTitle': 'Stop {name}?',
+  'admin.jobs.stopLine': "It stops at its next check, and shows as running until then. It runs again when its schedule next comes round, while it's enabled.",
+  'admin.jobs.disableTitle': 'Disable {name}?',
+  'admin.jobs.disableLine':
+    "It doesn't run on its schedule until it's enabled again, here or in the Classic Interface, after a restart too. A run already going on goes on to its end, unless it's stopped.",
+  // Schedule…: every so many seconds, minutes or hours, or a cron expression
+  'admin.schedule.title': 'Schedule of {name}',
+  'admin.schedule.mode': 'Runs',
+  'admin.schedule.mode.simple': 'Every So Often',
+  'admin.schedule.mode.cron': 'When a Cron Expression Says',
+  'admin.schedule.every': 'Every',
+  'admin.schedule.unit': 'Unit',
+  'admin.schedule.unit.seconds': 'Seconds',
+  'admin.schedule.unit.minutes': 'Minutes',
+  'admin.schedule.unit.hours': 'Hours',
+  'admin.schedule.everyNote': 'A whole number: as often as every second, and at least once a year. Each run counts from the start of the one before.',
+  'admin.schedule.everyRange': 'Type a whole number from 1 to {max}.',
+  'admin.schedule.cron': 'Cron Expression',
+  'admin.schedule.cronNote':
+    "In Quartz's form, in the server's time zone: seconds, minutes, hours, day of month, month and day of week, and a year if wanted. 0 0 3 * * ? runs it at three every morning.",
+  'admin.schedule.cronRequired': 'Type a cron expression.',
+  'admin.schedule.cronInvalid': "The server doesn't take that expression: it isn't in Quartz's form, or it never comes round again.",
+  'admin.schedule.keeps': "Its other settings, and whether it's enabled, stay as they are.",
+  'admin.schedule.save': 'Save',
+  'admin.schedule.saved': 'Saved the schedule of {name}',
 
   // The problems only the admin API answers, which the shared catalogue doesn't hold
   'problems.storage-unavailable': "This server doesn't have Healdan's storage module.",
@@ -1267,10 +1436,19 @@ export const adminPlurals = {
   },
 
   // Monitoring: Errors and the Server Log (Task 32b), their plurals
+  // The two halves of the count beside the Errors title, in Title Case as the other lists' counts: "14 Errors" of "4 Kinds"
+  'admin.errors.errors': { one: '{n} Error', other: '{n} Errors' },
+  'admin.errors.kinds': { one: '{n} Kind', other: '{n} Kinds' },
+  // How many times a fault was seen in all, in its details
+  'admin.errors.timesInAll': { one: 'Once in all', other: '{n} times in all' },
 
   // Monitoring: the Audit Trail and Activity (Task 32c), their plurals
 
   // Monitoring: Background Jobs (Task 32d), its plurals
+  // A LogicalDOC task's schedule, every so many seconds, minutes or hours, in the largest of them that fits it whole
+  'admin.jobs.every.seconds': { one: 'Every second', other: 'Every {n} seconds' },
+  'admin.jobs.every.minutes': { one: 'Every minute', other: 'Every {n} minutes' },
+  'admin.jobs.every.hours': { one: 'Every hour', other: 'Every {n} hours' },
 } as const satisfies Record<`admin.${string}`, PluralForms>
 
 export type AdminStringKey = keyof typeof adminEnUS
