@@ -16,8 +16,8 @@ import styles from './People.module.css'
 type A = adminComponents['schemas']
 
 /**
- * A person's signed-in devices (spec 8.7): each device token of theirs that still works, newest first, with what it
- * signed in with, when, its last use and when it expires, and Revoke, which asks first and signs that device out alone.
+ * A person's signed-in devices (spec 8.7): each device token of theirs that still works, newest first, with its computer's
+ * id, what it signed in with, when, its last use and when it expires, and Revoke, which asks first and signs that device out alone.
  * The web page's own sign-in isn't a device. Once the device revoked has gone from the list, and its Revoke with it, the
  * focus goes to `heading`. While a new read fails, the list it had stays, with a note (P4-R15).
  */
@@ -67,6 +67,8 @@ export function DevicesPanel({ person, heading }: { person: A['User']; heading: 
                 <tr key={device.id}>
                   <th scope="row" className={styles.name}>
                     {device.name}
+                    {/* The computer's id, the same at each of its sign-ins, so two devices of one name can be told apart */}
+                    {device.device !== null && <span className={styles.deviceId}>{t('admin.userDevices.computer', { id: device.device })}</span>}
                   </th>
                   <td>{device.provider?.label ?? t('admin.users.password')}</td>
                   <td>{formatDateTime(device.created)}</td>

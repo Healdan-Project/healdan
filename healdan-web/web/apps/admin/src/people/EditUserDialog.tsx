@@ -36,7 +36,8 @@ function changesOf(before: PersonDraft, after: PersonDraft): A['UserChange'] {
 
 /**
  * Edit (spec 8.7; P4-R11): a person's names, email, language and time zone; their username never changes. Save sends only
- * what changed, so a language or a time zone the options don't list stays as it is unless another is chosen. For an
+ * what changed since the dialog opened, so a language or a time zone the options don't list stays as it is unless
+ * another is chosen. For an
  * account linked to a sign-in provider, the form says the provider may set the names and email again at its next
  * sign-in. The server's refusal of a field is said beside it, and the rest above the buttons; while Save is on its way,
  * the dialog holds. Once saved, the person's page has the answer, and the lists, the find and the matters' rows, which
@@ -47,7 +48,10 @@ export function EditUserDialog({ person, onClose }: { person: A['User']; onClose
   const queryClient = useQueryClient()
   const refusalFor = useRefusalFor()
   const options = useUserOptions().data
-  const before = draftOf(person)
+  // What the form opened with, kept: a new read of the person while it's open, as at a return to the window or after
+  // another administrator's edit, changes neither the fields nor what counts as changed, so Save sends only what was
+  // typed here, never the old value of a field someone else has changed meanwhile
+  const [before] = useState(() => draftOf(person))
   const [draft, setDraft] = useState(before)
   const [failure, setFailure] = useState<unknown>()
   const [busy, setBusy] = useState(false)

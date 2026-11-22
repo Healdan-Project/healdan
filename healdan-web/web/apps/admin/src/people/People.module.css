@@ -156,6 +156,14 @@
   text-align: end;
 }
 
+/* A device's computer, under its name */
+.deviceId {
+  display: block;
+  color: var(--hd-text-secondary);
+  font-size: var(--hd-font-size-small);
+  font-weight: normal;
+}
+
 .link {
   color: var(--hd-accent-text);
 }

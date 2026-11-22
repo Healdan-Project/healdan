@@ -67,13 +67,14 @@ export interface PasswordShownProps {
 
 /**
  * A temporary password just made (P4-R7): that it was emailed, and to where, with nothing shown; or the password itself,
- * once, with Copy, and why it wasn't emailed when it was to be. It lives only in the dialog's state that holds the answer,
+ * once, with Copy, and why it wasn't emailed when it was to be; or, with no password and not emailed, that there's
+ * none to show. It lives only in the dialog's state that holds the answer,
  * and goes as the dialog closes: never in the query cache, the address or the browser's storage.
  */
 export function PasswordShown({ person, answer, asked, options }: PasswordShownProps) {
-  if (answer.emailed || answer.temporaryPassword === null) {
-    return <p className={styles.line}>{t('admin.password.emailed', { name: person.name, email: person.email ?? '' })}</p>
-  }
+  // Emailed only when the answer says so: a password missing from an answer that wasn't emailed is said as missing
+  if (answer.emailed) return <p className={styles.line}>{t('admin.password.emailed', { name: person.name, email: person.email ?? '' })}</p>
+  if (answer.temporaryPassword === null) return <p className={styles.line}>{t('admin.password.missing', { name: person.name })}</p>
   return (
     <>
       <p className={styles.line}>

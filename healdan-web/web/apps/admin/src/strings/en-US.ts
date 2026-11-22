@@ -899,6 +899,8 @@ export const adminEnUS = {
   'admin.password.reasonNotSetUp': "outgoing email isn't set up",
   'admin.password.reasonNoEmail': 'they have no email address',
   'admin.password.reasonTimedOut': "the mail server didn't take it in time",
+  // An answer with no password that wasn't emailed either, which the server never gives
+  'admin.password.missing': "Healdan gave no temporary password to show. Use Reset Password on {name}'s page to make another.",
   'admin.password.done': 'Done',
 
   // New User (spec 8.7): a password account
@@ -957,6 +959,8 @@ export const adminEnUS = {
   'admin.userDevices.none': 'Signed in on no device.',
   'admin.userDevices.about': "Each sign-in of an app on a computer, such as the Healdan Helper, that still works. The web page's own sign-in isn't listed: Sign Out Everywhere ends it.",
   'admin.userDevices.name': 'Device',
+  // Under a device's name: its computer's id, the same at each of its sign-ins
+  'admin.userDevices.computer': 'Computer {id}',
   'admin.userDevices.through': 'Signed In With',
   'admin.userDevices.created': 'Signed In',
   'admin.userDevices.lastUsed': 'Last Used',

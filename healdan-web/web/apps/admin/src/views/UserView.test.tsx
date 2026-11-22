@@ -70,7 +70,7 @@ describe("A person's page", () => {
     expect(within(main()).queryByRole('button', { name: 'Remove Everyone' })).toBeNull()
     const devices = await within(main()).findByRole('table', { name: 'Signed-In Devices of Priya Nair' })
     expect(within(devices).getAllByRole('row').slice(1).map((row) => row.textContent)).toEqual([
-      `Healdan Helper on ThinkPadPassword${formatDateTime('2026-11-02T08:00:00Z')}${formatDateTime('2026-11-19T10:33:00Z')}${formatDate('2027-02-02T08:00:00Z')}Revoke`,
+      `Healdan Helper on ThinkPadComputer linux-9e0bPassword${formatDateTime('2026-11-02T08:00:00Z')}${formatDateTime('2026-11-19T10:33:00Z')}${formatDate('2027-02-02T08:00:00Z')}Revoke`,
     ])
     const checkouts = await within(main()).findByRole('table', { name: 'Checked Out by Priya Nair' })
     expect(within(checkouts).getAllByRole('row').slice(1).map((row) => Array.from(row.children, (cell) => cell.textContent))).toEqual([
@@ -243,6 +243,38 @@ describe("A person's page", () => {
     expect(sent).toEqual({ lastName: 'Nair-Lee' } satisfies A['UserChange'])
     expect(within(main()).getByRole('heading', { level: 1 }).textContent).toBe('Priya Nair-Lee')
     expect(await screen.findByText('Saved Priya Nair-Lee')).toBeTruthy()
+  })
+
+  it("sends only what was changed in it, whatever a new read of the person brings while it's open", async () => {
+    let sent: unknown
+    let person = users[priyaRow.id]!
+    await openPerson(priyaRow.id, {
+      'GET /v1/admin/users/7': () => person,
+      'PATCH /v1/admin/users/7': ({ body }: Sent) => {
+        sent = body
+        return userOf({ ...priyaRow, firstName: 'Priyanka', name: 'Priyanka Nair-Lee', lastName: 'Nair-Lee' })
+      },
+    })
+    await userEvent.click(action('Edit')!)
+    const dialog = await screen.findByRole('dialog', { name: 'Edit Priya Nair' })
+    // Another administrator changes the last name meanwhile, and the page reads it at a return to the window
+    person = userOf({ ...priyaRow, lastName: 'Nair-Lee', name: 'Priya Nair-Lee' })
+    await act(async () => void window.dispatchEvent(new Event('focus')))
+    await waitFor(() => expect(screen.getAllByText('Priya Nair-Lee').length).toBeGreaterThan(0))
+    // Nothing typed, so nothing to save: the old last name isn't sent back over theirs
+    expect(isDisabled(within(dialog).getByRole('button', { name: 'Save' }))).toBe(true)
+    const first = within(dialog).getByRole('textbox', { name: 'First Name' })
+    await userEvent.clear(first)
+    await userEvent.type(first, 'Priyanka')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(sent).toEqual({ firstName: 'Priyanka' } satisfies A['UserChange'])
+  })
+
+  it('tells two devices of the same name apart by their computer', async () => {
+    await openPerson(helenRow.id)
+    const devices = await within(main()).findByRole('table', { name: 'Signed-In Devices of Helen Ashcombe' })
+    expect(within(devices).getAllByRole('rowheader').map((cell) => cell.textContent)).toEqual(['Healdan Helper on MacBookComputer mac-7f3a', 'Healdan Helper on Office PCComputer win-22c1'])
   })
 
   it("keeps a language the options don't list as a choice, as it is", async () => {

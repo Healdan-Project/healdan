@@ -37,7 +37,7 @@ export function Problems({ lead, problems, framed = false }: ProblemsProps) {
       {lead !== undefined && <p className={styles.line}>{lead}</p>}
       <ul className={framed ? `${styles.problems} ${styles.spaced}` : styles.problems}>
         {items.map((problem) => (
-          <li key={problem.key} className={framed ? `${styles.problem} ${styles.framed}` : styles.problem} data-framed={framed || undefined}>
+          <li key={problem.key} className={framed ? `${styles.problem} ${styles.framed}` : styles.problem}>
             <Icon name="alertTriangle" className={styles.sign} />
             <div className={styles.text}>
               <p className={styles.line}>{problem.sentence}</p>

@@ -9,6 +9,7 @@ import { problemLookup } from '../strings'
 import { expectNoAxeViolations } from '../test/axe'
 import { problem } from '../test/fakeApi'
 import { Problems } from './Problems'
+import problemStyles from './Problems.module.css'
 import { Refusal } from './Refusal'
 
 function renderWith(node: ReactNode) {
@@ -70,7 +71,8 @@ describe('Problems', () => {
     )
     const item = within(screen.getByRole('list')).getByRole('listitem')
     expect(within(item).getByRole('button', { name: 'Let Partners Read the Store' })).toBeTruthy()
-    expect(item.getAttribute('data-framed')).toBe('true')
+    expect(item.classList.contains(problemStyles.framed!)).toBe(true)
+    expect(item.hasAttribute('data-framed')).toBe(false)
     await expectNoAxeViolations(container)
   })
 

@@ -144,6 +144,17 @@ describe('New User', () => {
     expect(within(done).getByRole('group', { name: 'Temporary Password' }).textContent).toBe(PASSWORD)
   })
 
+  it("never says it was emailed when it wasn't, even with no password to show", async () => {
+    renderDialog({ 'POST /v1/admin/users': { user: ann, temporaryPassword: null, emailed: false } satisfies A['CreatedUser'] })
+    await fill({ email: 'ann@example.test' })
+    await userEvent.click(within(dialog()).getByRole('checkbox', { name: 'Email It to Them' }))
+    await userEvent.click(create())
+    const done = await screen.findByRole('dialog', { name: 'Added Ann Lee' })
+    expect(done.textContent).not.toContain('Emailed')
+    expect(within(done).getByText("Healdan gave no temporary password to show. Use Reset Password on Ann Lee's page to make another.")).toBeTruthy()
+    expect(within(done).queryByRole('group', { name: 'Temporary Password' })).toBeNull()
+  })
+
   it("doesn't offer to email it while outgoing email isn't set up", async () => {
     renderDialog({ 'GET /v1/admin/users/options': userOptions({ outgoingEmail: false }) })
     await fill({ email: 'ann@example.test' })
