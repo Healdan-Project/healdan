@@ -3,6 +3,7 @@
 
 import { ApiError, type adminComponents, type Api, type components } from '@healdan/api'
 import { inOrder, levelOf, permissionsOf, type NamedLevel } from '../workspace/levels'
+import { placed } from '../workspace/tree'
 
 type S = components['schemas']
 type A = adminComponents['schemas']
@@ -1542,6 +1543,139 @@ export function jobRoutes(rows: A['Job'][] = jobRows, options: JobRoutesOptions 
           schedule: sent.mode === 'simple' ? { mode: 'simple', intervalSeconds: sent.intervalSeconds ?? null, cron: null } : { mode: 'cron', intervalSeconds: null, cron: (sent.cron ?? '').trim() },
         })
       }),
+  }
+}
+
+// Reindex dialog (Phase 6): Recent Matters, the documents its doc #s name, what each choice would cover, and the reindex
+// a start answers, each from the fixtures above, so the counts agree with the Matters list's and the Stores'.
+
+/** A matter as the public Recent Matters lists it, from its row: its number within its client, and its client's */
+function reindexRecentOf(row: A['MatterRow']): S['MatterView'] {
+  const [, within] = row.number.split('.')
+  return {
+    type: 'matter',
+    id: row.id,
+    number: Number(within),
+    display: `${row.number} - ${row.name}`,
+    name: row.name,
+    description: null,
+    client: { id: row.client.id, number: row.client.number, name: row.client.name },
+    store: { id: row.store.id, name: row.store.name },
+    folderId: row.folderId,
+    lastChange: '2026-11-19T09:00:00Z',
+  }
+}
+
+const reindexRow = (id: number) => matterRows.find((row) => row.id === id)!
+
+/** GET /v1/matters/recent: 1003.1, 1001.1 and 1002.2, the newest first */
+export const reindexRecent: S['MatterView'][] = [31, 11, 22].map((id) => reindexRecentOf(reindexRow(id)))
+
+const reindexMatterOf = (row: A['MatterRow']): A['MatterBrief'] => ({ id: row.id, number: row.number, name: row.name })
+
+/** The documents the doc #s name, by their doc #: 10377 is set to Skip, so a reindex leaves it out */
+export const reindexDocuments: Record<number, { document: A['IndexDocument']; status: 'found' | 'left-out' }> = {
+  10412: { document: { id: 5012, docNumber: 10412, fileName: 'Witness Statement.pdf', matter: reindexMatterOf(reindexRow(11)) }, status: 'found' },
+  10398: { document: { id: 4998, docNumber: 10398, fileName: 'Heads of Terms.pdf', matter: reindexMatterOf(reindexRow(31)) }, status: 'found' },
+  10388: { document: { id: 4988, docNumber: 10388, fileName: 'Skeleton Argument.docx', matter: reindexMatterOf(reindexRow(11)) }, status: 'found' },
+  10377: { document: { id: 4977, docNumber: 10377, fileName: 'Old Draft.docx', matter: reindexMatterOf(reindexRow(11)) }, status: 'left-out' },
+}
+
+/** The documents in each folder of 1001.1's workspace (charterTree), every folder inside it counted: none in a search folder */
+export const reindexFolderCounts: Record<number, number> = { 111: 96, 112: 44, 113: 171, 114: 38, 115: 15, 116: 4 }
+
+/** Every document, as Everything counts them: the Dashboard's total */
+export const REINDEX_EVERYTHING = 1284
+
+/** What POST /v1/admin/reindex/preview answers for a scope, at P6-R9's 1.75 seconds a document, no reindex having run */
+export function reindexPreviewOf(scope: A['ReindexScope']): A['ReindexPreview'] | ApiError {
+  const answer = (name: string, count: number, skipped = 0, documents: A['ReindexMatch'][] | null = null): A['ReindexPreview'] => ({
+    name,
+    count,
+    skipped,
+    estimateSeconds: count === 0 ? null : Math.ceil(count * 1.75),
+    documents,
+    refusal: count === 0 ? "There's nothing here to reindex." : null,
+  })
+  switch (scope.kind) {
+    case 'documents': {
+      const given = [...new Set(scope.docNumbers ?? [])]
+      const matches = given.map((docNumber): A['ReindexMatch'] => {
+        const known = reindexDocuments[docNumber]
+        return known ? { docNumber, status: known.status, document: known.document } : { docNumber, status: 'not-found', document: null }
+      })
+      const found = matches.filter((one) => one.status === 'found').length
+      const leftOut = matches.filter((one) => one.status === 'left-out').length
+      const named = found + leftOut
+      return answer(named === 1 ? '1 Document' : `${named} Documents`, found, leftOut, matches)
+    }
+    case 'matter': {
+      const row = matterRows.find((one) => one.id === scope.targetId)
+      return row ? answer(`Matter ${row.number} ${row.name}`, row.documents ?? 0, 2) : problem(404, 'not-found')
+    }
+    case 'folder': {
+      const node = scope.targetId === null || scope.targetId === undefined ? undefined : placed(charterTree).find((one) => one.node.id === scope.targetId)?.node
+      if (node === undefined) return problem(404, 'not-found')
+      const row = reindexRow(11)
+      return answer(`Folder ${node.name} in ${row.number} ${row.name}`, reindexFolderCounts[node.id] ?? 0)
+    }
+    case 'store': {
+      const store = stores.find((one) => one.id === scope.targetId)
+      return store ? answer(`Store ${store.name}`, store.documents ?? 0) : problem(404, 'not-found')
+    }
+    case 'everything':
+      return answer('Everything', REINDEX_EVERYTHING, 12)
+  }
+}
+
+/** A reindex as POST /v1/admin/reindex answers it: just started by Alex, waiting for its turn, unless `over` says otherwise */
+export function reindexJobOf(over: Partial<A['ReindexJob']> = {}): A['ReindexJob'] {
+  return {
+    id: 7,
+    kind: 'matter',
+    targetId: 11,
+    name: 'Matter 1001.1 Charter Dispute – MV Northern Star',
+    startedBy: { id: me.id, username: me.username, name: me.name },
+    state: 'waiting',
+    cancelling: false,
+    emptyFirst: false,
+    total: 412,
+    done: 0,
+    failed: 0,
+    skipped: 0,
+    leftOut: 2,
+    created: '2026-11-23T10:00:00Z',
+    started: null,
+    ended: null,
+    stalledSince: null,
+    estimateSecondsLeft: 721,
+    ...over,
+  }
+}
+
+/**
+ * What the Reindex dialog reads, to spread over the defaults: Recent Matters, the Matters list searched by number, name or
+ * client, each matter's page, 1001.1's workspace, the preview of each choice, and a start that answers the reindex of what
+ * was sent.
+ */
+export function reindexRoutes(): Routes {
+  return {
+    'GET /v1/matters/recent': { items: reindexRecent, offset: 0, limit: 20, total: reindexRecent.length } satisfies S['MatterPage'],
+    'GET /v1/admin/matters': ({ query }: { query?: Record<string, unknown> }) => {
+      const q = String(query?.q ?? '').trim().toLowerCase()
+      const items = matterRows.filter((row) => row.number.startsWith(q) || row.name.toLowerCase().includes(q) || row.client.name.toLowerCase().includes(q))
+      return matterList(items, { limit: Number(query?.limit ?? 100) })
+    },
+    ...Object.fromEntries(matterRows.map((row) => [`GET /v1/admin/matters/${row.id}`, matterPage(row)])),
+    'GET /v1/admin/workspaces/110/tree': charterTree,
+    'POST /v1/admin/reindex/preview': ({ body }: { body?: unknown }) => reindexPreviewOf(body as A['ReindexScope']),
+    'POST /v1/admin/reindex': ({ body }: { body?: unknown }) => {
+      const scope = body as A['ReindexScope']
+      const preview = reindexPreviewOf(scope)
+      if (preview instanceof ApiError) return preview
+      if (preview.refusal !== null) return problem(409, 'refused', preview.refusal)
+      return reindexJobOf({ kind: scope.kind, targetId: scope.targetId ?? null, name: preview.name, emptyFirst: scope.emptyFirst ?? false, total: preview.count, leftOut: preview.skipped })
+    },
   }
 }
 

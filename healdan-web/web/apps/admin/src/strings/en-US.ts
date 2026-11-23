@@ -1351,6 +1351,55 @@ export const adminEnUS = {
   'admin.schedule.save': 'Save',
   'admin.schedule.saved': 'Saved the schedule of {name}',
 
+  // Reindex dialog (spec 8.9, P6-R18): its five choices, what each finds, the count and estimate, and Start
+  'admin.reindex.title': 'Reindex',
+  'admin.reindex.choices': 'What to Reindex',
+  'admin.reindex.kind.documents': 'Documents',
+  'admin.reindex.kind.folder': 'Folder',
+  'admin.reindex.kind.matter': '{matter}',
+  'admin.reindex.kind.store': 'Store',
+  'admin.reindex.kind.everything': 'Everything',
+  // Matter, and Folder's first step: a search that starts from Recent Matters
+  'admin.reindex.matter': '{matter}',
+  'admin.reindex.findMatter': 'Find a {matterLower}',
+  'admin.reindex.matterHint': 'Search by {matterLower} number, name or client.',
+  'admin.reindex.recentMatters': 'Recent {matters}',
+  // Folder, once its matter is chosen: the matter, the way back to the search, and its folders
+  'admin.reindex.folderMatter': '{matter}',
+  'admin.reindex.otherMatter': 'Choose Another {matter}',
+  'admin.reindex.folder': 'Folder',
+  'admin.reindex.filterFolders': "Filter this {matterLower}'s folders",
+  'admin.reindex.folderHint': 'Includes every folder inside the one you pick.',
+  'admin.reindex.folders': 'Folders in {name}',
+  // A folder found by a filter, below the top's own folders: the folders it's in
+  'admin.reindex.folderIn': 'in {path}',
+  'admin.reindex.noFolders': "This {matterLower} has no folders of its own. Reindex the {matterLower} instead.",
+  // Documents: doc #s typed or pasted, each as matched or not
+  'admin.reindex.docNumbers': 'Doc #s',
+  'admin.reindex.docNumbersHint': 'Type or paste doc #s, with commas, spaces or new lines between them.',
+  'admin.reindex.docNumber': '# {number}',
+  'admin.reindex.matches': 'Doc #s Given',
+  'admin.reindex.noSuchDocument': 'No such document',
+  'admin.reindex.leftOutDocument': "Left out: it's set to Skip, archived or being changed",
+  'admin.reindex.tooMany': 'Reindex at most 1,000 documents at a time.',
+  // Store: a plain list, each with its documents
+  'admin.reindex.store': 'Store',
+  'admin.reindex.notCounted': 'Not counted yet',
+  'admin.reindex.noStores': 'There are no Stores yet.',
+  // Everything's tick box, unticked, and its warning
+  'admin.reindex.emptyFirst': 'Empty the index first',
+  'admin.reindex.emptyFirstWarning': 'Empty the index first is for a damaged index. Search then misses documents until the run ends.',
+  'admin.reindex.estimate.short': 'Under a minute for {documents}. Search keeps working meanwhile.',
+  'admin.reindex.everything.short': "All {documents}, in under a minute. Search keeps finding them while they're replaced.",
+  // A part of the dialog whose list couldn't be read
+  'admin.reindex.unread': "This couldn't be read.",
+  // The button, until the preview gives its count, and for Everything
+  'admin.reindex.start': 'Reindex',
+  'admin.reindex.startEverything': 'Reindex Everything',
+  // Its openers: on a matter's page, and on a folder of a matter's Workspace
+  'admin.matter.reindex': 'Reindex',
+  'admin.workspace.reindex': 'Reindex',
+
   // The problems only the admin API answers, which the shared catalogue doesn't hold
   'problems.storage-unavailable': "This server doesn't have Healdan's storage module.",
   'problems.secret-key-missing': "Healdan's secret key file is missing.",
@@ -1452,6 +1501,32 @@ export const adminPlurals = {
   // Monitoring: the Audit Trail and Activity, their plurals
   // What a run of Show More found, said to a screen reader as it ends
   'admin.audit.moreRows': { one: '{n} more row', other: '{n} more rows' },
+
+  // Reindex dialog, its plurals
+  // The button, with the preview's count
+  'admin.reindex.startCount': { one: 'Reindex {n} Document', other: 'Reindex {n} Documents' },
+  // The estimate under the choice, from the preview, in minutes, or in hours for a long one
+  'admin.reindex.estimate.minutes': {
+    one: 'About a minute for {documents}. Search keeps working meanwhile.',
+    other: 'About {n} minutes for {documents}. Search keeps working meanwhile.',
+  },
+  'admin.reindex.estimate.hours': {
+    one: 'About an hour for {documents}. Search keeps working meanwhile.',
+    other: 'About {n} hours for {documents}. Search keeps working meanwhile.',
+  },
+  'admin.reindex.everything.minutes': {
+    one: "All {documents}, in about a minute. Search keeps finding them while they're replaced.",
+    other: "All {documents}, in about {n} minutes. Search keeps finding them while they're replaced.",
+  },
+  'admin.reindex.everything.hours': {
+    one: "All {documents}, in about an hour. Search keeps finding them while they're replaced.",
+    other: "All {documents}, in about {n} hours. Search keeps finding them while they're replaced.",
+  },
+  // What the preview leaves out of a folder, matter, Store or everything
+  'admin.reindex.leftOut': {
+    one: "{n} more is left out: a shortcut, or a document set to Skip, archived or being changed.",
+    other: '{n} more are left out: shortcuts, and documents set to Skip, archived or being changed.',
+  },
 
   // Monitoring: Background Jobs, its plurals
   // A LogicalDOC task's schedule, every so many seconds, minutes or hours, in the largest of them that fits it whole

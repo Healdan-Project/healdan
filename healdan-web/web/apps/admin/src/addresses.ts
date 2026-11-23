@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
+import type { adminComponents } from '@healdan/api'
 import { idFrom } from '@healdan/shell'
 
 /** Where AdminAppServlet serves the app, the router's basepath. Only the root context is supported. */
@@ -122,4 +123,20 @@ export function appAddressOf(link: string): string | undefined {
   const url = sameOrigin(link)
   if (url === undefined || (url.pathname !== ADMIN_BASE && !url.pathname.startsWith(`${ADMIN_BASE}/`))) return undefined
   return url.pathname + url.search + url.hash
+}
+
+// Reindex dialog: the Search Index page's address with the dialog open on a choice (P6-R18)
+
+/** What the Reindex dialog can be opened on, as the address's `reindex` names it */
+export type ReindexKind = adminComponents['schemas']['ReindexKind']
+
+/**
+ * The Search Index page with the Reindex dialog open, with ADMIN_BASE: on a matter (its id, never its folder's), on a
+ * folder of a matter's workspace (its id, and its matter's), on a Store (its id), or on a choice with nothing chosen yet.
+ */
+export function reindexHref(open: { kind: 'matter' | 'store'; id: number } | { kind: 'folder'; id: number; matter: number } | { kind: ReindexKind }): string {
+  const query = new URLSearchParams({ reindex: open.kind })
+  if ('id' in open) query.set('id', String(open.id))
+  if ('matter' in open) query.set('matter', String(open.matter))
+  return `${ADMIN_BASE}${routes.searchIndex}?${query.toString()}`
 }
