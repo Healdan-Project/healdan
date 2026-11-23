@@ -32,7 +32,14 @@ public class HeldTask extends Task {
 	private volatile CountDownLatch gate;
 
 	public HeldTask() {
-		super(NAME);
+		this(NAME);
+	}
+
+	/**
+	 * @param name its name, such as one of CE's tasks' for {@link JobsTestHooks#instead}
+	 */
+	public HeldTask(String name) {
+		super(name);
 		getScheduling().setEnabled(true);
 		getScheduling().setMode(TaskTrigger.MODE_SIMPLE);
 		getScheduling().setIntervalSeconds(3600);

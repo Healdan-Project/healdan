@@ -24,6 +24,7 @@ import com.logicaldoc.core.searchengine.indexer.IndexerTask;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.healdan.admin.Page;
 import com.logicaldoc.healdan.admin.dashboard.DashboardService;
+import com.logicaldoc.healdan.admin.jobs.JobControl;
 import com.logicaldoc.healdan.admin.jobs.Jobs;
 import com.logicaldoc.util.spring.Context;
 
@@ -41,6 +42,8 @@ public class IndexOverview {
 
 	private final Jobs jobs;
 
+	private final JobControl control;
+
 	/** The search engine; tests set one of their own, and put it back */
 	volatile Supplier<SearchEngine> engine = SearchEngine::get;
 
@@ -48,9 +51,10 @@ public class IndexOverview {
 	volatile Supplier<String> folder = () -> Context.get().getConfig().getProperty("index.dir");
 
 	@Autowired
-	public IndexOverview(IndexCounts counts, Jobs jobs) {
+	public IndexOverview(IndexCounts counts, Jobs jobs, JobControl control) {
 		this.counts = counts;
 		this.jobs = jobs;
+		this.control = control;
 	}
 
 	/**
@@ -70,7 +74,7 @@ public class IndexOverview {
 		IndexReview.requireAdmin(actor);
 		IndexCounts.Counts now = counts.counts();
 		return new SearchIndexSummary(now, entries(), size(), DashboardService.searchIndexTile(now),
-				jobs.one(IndexerTask.NAME));
+				jobs.one(IndexerTask.NAME), control.runRefusal(IndexerTask.NAME));
 	}
 
 	/**

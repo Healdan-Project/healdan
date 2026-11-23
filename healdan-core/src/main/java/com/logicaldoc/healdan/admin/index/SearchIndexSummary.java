@@ -14,7 +14,9 @@ import com.logicaldoc.healdan.admin.jobs.JobView;
  * @param sizeBytes the bytes the index's folder takes; null when that can't be read
  * @param health the Dashboard's Search Index tile, as it makes it
  * @param indexer CE's Indexer, as Background Jobs shows it; null if the server has none
+ * @param runRefusal what Run Indexer Now would refuse, as {@code JobControl.runRefusal} says; null when it would run
+ *        it
  */
 public record SearchIndexSummary(IndexCounts.Counts counts, Long entries, Long sizeBytes, HealthTile health,
-		JobView indexer) {
+		JobView indexer, String runRefusal) {
 }

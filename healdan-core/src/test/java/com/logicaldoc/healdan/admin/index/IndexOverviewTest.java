@@ -42,6 +42,7 @@ import com.logicaldoc.healdan.HealdanRuleException;
 import com.logicaldoc.healdan.admin.Page;
 import com.logicaldoc.healdan.admin.dashboard.DashboardService;
 import com.logicaldoc.healdan.admin.dashboard.HealthTile;
+import com.logicaldoc.healdan.admin.jobs.JobControl;
 import com.logicaldoc.healdan.matter.Matter;
 import com.logicaldoc.healdan.support.HealdanFixtures;
 import com.logicaldoc.healdan.support.LogCapture;
@@ -127,6 +128,7 @@ public class IndexOverviewTest extends AbstractHealdanTestCase {
 		// CE's Indexer, as Background Jobs shows it
 		assertEquals(IndexerTask.NAME, summary.indexer().name());
 		assertTrue(summary.indexer().logicalDocTask());
+		assertEquals(JobControl.get().runRefusal(IndexerTask.NAME), summary.runRefusal());
 
 		// Read at the request: a change shows at once
 		jdbc.update("update ld_document set ld_indexed = ? where ld_docref is null", IndexingStatus.INDEXED.ordinal());

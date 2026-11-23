@@ -20,8 +20,6 @@ import org.springframework.stereotype.Component;
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentDAO;
-import com.logicaldoc.core.document.DocumentEvent;
-import com.logicaldoc.core.document.DocumentHistory;
 import com.logicaldoc.core.document.DocumentManager;
 import com.logicaldoc.core.document.IndexingStatus;
 import com.logicaldoc.core.parser.ParsingException;
@@ -140,9 +138,10 @@ public class IndexReview {
 
 	/**
 	 * Try Again: indexes a document that couldn't be indexed, now, on the caller's thread, through CE's own
-	 * {@code DocumentManager.index}, and writes the event CE's Indexer writes, {@code event.indexed} or
-	 * {@code event.indexed.error} with the error's message, as the actor, with the session when there is one; the
-	 * outcome is answered either way. A file whose storage can't be reached is neither (ruling P6-R23): nothing is
+	 * {@code DocumentManager.index}, and writes the event CE's Indexer writes ({@link IndexEventRows}),
+	 * {@code event.indexed} or {@code event.indexed.error} with the error's message, as the actor, with the session
+	 * when there is one, and, like CE, sets the document to Skip after its error where {@code index.skiponerror} says
+	 * so; the outcome is answered either way (ruling P6-R24). A file whose storage can't be reached is neither (ruling P6-R23): nothing is
 	 * written, counted or recorded, and the outage is thrown, which the API answers {@code 503}.
 	 * <p>
 	 * CE's index reads the file inside itself, and when it's given an event it writes the error's row before it
@@ -165,7 +164,9 @@ public class IndexReview {
 		Tried tried;
 		try {
 			indexing.index(docId);
-			event(docId, DocumentEvent.INDEXED, null, actor, session);
+			Document document = document(docId);
+			if (document != null)
+				IndexEventRows.indexed(document, actor, session);
 			tried = new Tried(INDEXED, null);
 		} catch (ParsingException e) {
 			StorageUnreachableException outage = StorageUnreachableException.in(e);
@@ -174,7 +175,11 @@ public class IndexReview {
 			// The document's own failure, the index's included, which CE wraps so. Its message can name the file, so
 			// it isn't logged
 			log.debug("Document {} couldn't be indexed again: {}", docId, e.getClass().getName());
-			event(docId, DocumentEvent.INDEXED_ERROR, e.getMessage(), actor, session);
+			Document document = document(docId);
+			if (document != null) {
+				IndexEventRows.failed(document, e.getMessage(), actor, session);
+				skipOnError(document);
+			}
 			FailedDocument now = counts.failure(docId, actor.getTenantId());
 			tried = new Tried(FAILED, now != null ? now.reason() : e.getMessage());
 		}
@@ -184,28 +189,17 @@ public class IndexReview {
 		return tried;
 	}
 
-	/**
-	 * Writes an index event of the document's, as CE's index writes it when it's given one: the error's with its
-	 * message as the comment, and Skip after it where the tenant's {@code index.skiponerror} says so
-	 */
-	private static void event(long docId, DocumentEvent which, String comment, User actor, Session session)
-			throws PersistenceException {
-		DocumentDAO dao = DocumentDAO.get();
-		Document document = dao.findById(docId);
-		if (document == null)
-			return;
-		DocumentHistory history = new DocumentHistory();
-		history.setUser(actor);
-		if (session != null)
-			history.setSession(session);
-		history.setEvent(which);
-		history.setComment(comment);
-		history.setDocument(document);
-		dao.saveDocumentHistory(document, history);
-		if (which == DocumentEvent.INDEXED_ERROR && Context.get().getConfig().getTenantBoolean(
+	/** @return the document as it is now; null if it's gone meanwhile */
+	private static Document document(long docId) throws PersistenceException {
+		return DocumentDAO.get().findById(docId);
+	}
+
+	/** Sets the document to Skip once it couldn't be indexed, where the tenant's {@code index.skiponerror} says so */
+	private static void skipOnError(Document document) throws PersistenceException {
+		if (Context.get().getConfig().getTenantBoolean(
 				Context.get(TenantDAO.class).getTenantName(document.getTenantId()), "index.skiponerror", false)) {
 			document.setIndexingStatus(IndexingStatus.SKIP);
-			dao.store(document);
+			DocumentDAO.get().store(document);
 		}
 	}
 
