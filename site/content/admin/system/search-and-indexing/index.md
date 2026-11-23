@@ -31,8 +31,8 @@ states, or in none of them while it's set to Skip:
 - **Indexed:** its entry has been written to the index, and it hasn't been marked to be indexed again since.
 - **Waiting:** it's marked to be indexed, its file or only its properties, for the Indexer to take at one of its runs.
   An archived document isn't counted, as the Indexer leaves it alone.
-- **Couldn't Be Indexed:** it's marked to have its file indexed, isn't archived, and the last time it was tried, it
-  couldn't be. The Indexer goes on trying it at each run until it's indexed or set to Skip.
+- **Couldn't Be Indexed:** it's marked to be indexed, its file or only its properties, isn't archived, and the last
+  time it was tried, it couldn't be. The Indexer goes on trying it at each run until it's indexed or set to Skip.
 
 ## The Search Index
 
@@ -48,7 +48,7 @@ At the top of the page are **Run Indexer Now** and **Reindex…**, then the thre
 
 The tabs carry their counts, as in "Couldn't Be Indexed (2)", and the tab that's open is in the page's address. The
 server keeps one count of the three for up to 10 seconds, shared by the page and its lists, and counts again at once
-after **Try Again**, **Skip**, a reindex's end or a waiting one cancelled.
+after **Try Again**, **Skip**, a reindex's end or a waiting one cancelled, and once a run of the Indexer has ended.
 
 **Run Indexer Now** runs the Indexer at once, as **Run Now** on [Background Jobs](../../monitoring/background-jobs/)
 does, and says "Asked the Indexer to run now". The run takes the next documents waiting, as many as one run takes,
@@ -87,13 +87,16 @@ Each document that couldn't be indexed, the latest error first: its **Doc #**, i
 matter, the **Reason** and **When** it was last tried.
 
 - **Try Again** indexes the document now, while you wait, as the Indexer would, so a large or slow file takes a while.
-  The row and a message say how it went. Indexed, it leaves the list. If it couldn't be indexed again, it stays, with
-  the new reason, and the Indexer goes on trying it, unless **On error, mark unindexable** is on (see
-  [The Settings](#the-settings)), which sets it to Skip, so it leaves the list. When the
+  It follows the patterns (see [The Settings](#the-settings)) as they are now: a file they have indexed by its
+  properties only is indexed so, its text never read, and one they leave out altogether isn't indexed but set to Skip,
+  with the reason "The server's settings leave this kind of file out of the index, so it's set to Skip." The row and a
+  message say how it went. Indexed, it leaves the list. If it couldn't be indexed again, it stays, with the new reason,
+  and the Indexer goes on trying it, unless **On error, mark unindexable** is on, which sets it to Skip, so it leaves
+  the list; but if the Indexer indexed it in the moment Try Again was trying, it's indexed. When the
   [storage backend](../../storage-backends/) that keeps its file can't be reached just then, Healdan says so, naming the
-  Store, and changes nothing, and so it does while the index itself can't be written: "The search index can't be
-  written just now. Try again later." Either way the document stays as it was, with no row on the **History** tab,
-  and nothing is recorded. For the storage, LogicalDOC's reader still logs two errors, which
+  Store, and changes nothing, even with **Ignore content error** on, and so it does while the index itself can't be
+  written: "The search index can't be written just now. Try again later." Either way the document stays as it was,
+  with no row on the **History** tab, and nothing is recorded. For the storage, LogicalDOC's reader still logs two errors, which
   [Errors](../../monitoring/errors/) counts under two faults, made the first time and seen again after (see
   [While It Runs](#while-it-runs)). Try again once the backend, or the index, is back.
 - **Skip** asks first, then sets the document not to be indexed, so the Indexer stops trying it, and it leaves the
@@ -167,22 +170,28 @@ picks the row the arrow keys are on, and never starts the reindex.
 - **It always reaches its end.** The documents it tries are fixed as it's started, and each is tried in the order
   they were filed in. A document deleted, in the Trash or destroyed by its turn, or set to Skip, archived or being
   changed at that moment, is skipped. A document moved or given a new version since is indexed as it is then.
+- **It follows the patterns** (see [The Settings](#the-settings)) as they are at each document's turn, as LogicalDOC
+  does when a document is saved: a file they have indexed by its properties only, such as an `.iso` to begin with, is
+  indexed so, its text never read, and one they leave out altogether is skipped and set to Skip, keeping any entry it
+  had.
 - **A document whose file's storage can't be reached** at its turn is skipped too, keeping its entry and staying as it
-  was, with no row on the **History** tab: a reindex once the [storage backend](../../storage-backends/) is back covers
-  it. LogicalDOC's reader still logs two errors for each such document: one naming its file, as "Cannot parse
+  was, with no row on the **History** tab, even with **Ignore content error** on: a reindex once the
+  [storage backend](../../storage-backends/) is back covers it. LogicalDOC's reader still logs two errors for each such document: one naming its file, as "Cannot parse
   document Witness Statement.pdf (…)", and one with the outage's sentence, which names the Store.
   [Errors](../../monitoring/errors/) groups faults by their message with its numbers and quoted names left aside, so
   the second is one fault, seen once for each document, and the first is a fault of its own for each file name, each
   naming its file. The left pane's Errors count and the Dashboard's unresolved errors rise by about as many as there
   were such documents, and each fault is marked resolved on its own.
 - **A document it couldn't index** joins **Couldn't Be Indexed**, keeping the entry it had, and the Indexer goes on
-  trying it at each run, unless **On error, mark unindexable** is on, which sets it to Skip, as **Try Again** does. A
-  document whose save met another's at that moment, as when the Indexer took it too, is tried once more at the end of
-  its stretch before it counts as one it couldn't index.
-- **When the index can't be written,** so that nothing in a stretch of documents could be indexed and the index
-  doesn't answer a check, the reindex waits and tries that stretch again, counting nothing meanwhile, not even a
-  document that failed for its own reason beside them, and its card says it's waiting for the index. While the index
-  answers, a document it refuses is that document's failure, so one such document never holds a reindex up.
+  trying it at each run, by its file or by its properties as it was tried, unless **On error, mark unindexable** is
+  on, which sets it to Skip, as **Try Again** does. A document whose save met another's at that moment, as when the
+  Indexer took it too, is tried once more at the end of its stretch before it counts as one it couldn't index. One
+  that **Try Again** or the Indexer indexed after the reindex tried it counts as indexed, and keeps that index.
+- **When the index can't be written,** so that a document in a stretch fails because of it and the index doesn't
+  answer a check, the reindex waits and tries that stretch again, counting nothing meanwhile, not even a document
+  indexed before the index went or one that failed for its own reason beside them, and its card says it's waiting for
+  the index. While the index answers, a document it refuses is that document's failure, so one such document never
+  holds a reindex up.
 - **When Healdan itself fails** part way, the reindex stays running, its card saying it's making no progress, and
   Healdan tries again every 30 seconds.
 - **A restart** of the server lets the running reindex go on from where it was, and the waiting ones wait their turn
@@ -202,8 +211,9 @@ they were. A reindex that has ended can't be cancelled: "This reindex has ended.
 
 **Empty the Index First**, a tick box shown only under **Everything**, beneath its warning and unticked, is for a
 damaged index; ticked, the button reads **Empty the Index and Reindex Everything**. As the reindex's run begins, not
-as it's started, so no other reindex is running then, it marks every document to be indexed, then empties the index
-and checks that it's empty. An index that couldn't be emptied is waited for, as one that can't be written is, and
+as it's started, so no other reindex is running then, it marks every document to be indexed, its file or only its
+properties as the patterns have it, or set to Skip where they leave it out, then empties the index and checks that
+it's empty. An index that couldn't be emptied is waited for, as one that can't be written is, and
 emptied again; a reindex cancelled meanwhile leaves the documents marked, with their entries, for the Indexer. Once
 it's empty, search misses documents until each is done again, and the Indexer takes any the reindex doesn't cover,
 such as those filed meanwhile. A document set to Skip loses its entry, and stays set to Skip. Without the tick,
@@ -254,7 +264,7 @@ buttons and tabs still work beside the Admin app's Search Index.
 | Setting | What it does |
 |---|---|
 | Include patterns, Exclude patterns | which files have their text indexed, by name, such as `*.iso`. `*.exe`, `*.bin` and `*.iso` are left out to begin with |
-| Include patterns(metadata only), Exclude patterns(metadata only) | which files are indexed by their properties only, without their text |
+| Include patterns(metadata only), Exclude patterns(metadata only) | which of the files the patterns above leave out are indexed by their properties only, without their text; the rest aren't indexed at all. A reindex and **Try Again** follow both pairs too |
 | On error, mark unindexable | gives up on a file whose text can't be read, instead of trying again at each run |
 | Ignore content error | indexes a file without its text when the text can't be read, instead of trying again at each run |
 | Sorting | which documents the Indexer takes first, such as the most recent. **none** to begin with |

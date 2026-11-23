@@ -5,6 +5,7 @@ package com.logicaldoc.healdan.admin.index;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -27,7 +28,6 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import com.logicaldoc.core.PersistenceException;
-import com.logicaldoc.core.document.DocumentManager;
 import com.logicaldoc.core.document.IndexingStatus;
 import com.logicaldoc.core.searchengine.IndexException;
 import com.logicaldoc.core.security.user.User;
@@ -51,29 +51,35 @@ import jakarta.annotation.PreDestroy;
  * Each call of {@link #runOnce()} does one step: it ends a running job that was asked to stop, or one with no
  * documents left, or works through the next {@link #BATCH} of its documents above its saved position, in id order;
  * with none running it begins the oldest waiting one. A job that empties the index first, once its run has begun, so
- * a job waiting never empties the index under another, marks every document of its tenant in the index to index,
- * Skip kept, and commits; then drops the index, and checks that it holds nothing (ruling P6-R25). Only then does its
- * row keep that it has, so it does it once. An index the drop leaves entries in, or that can't be counted, is the
- * index's outage: the job waits, and marks and drops again at its next turn. A stop in between leaves the documents
- * marked to index, which LogicalDOC's Indexer takes.
+ * a job waiting never empties the index under another, marks every document of its tenant in the index, or set to be
+ * indexed by its properties, as the tenant's file-pattern rules have it ({@link IndexRules}: to index, to index by its
+ * properties alone, or Skip), Skip kept, and commits; then drops the index, and checks that it holds nothing (ruling
+ * P6-R25). Only then does its row keep that it has, so it does it once. An index the drop leaves entries in, or that
+ * can't be counted, is the index's outage: the job waits, and marks and drops again at its next turn. A stop in
+ * between leaves the documents marked to index, which LogicalDOC's Indexer takes.
  * <p>
- * A batch's documents are indexed through {@code DocumentManager.index} on as many threads as LogicalDOC's Indexer
- * takes ({@code threadpool.IndexerTask.max}). Each is looked at again just before its turn: one no longer live, set to
- * Skip, archived or in a running transaction is skipped, and so is one whose file's storage can't be reached (a
- * {@link StorageUnreachableException} in its failure's causes, ruling P6-R23), its entry, its state and its history
- * as they were, counted apart too; one moved or replaced is indexed as it is now. Its old entry stays until its new
- * one replaces it, so search goes on finding it. A document whose save met another write of it at that moment (a
- * stale row, as when LogicalDOC's Indexer takes it too) is tried once more at the end of its batch (ruling P6-R31). A
- * document's own failure is caught and counted, and it's marked to index again, its old entry kept, so it joins
+ * A batch's documents are indexed through {@code DocumentManager.index}, each file's text read first
+ * ({@link DocumentIndexing}), on as many threads as LogicalDOC's Indexer takes ({@code threadpool.IndexerTask.max}).
+ * Each is looked at again just before its turn: one no longer live, set to Skip, archived or in a running transaction
+ * is skipped, and so is one whose file's storage can't be reached (a {@link StorageUnreachableException} in its
+ * failure's causes, ruling P6-R23, whatever {@code index.ignorecontenterror} says), its entry, its state and its
+ * history as they were, counted apart too; one moved or replaced is indexed as it is now. The tenant's file-pattern
+ * rules decide how: one they leave out is skipped and set to Skip, and one they have indexed by its properties alone is
+ * set so just before its turn, so LogicalDOC reads no file of it. Its old entry stays until its new one replaces it, so
+ * search goes on finding it. A document whose save met another write of it at that moment (a stale row, as when
+ * LogicalDOC's Indexer takes it too) is tried once more at the end of its batch (ruling P6-R31). A document's own
+ * failure is caught and counted, and it's marked to index again as it was tried, its old entry kept, so it joins
  * Couldn't Be Indexed and LogicalDOC's Indexer tries it again; or, where the tenant's {@code index.skiponerror} says
- * so, set to Skip, as Try Again and LogicalDOC's own index do (ruling P6-R30). The worker writes the history rows
- * itself ({@link IndexEventRows}), as the job's starter: {@code event.indexed}, or {@code event.indexed.error} with
- * the failure's reason ({@link IndexFaults#reason}). A batch's rows, counts and position are saved together once it
- * ends. A batch in which nothing was indexed and some document failed because the search index can't be written (an
- * {@link IndexException} or a {@link SolrException} in its causes) is the index's outage, whatever else failed beside
- * it, once the index is asked and doesn't answer (ruling P6-R26; one that answers makes those documents' failures
- * their own): nothing of it is saved, the job notes since when it stalls, and the batch runs again after a wait
- * ({@link #stallWait}).
+ * so, set to Skip, as Try Again and LogicalDOC's own index do (ruling P6-R30); unless it was indexed since its try
+ * began, by Try Again or LogicalDOC's Indexer ({@link IndexEventRows#indexedSince}), when it counts as done and
+ * nothing of its failure is saved. The worker writes the history rows itself ({@link IndexEventRows}), as the job's
+ * starter: {@code event.indexed}, or {@code event.indexed.error} with the failure's reason
+ * ({@link IndexFaults#reason}). A batch's rows, counts and position are saved together once it ends. A batch in which
+ * some document failed because the search index can't be written (an {@link IndexException} or a
+ * {@link SolrException} in its causes) is the index's outage, whatever else failed beside it and whatever was indexed
+ * before, once the index is asked and doesn't answer (ruling P6-R26; one that answers makes those documents'
+ * failures their own): nothing of it is saved, the documents it set to be indexed by their properties are put back,
+ * the job notes since when it stalls, and the batch runs again after a wait ({@link #stallWait}).
  * <p>
  * Its loop survives anything (ruling P6-R27): a turn that fails, with an {@link Error} too, is logged at warn by
  * class, reported failed, and followed by another after {@value #FAILURE_WAIT_MS} ms, a running job noting since when
@@ -94,8 +100,14 @@ public class ReindexWorker implements HealdanStartListener, HealdanJob {
 	/** The most documents a batch takes */
 	static final int BATCH = 100;
 
-	/** How a document is indexed when no test changes it: CE's own index of it, which writes no history row */
-	static final Indexing REAL = id -> DocumentManager.get().index(id, null, null);
+	/**
+	 * How a document is indexed when no test changes it: CE's own index of it, its text read first
+	 * ({@link DocumentIndexing}), which writes no history row
+	 */
+	static final Indexing REAL = DocumentIndexing::index;
+
+	/** The most ids one statement marks as Empty the Index First begins */
+	private static final int MARK_CHUNK = 10_000;
 
 	/** The threads a batch takes when the Indexer's setting can't be read */
 	private static final int THREADS = 2;
@@ -140,6 +152,9 @@ public class ReindexWorker implements HealdanStartListener, HealdanJob {
 
 	private final JdbcTemplate jdbc;
 
+	/** The database, read a chunk at a time, for Empty the Index First's look through every document */
+	private final JdbcTemplate streaming;
+
 	/** What a started job wakes the thread with */
 	private final Object signal = new Object();
 
@@ -177,6 +192,8 @@ public class ReindexWorker implements HealdanStartListener, HealdanJob {
 		this.jobs = jobs;
 		this.transaction = new TransactionTemplate(transactions);
 		this.jdbc = new JdbcTemplate(dataSource);
+		this.streaming = new JdbcTemplate(dataSource);
+		streaming.setFetchSize(MARK_CHUNK);
 	}
 
 	@Override
@@ -401,10 +418,11 @@ public class ReindexWorker implements HealdanStartListener, HealdanJob {
 
 	/**
 	 * As a job that empties the index first begins its run (rulings P6-R7 and P6-R25): marks every document of its
-	 * tenant in the index to index, Skip kept, and commits; drops the index; and, once the index is found to hold
-	 * nothing, keeps that the job has emptied it. An index the drop leaves entries in, or that can't be counted, is its
-	 * outage: the job stalls. The index is one for every tenant, so the drop takes every tenant's entries while only
-	 * the job's tenant's documents are marked; Healdan runs one tenant.
+	 * tenant in the index, or set to be indexed by its properties, as the tenant's file-pattern rules have it
+	 * ({@link IndexRules}: to index, to index by its properties alone, or Skip), Skip kept, and commits; drops the
+	 * index; and, once the index is found to hold nothing, keeps that the job has emptied it. An index the drop leaves
+	 * entries in, or that can't be counted, is its outage: the job stalls. The index is one for every tenant, so the
+	 * drop takes every tenant's entries while only the job's tenant's documents are marked; Healdan runs one tenant.
 	 *
 	 * @return whether the index was emptied
 	 */
@@ -412,14 +430,9 @@ public class ReindexWorker implements HealdanStartListener, HealdanJob {
 		Long tenantId = jobs.tenant(job.id());
 		if (tenantId == null)
 			return false;
+		IndexRules rules = rules(tenantId);
 		// Marked first, so whatever stops it later leaves them for LogicalDOC's Indexer
-		List<Long> marked = transaction.execute(status -> {
-			List<Long> ids = jdbc.queryForList("update ld_document set ld_indexed = ? where ld_indexed in (?, ?)"
-					+ " and ld_tenantid = ? returning ld_id", Long.class, IndexingStatus.TO_INDEX.ordinal(),
-					IndexingStatus.INDEXED.ordinal(), IndexingStatus.TO_INDEX_METADATA.ordinal(), tenantId);
-			CacheEvictor.get().evictDocumentsAfterCompletion(ids);
-			return ids;
-		});
+		List<Long> marked = transaction.execute(status -> mark(tenantId, rules));
 		IndexCounts.get().moved();
 
 		IndexFaults.Index searchIndex = index;
@@ -444,6 +457,47 @@ public class ReindexWorker implements HealdanStartListener, HealdanJob {
 		return true;
 	}
 
+	/**
+	 * Marks every document of the tenant in the index, or set to be indexed by its properties, as the rules have it,
+	 * in the caller's transaction, the cache evicted after it.
+	 *
+	 * @return the documents marked to index, by their text or their properties
+	 */
+	private List<Long> mark(long tenantId, IndexRules rules) {
+		Map<IndexingStatus, List<Long>> by = new EnumMap<>(IndexingStatus.class);
+		streaming.query("select ld_id, ld_filename, ld_indexed from ld_document where ld_indexed in (?, ?)"
+				+ " and ld_tenantid = ?", rs -> {
+					IndexingStatus now = IndexingStatus.values()[rs.getInt(3)];
+					by.computeIfAbsent(rules.statusFor(rs.getString(2), now), as -> new ArrayList<>())
+							.add(rs.getLong(1));
+				}, IndexingStatus.INDEXED.ordinal(), IndexingStatus.TO_INDEX_METADATA.ordinal(), tenantId);
+		List<Long> changed = new ArrayList<>();
+		List<Long> toIndex = new ArrayList<>();
+		by.forEach((as, ids) -> {
+			for (int from = 0; from < ids.size(); from += MARK_CHUNK) {
+				Long[] chunk = ids.subList(from, Math.min(ids.size(), from + MARK_CHUNK)).toArray(Long[]::new);
+				List<Long> done = jdbc.query("update ld_document set ld_indexed = ? where ld_id = any(?)"
+						+ " and ld_indexed in (?, ?) returning ld_id", ReindexJobs.bind(as.ordinal(), chunk,
+								IndexingStatus.INDEXED.ordinal(), IndexingStatus.TO_INDEX_METADATA.ordinal()),
+						(rs, i) -> rs.getLong(1));
+				changed.addAll(done);
+				if (as != IndexingStatus.SKIP)
+					toIndex.addAll(done);
+			}
+		});
+		CacheEvictor.get().evictDocumentsAfterCompletion(changed);
+		return toIndex;
+	}
+
+	/** @return the tenant's file-pattern rules for indexing */
+	private static IndexRules rules(long tenantId) {
+		try {
+			return IndexRules.of(tenantId);
+		} catch (PersistenceException e) {
+			throw new IllegalStateException("The tenant's name couldn't be read", e);
+		}
+	}
+
 	/** The search index can't be written or emptied: the job waits, and says so once */
 	private void stall(ReindexJob job, String line) {
 		jobs.stalled(job.id(), ReindexJobs.now());
@@ -455,16 +509,33 @@ public class ReindexWorker implements HealdanStartListener, HealdanJob {
 	private enum Result {
 		INDEXED, FAILED, SKIPPED,
 		/** Skipped, as its file's storage couldn't be reached */
-		UNREACHABLE
+		UNREACHABLE,
+		/** Skipped, and set to Skip, as the tenant's file-pattern rules leave it out ({@link IndexRules}) */
+		LEFT_OUT
 	}
 
 	/**
 	 * @param docId the document
 	 * @param result what became of it
-	 * @param previous its indexing status before, for an indexed one
+	 * @param previous its indexing status before, for an indexed or a failed one
 	 * @param failure what it failed with, for a failed one
+	 * @param as how it was indexed, {@code TO_INDEX} or {@code TO_INDEX_METADATA}, which a failed one is set to wait
+	 *        as; null for one not tried
+	 * @param marked whether the worker set it to be indexed by its properties alone just before it tried it
+	 * @param began when the try began, to the millisecond; null for one not tried
 	 */
-	private record Outcome(long docId, Result result, int previous, Throwable failure) {
+	private record Outcome(long docId, Result result, int previous, Throwable failure, IndexingStatus as,
+			boolean marked, Instant began) {
+
+		/** @return a document skipped, not tried */
+		static Outcome skipped(long docId, Result result) {
+			return new Outcome(docId, result, 0, null, null, false, null);
+		}
+
+		/** @return whether its status was {@code INDEXED} as its try began */
+		boolean indexedThen() {
+			return !marked && previous == IndexingStatus.INDEXED.ordinal();
+		}
 
 		/** @return whether it failed as an index that can't be written makes it ({@link IndexFaults#indexFault}) */
 		boolean indexFault() {
@@ -487,18 +558,21 @@ public class ReindexWorker implements HealdanStartListener, HealdanJob {
 		}
 
 		Indexing how = indexing;
-		List<Outcome> outcomes = indexAll(ids, how);
+		IndexRules rules = rules(tenantOf(job));
+		List<Outcome> outcomes = indexAll(ids, how, rules);
 		if (outcomes == null)
 			// Stopping: the batch runs again at the next start
 			return;
-		outcomes = againAfterCollisions(outcomes, how);
+		outcomes = againAfterCollisions(outcomes, how, rules);
 
 		long indexed = outcomes.stream().filter(o -> o.result() == Result.INDEXED).count();
-		List<Outcome> failed = outcomes.stream().filter(o -> o.result() == Result.FAILED).toList();
-		// Nothing indexed and an index fault, with an index that doesn't answer: the index's outage, whatever else
-		// failed beside it (CE parses a file before it writes its hit, so one that can't be parsed fails without the
-		// index even while it's down). An index that answers makes the faults those documents' own
-		if (indexed == 0 && failed.stream().anyMatch(Outcome::indexFault) && !IndexFaults.answers(index)) {
+		List<Outcome> tried = outcomes.stream().filter(o -> o.result() == Result.FAILED).toList();
+		// An index fault, with an index that doesn't answer: the index's outage, whatever else failed beside it (CE
+		// parses a file before it writes its hit, so one that can't be parsed fails without the index even while it's
+		// down) and whatever was indexed before it went (review of #312, finding 3). An index that answers makes the
+		// faults those documents' own
+		if (tried.stream().anyMatch(Outcome::indexFault) && !IndexFaults.answers(index)) {
+			putBack(outcomes);
 			stall(job, "The search index can't be written, so reindex job {} waits and tries again");
 			return;
 		}
@@ -506,28 +580,42 @@ public class ReindexWorker implements HealdanStartListener, HealdanJob {
 
 		List<Long> unreachable = outcomes.stream().filter(o -> o.result() == Result.UNREACHABLE)
 				.map(Outcome::docId).toList();
-		long skipped = outcomes.size() - indexed - failed.size();
+		List<Long> leftOut = outcomes.stream().filter(o -> o.result() == Result.LEFT_OUT).map(Outcome::docId)
+				.toList();
+		long skipped = outcomes.size() - indexed - tried.size();
 		User starter = starter(job);
 		// As Try Again and CE's own index do after the error's row, where the tenant says so
-		int failedStatus = !failed.isEmpty() && skipOnError(job) ? IndexingStatus.SKIP.ordinal()
-				: IndexingStatus.TO_INDEX.ordinal();
+		boolean skipOnError = !tried.isEmpty() && skipOnError(job);
 		List<Outcome> recorded = outcomes;
-		transaction.executeWithoutResult(status -> {
+		List<Outcome> failed = transaction.execute(status -> {
+			// A failure isn't saved over an index made since its try began: that document is done (review of #312,
+			// finding 4)
+			List<Outcome> own = tried.stream()
+					.filter(o -> !IndexEventRows.indexedSince(jdbc, o.docId(), o.began(), o.indexedThen())).toList();
 			try {
 				for (Outcome outcome : recorded)
-					if (outcome.result() == Result.INDEXED || outcome.result() == Result.FAILED)
+					if (outcome.result() == Result.INDEXED || own.contains(outcome))
 						record(outcome, starter);
 			} catch (PersistenceException e) {
 				throw new IllegalStateException("A reindex's history rows couldn't be written", e);
 			}
-			if (!failed.isEmpty()) {
-				List<Long> failedIds = failed.stream().map(Outcome::docId).toList();
-				// Waits to be indexed again, its old entry kept, so it joins Couldn't Be Indexed; or set to Skip
+			// Waits to be indexed again as it was tried, by its text or its properties, its old entry kept, so it
+			// joins Couldn't Be Indexed; or set to Skip
+			Map<IndexingStatus, List<Long>> waiting = new EnumMap<>(IndexingStatus.class);
+			for (Outcome outcome : own)
+				waiting.computeIfAbsent(skipOnError ? IndexingStatus.SKIP : outcome.as(), as -> new ArrayList<>())
+						.add(outcome.docId());
+			// Left out by the file-pattern rules: set to Skip, as CE's own save of it would
+			if (!leftOut.isEmpty())
+				waiting.computeIfAbsent(IndexingStatus.SKIP, as -> new ArrayList<>()).addAll(leftOut);
+			waiting.forEach((as, docIds) -> {
 				jdbc.update("update ld_document set ld_indexed = ? where ld_id = any(?) and ld_indexed <> ?",
-						ReindexJobs.bind(failedStatus, failedIds.toArray(Long[]::new), IndexingStatus.SKIP.ordinal()));
-				CacheEvictor.get().evictDocumentsAfterCompletion(failedIds);
-			}
-			jobs.saveBatch(job.id(), indexed, failed.size(), skipped, unreachable.size(), ids.get(ids.size() - 1));
+						ReindexJobs.bind(as.ordinal(), docIds.toArray(Long[]::new), IndexingStatus.SKIP.ordinal()));
+				CacheEvictor.get().evictDocumentsAfterCompletion(docIds);
+			});
+			jobs.saveBatch(job.id(), indexed + tried.size() - own.size(), own.size(), skipped, unreachable.size(),
+					ids.get(ids.size() - 1));
+			return own;
 		});
 		if (!failed.isEmpty()) {
 			log.warn("Reindex job {} couldn't index {} of a batch's documents: {}", job.id(), failed.size(),
@@ -552,13 +640,39 @@ public class ReindexWorker implements HealdanStartListener, HealdanJob {
 	 * @return the outcomes, with each document whose save met another write of it tried once more, one at a time
 	 *         (ruling P6-R31)
 	 */
-	private List<Outcome> againAfterCollisions(List<Outcome> outcomes, Indexing how) {
+	private List<Outcome> againAfterCollisions(List<Outcome> outcomes, Indexing how, IndexRules rules) {
 		if (outcomes.stream().noneMatch(Outcome::collision))
 			return outcomes;
 		List<Outcome> again = new ArrayList<>(outcomes.size());
-		for (Outcome outcome : outcomes)
-			again.add(outcome.collision() ? index(outcome.docId(), how) : outcome);
+		for (Outcome outcome : outcomes) {
+			if (!outcome.collision()) {
+				again.add(outcome);
+				continue;
+			}
+			Outcome second = index(outcome.docId(), how, rules);
+			// Marked by the first try: its status before is the first try's
+			if (outcome.marked() && second.began() != null)
+				second = new Outcome(second.docId(), second.result(), outcome.previous(), second.failure(),
+						second.as(), true, outcome.began());
+			again.add(second);
+		}
 		return again;
+	}
+
+	/**
+	 * Puts each document the worker set to be indexed by its properties back as it was, unless it has changed since,
+	 * for a batch saved with nothing of it
+	 */
+	private void putBack(List<Outcome> outcomes) {
+		for (Outcome outcome : outcomes)
+			if (outcome.marked())
+				putBack(outcome.docId(), outcome.previous());
+	}
+
+	private void putBack(long docId, int previous) {
+		jdbc.update("update ld_document set ld_indexed = ? where ld_id = ? and ld_indexed = ?", previous, docId,
+				IndexingStatus.TO_INDEX_METADATA.ordinal());
+		CacheEvictor.get().evictDocuments(List.of(docId));
 	}
 
 	/** @return the failures' classes, each with how many failed so, as {@code ParsingException 2} */
@@ -573,18 +687,25 @@ public class ReindexWorker implements HealdanStartListener, HealdanJob {
 
 	/** @return whether the job's tenant sets a document that couldn't be indexed to Skip */
 	private boolean skipOnError(ReindexJob job) {
-		Long tenantId = jobs.tenant(job.id());
 		try {
-			return tenantId != null && IndexSettings.skipOnError(tenantId);
+			return IndexSettings.skipOnError(tenantOf(job));
 		} catch (PersistenceException e) {
 			throw new IllegalStateException("The tenant's settings couldn't be read", e);
 		}
 	}
 
+	/** @return the job's tenant */
+	private long tenantOf(ReindexJob job) {
+		Long tenantId = jobs.tenant(job.id());
+		if (tenantId == null)
+			throw new IllegalStateException("Reindex job " + job.id() + " has no tenant");
+		return tenantId;
+	}
+
 	/**
 	 * @return what became of each document, in their order; null if the thread was interrupted meanwhile
 	 */
-	private List<Outcome> indexAll(List<Long> ids, Indexing how) {
+	private List<Outcome> indexAll(List<Long> ids, Indexing how, IndexRules rules) {
 		int set = this.threads;
 		int threads = Math.max(1, Math.min(ids.size(), set > 0 ? set : threads()));
 		AtomicInteger number = new AtomicInteger();
@@ -596,7 +717,7 @@ public class ReindexWorker implements HealdanStartListener, HealdanJob {
 		try {
 			List<Future<Outcome>> futures = new ArrayList<>();
 			for (long id : ids)
-				futures.add(pool.submit(() -> index(id, how)));
+				futures.add(pool.submit(() -> index(id, how, rules)));
 			List<Outcome> outcomes = new ArrayList<>();
 			for (Future<Outcome> future : futures)
 				outcomes.add(future.get());
@@ -627,37 +748,63 @@ public class ReindexWorker implements HealdanStartListener, HealdanJob {
 		}
 	}
 
-	/** Indexes a document, if it's still to be tried */
-	private Outcome index(long docId, Indexing how) {
-		Integer previous = eligible(docId);
-		if (previous == null)
-			return new Outcome(docId, Result.SKIPPED, 0, null);
+	/**
+	 * Indexes a document, if it's still to be tried, as the tenant's file-pattern rules have it (review of #312,
+	 * finding 1): one they leave out isn't tried, and one they have indexed by its properties alone is set so first,
+	 * as CE's index then reads no file of it.
+	 */
+	private Outcome index(long docId, Indexing how, IndexRules rules) {
+		Eligible found = eligible(docId);
+		if (found == null)
+			return Outcome.skipped(docId, Result.SKIPPED);
+		int previous = found.status();
+		IndexingStatus as = rules.statusFor(found.fileName(), IndexingStatus.values()[previous]);
+		if (as == IndexingStatus.SKIP)
+			return Outcome.skipped(docId, Result.LEFT_OUT);
+		boolean marked = as == IndexingStatus.TO_INDEX_METADATA
+				&& previous != IndexingStatus.TO_INDEX_METADATA.ordinal();
+		if (marked) {
+			int changed = jdbc.update("update ld_document set ld_indexed = ? where ld_id = ? and ld_indexed = ?",
+					as.ordinal(), docId, previous);
+			CacheEvictor.get().evictDocuments(List.of(docId));
+			// Changed meanwhile, as when LogicalDOC's Indexer took it
+			if (changed == 0)
+				return Outcome.skipped(docId, Result.SKIPPED);
+		}
+		Instant began = Instant.ofEpochMilli(System.currentTimeMillis());
 		try {
 			how.index(docId);
-			return new Outcome(docId, Result.INDEXED, previous, null);
+			return new Outcome(docId, Result.INDEXED, previous, null, as, marked, began);
 		} catch (VirtualMachineError e) {
 			throw e;
 		} catch (Throwable t) {
-			// One that went meanwhile isn't a failure of its own, nor one whose file's storage can't be reached
-			if (eligible(docId) == null)
-				return new Outcome(docId, Result.SKIPPED, 0, null);
-			if (StorageUnreachableException.in(t) != null)
-				return new Outcome(docId, Result.UNREACHABLE, 0, null);
-			return new Outcome(docId, Result.FAILED, previous, t);
+			// One that went meanwhile isn't a failure of its own, nor one whose file's storage can't be reached, which
+			// stays as it was
+			Result result = eligible(docId) == null ? Result.SKIPPED
+					: StorageUnreachableException.in(t) != null ? Result.UNREACHABLE : Result.FAILED;
+			if (result == Result.FAILED)
+				return new Outcome(docId, result, previous, t, as, marked, began);
+			if (marked)
+				putBack(docId, previous);
+			return Outcome.skipped(docId, result);
 		}
 	}
 
+	/** A document a job tries now: its indexing status and file name */
+	private record Eligible(int status, String fileName) {
+	}
+
 	/**
-	 * @return the document's indexing status, if it's live and a job tries it now (ReindexJobs' ELIGIBLE); null if
-	 *         it's gone, set to Skip, archived or in a running transaction
+	 * @return the document's indexing status and file name, if it's live and a job tries it now (ReindexJobs'
+	 *         ELIGIBLE); null if it's gone, set to Skip, archived or in a running transaction
 	 */
-	private Integer eligible(long docId) {
+	private Eligible eligible(long docId) {
 		Object[] eligible = ReindexJobs.eligibleParams();
-		List<Integer> status = jdbc.queryForList(
-				"select d.ld_indexed from ld_document d where d.ld_id = ? and d.ld_deleted = 0 and "
+		List<Eligible> found = jdbc.query(
+				"select d.ld_indexed, d.ld_filename from ld_document d where d.ld_id = ? and d.ld_deleted = 0 and "
 						+ ReindexJobs.ELIGIBLE,
-				Integer.class, docId, eligible[0], eligible[1]);
-		return status.isEmpty() ? null : status.get(0);
+				(rs, i) -> new Eligible(rs.getInt(1), rs.getString(2)), docId, eligible[0], eligible[1]);
+		return found.isEmpty() ? null : found.get(0);
 	}
 
 	/**

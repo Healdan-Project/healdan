@@ -3,7 +3,6 @@
 
 package com.logicaldoc.healdan.admin.index;
 
-import com.logicaldoc.core.document.DocumentManager;
 import com.logicaldoc.core.parser.ParsingException;
 import com.logicaldoc.core.searchengine.IndexException;
 import com.logicaldoc.util.spring.Context;
@@ -63,7 +62,7 @@ public final class IndexTestHooks {
 	 */
 	public static void reset() {
 		IndexReview review = Context.get(IndexReview.class);
-		review.indexing = docId -> DocumentManager.get().index(docId, null, null);
+		review.indexing = IndexReview.REAL;
 		review.index = IndexFaults.REAL;
 	}
 }

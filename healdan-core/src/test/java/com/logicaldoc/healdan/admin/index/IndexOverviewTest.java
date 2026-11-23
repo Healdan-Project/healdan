@@ -37,6 +37,9 @@ import com.logicaldoc.core.searchengine.SearchEngine;
 import com.logicaldoc.core.searchengine.indexer.IndexerTask;
 import com.logicaldoc.core.security.Tenant;
 import com.logicaldoc.core.security.user.User;
+import com.logicaldoc.core.task.Task;
+import com.logicaldoc.core.task.TaskManager;
+import com.logicaldoc.core.task.TaskScheduling;
 import com.logicaldoc.healdan.AbstractHealdanTestCase;
 import com.logicaldoc.healdan.HealdanRuleException;
 import com.logicaldoc.healdan.admin.Page;
@@ -210,5 +213,39 @@ public class IndexOverviewTest extends AbstractHealdanTestCase {
 				assertThrows(HealdanRuleException.class, () -> overview.failed(0, 10, clerk)).getMessage());
 		assertEquals(IndexReview.ONLY_ADMINS,
 				assertThrows(HealdanRuleException.class, () -> overview.waiting(0, 10, clerk)).getMessage());
+	}
+
+	// The kept counts go once LogicalDOC's Indexer has ended a run since they were worked out, so the heading a page
+	// asks for as the run ends counts what it did (review of #312, finding 5)
+	@Test
+	public void testTheCountsAfterTheIndexerEndsARun() throws Exception {
+		document("waiting.txt", IndexingStatus.TO_INDEX);
+		Task indexer = Context.get(TaskManager.class).getTasks().stream()
+				.filter(task -> IndexerTask.NAME.equals(task.getName())).findFirst().orElseThrow();
+		TaskScheduling scheduling = indexer.getScheduling();
+		Date fired = scheduling.getPreviousFireTime();
+		long duration = scheduling.getLastDuration();
+		try {
+			assertEquals(new IndexCounts.Counts(0, 1, 0), overview.summary(boss).counts());
+			jdbc.update("update ld_document set ld_indexed = ? where ld_docref is null",
+					IndexingStatus.INDEXED.ordinal());
+			// Kept while the Indexer hasn't run
+			assertEquals(new IndexCounts.Counts(0, 1, 0), overview.summary(boss).counts());
+
+			// A run of the Indexer ends
+			scheduling.setPreviousFireTime(new Date());
+			scheduling.setLastDuration(1_500);
+			assertEquals(new IndexCounts.Counts(1, 0, 0), overview.summary(boss).counts());
+			assertEquals(0, overview.waiting(0, 10, boss).total());
+
+			// And kept again until another ends
+			document("later.txt", IndexingStatus.TO_INDEX);
+			assertEquals(0, overview.waiting(0, 10, boss).total());
+			scheduling.setLastDuration(2_500);
+			assertEquals(1, overview.waiting(0, 10, boss).total());
+		} finally {
+			scheduling.setPreviousFireTime(fired);
+			scheduling.setLastDuration(duration);
+		}
 	}
 }

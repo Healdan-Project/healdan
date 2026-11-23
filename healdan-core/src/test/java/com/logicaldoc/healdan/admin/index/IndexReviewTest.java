@@ -87,9 +87,9 @@ public class IndexReviewTest extends AbstractHealdanTestCase {
 	}
 
 	@After
-	public void putBack() {
-		review.indexing = docId -> DocumentManager.get().index(docId, null, null);
-		review.index = IndexFaults.REAL;
+	public void putBack() throws Exception {
+		IndexTestHooks.reset();
+		IndexFilesFail.reset();
 	}
 
 	@Override
@@ -375,5 +375,85 @@ public class IndexReviewTest extends AbstractHealdanTestCase {
 		assertEquals("# 12 a.pdf", IndexReview.name(new FailedDocument(1, "12", "a.pdf", null, null, null)));
 		assertEquals("a.pdf", IndexReview.name(new FailedDocument(1, null, "a.pdf", null, null, null)));
 		assertEquals("# 12", IndexReview.name(new FailedDocument(1, "12", " ", null, null, null)));
+	}
+
+	private String hit(Document document) {
+		var hit = SearchEngine.get().getHit(document.getId());
+		return hit != null ? hit.getContent() : null;
+	}
+
+	private int rows(Document document, DocumentEvent event) {
+		return jdbc.queryForObject("select count(*) from ld_history where ld_docid = ? and ld_event = ?",
+				Integer.class, document.getId(), event.toKey());
+	}
+
+	// The tenant's file-pattern rules decide, as CE's own save of a document does: one they make metadata-only is
+	// indexed by its properties, its file never read, and one they leave out is set to Skip (review of #312, finding 1)
+	@Test
+	public void testTryAgainKeepsTheFilePatterns() throws Exception {
+		Document meta = failed("meta-notes.txt");
+		Document left = failed("skip-notes.txt");
+		try (TenantSetting excludes = TenantSetting.set("index.excludes", "meta-*.txt,skip-*.txt");
+				TenantSetting metadata = TenantSetting.set("index.excludes.metadata", "skip-*.txt")) {
+			IndexReview.Tried tried = review.retry(meta.getId(), boss, null);
+			assertTrue(tried.indexed());
+			assertEquals(IndexingStatus.INDEXED.ordinal(), indexed(meta));
+			assertNotNull(SearchEngine.get().getHit(meta.getId()));
+			String content = hit(meta);
+			assertTrue(content, content == null || !content.contains("kestrel"));
+
+			IndexReview.Tried leftOut = review.retry(left.getId(), boss, null);
+			assertEquals(IndexReview.FAILED, leftOut.outcome());
+			assertEquals("The server's settings leave this kind of file out of the index, so it's set to Skip.",
+					leftOut.reason());
+			assertEquals(IndexingStatus.SKIP.ordinal(), indexed(left));
+			assertNull(SearchEngine.get().getHit(left.getId()));
+			assertNull(IndexCounts.get().failure(left.getId(), Tenant.DEFAULT_ID));
+		}
+	}
+
+	// With Ignore Content Error on, LogicalDOC's index takes a file it can't read for an empty one; Try Again reads it
+	// first, so a file whose storage can't be reached is the outage, with nothing written (review of #312, finding 2)
+	@Test
+	public void testTryAgainWithIgnoreContentErrorOnAFileWhoseStorageCantBeReached() throws Exception {
+		Document document = failed("cloud.txt");
+		long changes = IndexCounts.get().changes();
+		int rows = jdbc.queryForObject("select count(*) from ld_history where ld_docid = ?", Integer.class,
+				document.getId());
+		IndexFilesFail.when(Map.of(document.getId(), new StorageUnreachableException("Cloud", true, null)));
+		try (TenantSetting ignore = TenantSetting.set("index.ignorecontenterror", "true");
+				LogCapture ce = LogCapture.of(DocumentManager.class)) {
+			UncheckedIOException thrown = assertThrows(UncheckedIOException.class,
+					() -> review.retry(document.getId(), boss, null));
+			assertNotNull(StorageUnreachableException.in(thrown));
+		}
+		assertEquals(rows, (int) jdbc.queryForObject("select count(*) from ld_history where ld_docid = ?",
+				Integer.class, document.getId()));
+		assertNull(SearchEngine.get().getHit(document.getId()));
+		assertEquals(IndexingStatus.TO_INDEX.ordinal(), indexed(document));
+		assertEquals("Timed out", IndexCounts.get().failure(document.getId(), Tenant.DEFAULT_ID).reason());
+		assertEquals(changes, IndexCounts.get().changes());
+		assertEquals(List.of(), AdminRecord.eventsSince(recorded));
+	}
+
+	// A failure isn't written over an index of the document made after the try began: it's indexed (review of #312,
+	// finding 4)
+	@Test
+	public void testTryAgainDoesntUndoANewerIndex() throws Exception {
+		Document document = failed("raced.txt");
+		User indexer = fx.admin();
+		review.indexing = docId -> {
+			// As LogicalDOC's Indexer, which indexes it, with its row, just as Try Again's own try fails
+			DocumentManager.get().index(docId, null, null);
+			IndexEventRows.indexed(docId, indexer, IndexingStatus.TO_INDEX, null);
+			throw new ParsingException("Timed out again");
+		};
+
+		IndexReview.Tried tried = review.retry(document.getId(), boss, null);
+
+		assertTrue(tried.indexed());
+		assertEquals(IndexingStatus.INDEXED.ordinal(), indexed(document));
+		assertEquals(1, rows(document, DocumentEvent.INDEXED_ERROR));
+		assertNull(IndexCounts.get().failure(document.getId(), Tenant.DEFAULT_ID));
 	}
 }

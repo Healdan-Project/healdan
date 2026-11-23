@@ -41,7 +41,8 @@ import com.logicaldoc.util.spring.Context;
  * Trash:
  * <ul>
  * <li><b>indexed</b>: in the index ({@code ld_indexed} {@code INDEXED});</li>
- * <li><b>failed</b>: waiting to be indexed ({@code TO_INDEX}), not archived, and its latest {@code event.indexed} or
+ * <li><b>failed</b>: waiting to be indexed ({@code TO_INDEX}, or {@code TO_INDEX_METADATA} for one the file-pattern
+ * rules have indexed by its properties alone), not archived, and its latest {@code event.indexed} or
  * {@code event.indexed.error} row is the error, whose comment says why. {@code DocumentManager.index} writes those
  * rows. CE's Indexer goes on trying such a document on its schedule, an error row each time;</li>
  * <li><b>waiting</b>: what CE's Indexer will take ({@code TO_INDEX} or {@code TO_INDEX_METADATA}, not archived) but
@@ -73,7 +74,7 @@ public class IndexCounts {
 
 	/** Whether document {@code d} failed: 1 or 0, its latest event looked for only when it waits to be indexed */
 	private static final String FAILED = """
-			case when d.ld_indexed = :toindex and %s
+			case when d.ld_indexed in (:waiting) and %s
 			     then case when %s = :error then 1 else 0 end
 			     else 0 end""".formatted(NOT_ARCHIVED, latest("ld_event"));
 
@@ -199,7 +200,7 @@ public class IndexCounts {
 				  join ld_history h on h.ld_id = %s and h.ld_event = :error
 				  left join ld_document_ext c on c.ld_docid = d.ld_id and c.ld_name = :clientname
 				  left join ld_document_ext m on m.ld_docid = d.ld_id and m.ld_name = :mattername
-				 where %s and d.ld_indexed = :toindex and %s
+				 where %s and d.ld_indexed in (:waiting) and %s
 				 order by %s, h.ld_date desc, d.ld_id desc""".formatted(latest("ld_id"), LIVE, NOT_ARCHIVED,
 				ListingSql.nullsLast("h.ld_date")) + ListingSql.PAGE;
 		MapSqlParameterSource params = params().addValue("clientname", HealdanConstants.ATTR_CLIENT)
@@ -268,7 +269,7 @@ public class IndexCounts {
 				  join ld_history h on h.ld_id = %s and h.ld_event = :error
 				  left join ld_document_ext c on c.ld_docid = d.ld_id and c.ld_name = :clientname
 				  left join ld_document_ext m on m.ld_docid = d.ld_id and m.ld_name = :mattername
-				 where d.ld_id = :id and d.ld_tenantid = :tenant and %s and d.ld_indexed = :toindex
+				 where d.ld_id = :id and d.ld_tenantid = :tenant and %s and d.ld_indexed in (:waiting)
 				   and %s""".formatted(latest("ld_id"), LIVE, NOT_ARCHIVED);
 		MapSqlParameterSource params = params().addValue("clientname", HealdanConstants.ATTR_CLIENT)
 				.addValue("mattername", HealdanConstants.ATTR_MATTER).addValue("id", docId)
@@ -362,7 +363,6 @@ public class IndexCounts {
 	private static MapSqlParameterSource params() {
 		return new MapSqlParameterSource().addValue("error", DocumentEvent.INDEXED_ERROR.toKey())
 				.addValue("events", List.of(DocumentEvent.INDEXED.toKey(), DocumentEvent.INDEXED_ERROR.toKey()))
-				.addValue("toindex", IndexingStatus.TO_INDEX.ordinal())
 				.addValue("indexed", IndexingStatus.INDEXED.ordinal())
 				.addValue("waiting", List.of(IndexingStatus.TO_INDEX.ordinal(), IndexingStatus.TO_INDEX_METADATA.ordinal()))
 				.addValue("archived", DocumentStatus.ARCHIVED.ordinal());

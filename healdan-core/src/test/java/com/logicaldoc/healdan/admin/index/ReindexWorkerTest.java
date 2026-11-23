@@ -920,4 +920,207 @@ public class ReindexWorkerTest extends AbstractReindexTestCase {
 		}
 		assertEquals(1, job(again).failed());
 	}
+
+	/** @return whether the document's entry in the index holds none of its text, as one indexed by its properties */
+	private boolean propertiesOnly(Document document) {
+		Hit hit = SearchEngine.get().getHit(document.getId());
+		assertNotNull("No entry for " + document.getFileName(), hit);
+		return hit.getContent() == null || !hit.getContent().contains("words of");
+	}
+
+	// The tenant's file-pattern rules decide how each document is indexed, as CE's own save of it does: one the
+	// patterns make metadata-only is indexed by its properties, its file never read, and one they leave out is set to
+	// Skip, not indexed; one that fails waits again as metadata-only, among those that couldn't be indexed (review of
+	// #312, finding 1)
+	@Test
+	public void testTheFilePatternsDecideHowEachDocumentIsIndexed() throws Exception {
+		Document x1 = indexedDocument("x1.txt");
+		Document meta = indexedDocument("meta-x.txt");
+		Document metaWaiting = document(pleadings, "meta-waiting.txt");
+		status(metaWaiting, IndexingStatus.TO_INDEX_METADATA);
+		Document metaFails = indexedDocument("meta-fails.txt");
+		Document left = indexedDocument("skip-x.txt");
+		ReindexTestHooks.indexWith(id -> {
+			if (id == metaFails.getId())
+				throw new IllegalStateException("The engine refuses it");
+			ReindexTestHooks.real().index(id);
+		});
+		try (TenantSetting excludes = TenantSetting.set("index.excludes", "meta-*.txt,skip-*.txt");
+				TenantSetting metadata = TenantSetting.set("index.excludes.metadata", "skip-*.txt")) {
+			ReindexJob job = service.start(ReindexScope.folder(pleadings.getId()), admin);
+			try (LogCapture log = LogCapture.of(ReindexWorker.class)) {
+				runToTheEnd();
+			}
+
+			ReindexJob done = job(job);
+			assertEquals(State.DONE, done.state());
+			assertEquals(3, done.done());
+			assertEquals(1, done.failed());
+			assertEquals(1, done.skipped());
+		}
+		assertTrue(hit(x1), hit(x1).contains("the words of x1.txt"));
+		for (Document document : List.of(x1, meta, metaWaiting))
+			assertEquals(IndexingStatus.INDEXED.ordinal(), indexed(document));
+		assertTrue(hit(meta), propertiesOnly(meta));
+		assertTrue(hit(metaWaiting), propertiesOnly(metaWaiting));
+		// Left out: set to Skip, its entry as it was, no row
+		assertEquals(IndexingStatus.SKIP.ordinal(), indexed(left));
+		assertEquals("old words of skip-x.txt", hit(left));
+		assertEquals(List.of(), history(left, DocumentEvent.INDEXED));
+		assertEquals(List.of(), history(left, DocumentEvent.INDEXED_ERROR));
+		// Failed: waits again by its properties, and is among those that couldn't be indexed
+		assertEquals(IndexingStatus.TO_INDEX_METADATA.ordinal(), indexed(metaFails));
+		assertEquals("The engine refuses it", IndexCounts.get().failure(metaFails.getId(), Tenant.DEFAULT_ID).reason());
+	}
+
+	// Empty the Index First marks each document as the file-pattern rules have it, not every one to have its text
+	// read (review of #312, finding 1)
+	@Test
+	public void testEmptyTheIndexFirstKeepsTheFilePatterns() throws Exception {
+		Document x1 = indexedDocument("x1.txt");
+		Document meta = indexedDocument("meta-x.txt");
+		Document metaWaiting = document(pleadings, "meta-waiting.txt");
+		status(metaWaiting, IndexingStatus.TO_INDEX_METADATA);
+		Document left = indexedDocument("skip-x.txt");
+		ReindexTestHooks.threads(1);
+		Map<Long, Integer> statuses = new ConcurrentHashMap<>();
+		AtomicBoolean first = new AtomicBoolean(true);
+		ReindexTestHooks.indexWith(id -> {
+			if (first.getAndSet(false))
+				for (Document document : List.of(x1, meta, metaWaiting, left))
+					statuses.put(document.getId(), indexed(document));
+			ReindexTestHooks.real().index(id);
+		});
+		try (TenantSetting excludes = TenantSetting.set("index.excludes", "meta-*.txt,skip-*.txt");
+				TenantSetting metadata = TenantSetting.set("index.excludes.metadata", "skip-*.txt")) {
+			ReindexJob job = service.start(ReindexScope.everything(true), admin);
+			try (LogCapture log = LogCapture.of(ReindexWorker.class)) {
+				runToTheEnd();
+			}
+			assertEquals(State.DONE, job(job).state());
+			assertEquals(3, job(job).done());
+			assertEquals(1, job(job).skipped());
+		}
+
+		assertEquals(Map.of(x1.getId(), IndexingStatus.TO_INDEX.ordinal(), meta.getId(),
+				IndexingStatus.TO_INDEX_METADATA.ordinal(), metaWaiting.getId(),
+				IndexingStatus.TO_INDEX_METADATA.ordinal(), left.getId(), IndexingStatus.SKIP.ordinal()), statuses);
+		assertTrue(hit(x1), hit(x1).contains("the words of x1.txt"));
+		assertTrue(hit(meta), propertiesOnly(meta));
+		assertTrue(hit(metaWaiting), propertiesOnly(metaWaiting));
+		assertNull(hit(left));
+		assertEquals(IndexingStatus.SKIP.ordinal(), indexed(left));
+	}
+
+	// With Ignore Content Error on, LogicalDOC's index takes a file it can't read for an empty one; the worker reads
+	// it first, so a file whose storage can't be reached keeps its entry, while a damaged file still ends as LogicalDOC
+	// ends it, indexed with no text (review of #312, finding 2)
+	@Test
+	public void testIgnoreContentErrorKeepsTheEntryOfAFileWhoseStorageCantBeReached() throws Exception {
+		Document x1 = indexedDocument("x1.txt");
+		Document cloud = indexedDocument("cloud.txt");
+		Document damaged = indexedDocument("damaged.txt");
+		IndexFilesFail.when(Map.of(cloud.getId(), new StorageUnreachableException("Smoke Cloud", true, null),
+				damaged.getId(), new java.io.IOException("The file is damaged")));
+		try (TenantSetting ignore = TenantSetting.set("index.ignorecontenterror", "true")) {
+			ReindexJob job = service.start(ReindexScope.folder(pleadings.getId()), admin);
+			try (LogCapture log = LogCapture.of(ReindexWorker.class); LogCapture ce = LogCapture.of(DocumentManager.class)) {
+				assertTrue(worker.runOnce());
+			}
+
+			ReindexJob done = job(job);
+			assertEquals(State.DONE, done.state());
+			assertEquals(2, done.done());
+			assertEquals(0, done.failed());
+			assertEquals(1, done.skipped());
+			assertEquals(1, done.unreachable());
+		} finally {
+			IndexFilesFail.reset();
+		}
+		assertEquals("old words of cloud.txt", hit(cloud));
+		assertEquals(IndexingStatus.INDEXED.ordinal(), indexed(cloud));
+		assertEquals(List.of(), history(cloud, DocumentEvent.INDEXED));
+		assertTrue(hit(x1), hit(x1).contains("the words of x1.txt"));
+		// As LogicalDOC ends it: indexed, with no text
+		assertEquals(IndexingStatus.INDEXED.ordinal(), indexed(damaged));
+		assertTrue(hit(damaged), propertiesOnly(damaged));
+		assertEquals(1, history(damaged, DocumentEvent.INDEXED).size());
+	}
+
+	// An index fault after a document done is the index's outage when the index doesn't answer: nothing of the batch
+	// is saved, and it runs again (review of #312, finding 3)
+	@Test
+	public void testAnIndexFaultAfterADocumentDoneIsTheOutageWhileTheIndexDoesntAnswer() throws Exception {
+		Document x1 = indexedDocument("x1.txt");
+		Document x2 = indexedDocument("x2.txt");
+		ReindexTestHooks.threads(1);
+		ReindexTestHooks.indexWith(id -> {
+			if (id == x2.getId())
+				ReindexTestHooks.unwritable().index(id);
+			ReindexTestHooks.real().index(id);
+		});
+		ReindexTestHooks.indexDown();
+		try (TenantSetting skip = TenantSetting.set("index.skiponerror", "true")) {
+			ReindexJob job = service.start(ReindexScope.folder(pleadings.getId()), admin);
+			try (LogCapture log = LogCapture.of(ReindexWorker.class)) {
+				assertTrue(worker.runOnce());
+				assertEquals(List.of("WARN The search index can't be written, so reindex job " + job.id()
+						+ " waits and tries again"), log.lines());
+			}
+
+			ReindexJob waiting = job(job);
+			assertEquals(State.RUNNING, waiting.state());
+			assertEquals(0, waiting.done() + waiting.failed() + waiting.skipped());
+			assertNotNull(waiting.stalledSince());
+			assertEquals(0, position(job));
+			assertEquals(List.of(), history(x1, DocumentEvent.INDEXED));
+			assertEquals(List.of(), history(x2, DocumentEvent.INDEXED_ERROR));
+			assertEquals(IndexingStatus.INDEXED.ordinal(), indexed(x2));
+			assertEquals("old words of x2.txt", hit(x2));
+
+			// Once the index is back, the batch runs again
+			ReindexTestHooks.reset();
+			assertTrue(worker.runOnce());
+			assertEquals(State.DONE, job(job).state());
+			assertEquals(2, job(job).done());
+		}
+	}
+
+	// A failure isn't saved over an index of the document made after the try began, by Try Again or LogicalDOC's
+	// Indexer: the document counts as done (review of #312, finding 4)
+	@Test
+	public void testAFailureIsntSavedOverANewerIndex() throws Exception {
+		Document x1 = indexedDocument("x1.txt");
+		Document x2 = indexedDocument("x2.txt");
+		Document x3 = document(pleadings, "x3.txt");
+		status(x3, IndexingStatus.TO_INDEX);
+		Document x4 = indexedDocument("x4.txt");
+		ReindexTestHooks.threads(1);
+		ReindexTestHooks.indexWith(id -> {
+			if (id == x1.getId() || id == x3.getId())
+				throw new ParsingException("Timed out");
+			if (id == x2.getId()) {
+				// As Try Again, after x1's try failed: its index and its row
+				DocumentManager.get().index(x1.getId(), null, null);
+				IndexEventRows.indexed(x1.getId(), admin, IndexingStatus.TO_INDEX, null);
+			}
+			if (id == x4.getId())
+				// As LogicalDOC's Indexer, after x3's try failed, with no row of its own here
+				status(x3, IndexingStatus.INDEXED);
+			ReindexTestHooks.real().index(id);
+		});
+		ReindexJob job = service.start(ReindexScope.folder(pleadings.getId()), admin);
+
+		assertTrue(worker.runOnce());
+
+		ReindexJob done = job(job);
+		assertEquals(State.DONE, done.state());
+		assertEquals(4, done.done());
+		assertEquals(0, done.failed());
+		for (Document document : List.of(x1, x3)) {
+			assertEquals(IndexingStatus.INDEXED.ordinal(), indexed(document));
+			assertEquals(List.of(), history(document, DocumentEvent.INDEXED_ERROR));
+		}
+		assertTrue(hit(x1), hit(x1).contains("the words of x1.txt"));
+	}
 }

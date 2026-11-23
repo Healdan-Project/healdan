@@ -550,10 +550,12 @@ start them; `DashboardServiceTest` calls `forget()`, which drops what the Dashbo
   `Jobs`' seam, `JobsTestHooks.instead(task)` puts it in place of LogicalDOC's task of the same name (a held Indexer,
   through `HeldTask(String name)`), and `reset()` puts the list back.
 - **The Search Index's tests.** `IndexCountsTest` checks the three counts, the latest of many tries and tries at the
-  same moment, the failed and waiting lists with their matters, one document's failure and its Skip, and `moved()`
-  moving the changes on. `IndexOverviewTest` checks the heading, entries and a size that can't be read (their warnings
-  pinned), the lists with their totals, the count kept for 10 seconds less a nanosecond and counted again at 10 or once
-  `moved()` moves the changes on (through its `nanoTime` seam), and a non-administrator refused. `IndexHistoryTest`
+  same moment, the failed and waiting lists with their matters (a metadata-only document that failed among the failed),
+  one document's failure and its Skip, and `moved()` moving the changes on. `IndexOverviewTest` checks the heading,
+  entries and a size that can't be read (their warnings pinned), the lists with their totals, the count kept for 10
+  seconds less a nanosecond and counted again at 10 or once `moved()` moves the changes on (through its `nanoTime`
+  seam), counted again once LogicalDOC's Indexer has ended a run (`testTheCountsAfterTheIndexerEndsARun`, through the
+  real task's scheduling, put back after), and a non-administrator refused. `IndexHistoryTest`
   checks the events newest first, a page looking through a window by key and short pages with a cursor, the cursor's one
   spelling, and, as `AuditFeedTest` does, every statement's bound under a custom plan and under `plan_cache_mode =
   force_generic_plan` (`testEveryStatementKeepsItsBoundUnderACustomPlanAndAGenericOne`). `IndexReviewTest` checks Try
@@ -562,8 +564,14 @@ start them; `DashboardServiceTest` calls `forget()`, which drops what the Dashbo
   (`testTryAgainThatFailsWithSkipOnErrorSetsItToSkip`, with the document in the second-level cache first), Skip, only a
   failed document and only an administrator, a document by its doc #, the record's name, Try Again while the index can't
   be written leaving everything as it was until the index answers (`testTryAgainWhileTheIndexCantBeWritten`), and any
-  other failure the document's own (`testTryAgainThatFailsOtherwiseIsTheDocumentsFailure`). `IndexEventRowsTest` checks
-  both rows. `IndexTestHooks`, in `healdan-core`'s test-jar, makes Try Again's index fail as LogicalDOC's does
+  other failure the document's own (`testTryAgainThatFailsOtherwiseIsTheDocumentsFailure`), and, since the owner's
+  review, the file patterns (`testTryAgainKeepsTheFilePatterns`: a metadata-only file indexed without its text, one
+  left out set to Skip), a file whose storage can't be reached with `index.ignorecontenterror` on still the outage
+  (`testTryAgainWithIgnoreContentErrorOnAFileWhoseStorageCantBeReached`), and a failure not written over an index made
+  meanwhile (`testTryAgainDoesntUndoANewerIndex`). `IndexEventRowsTest` checks both rows. `IndexFilesFail` (in the
+  tests' package) wraps the store `DocumentManager` reads files through, so named documents' files fail with a
+  `StorageUnreachableException` or an `IOException` inside LogicalDOC's own parse, and `TenantSetting` sets one of the
+  default tenant's settings, such as `index.excludes`, in memory until closed. `IndexTestHooks`, in `healdan-core`'s test-jar, makes Try Again's index fail as LogicalDOC's does
   (`failIndexing(cause)`, wrapped in a `ParsingException`), the search index not answer Try Again's check
   (`indexDown()`), and the Search Index's next read count afresh (`forgetCounts()`), and puts the first two back
   (`reset()`). `AdminSearchIndexResourceTest`, in `healdan-api`, checks the routes: the heading as `IndexCounts` counts,
@@ -585,10 +593,17 @@ start them; `DashboardServiceTest` calls `forget()`, which drops what the Dashbo
   between the emptying and the first batch, an `Error` failing the turn while the worker goes on
   (`testAnErrorFailsTheTurnAndTheWorkerGoesOn`), a document the index refuses while it answers failing on its own
   (`testADocumentTheIndexRefusesWhileItAnswersFails`), `index.skiponerror` setting a failed document to Skip, a save
-  that collides tried once more, and `unreachable` counted. `ReindexTestHooks`, in `healdan-core`'s test-jar, sets the
+  that collides tried once more, and `unreachable` counted. Since the owner's review it checks the file patterns
+  (`testTheFilePatternsDecideHowEachDocumentIsIndexed`, `testEmptyTheIndexFirstKeepsTheFilePatterns`), a file whose
+  storage can't be reached kept with `index.ignorecontenterror` on while a damaged one ends as LogicalDOC ends it
+  (`testIgnoreContentErrorKeepsTheEntryOfAFileWhoseStorageCantBeReached`), an index fault after a document indexed
+  stalling while the index doesn't answer (`testAnIndexFaultAfterADocumentDoneIsTheOutageWhileTheIndexDoesntAnswer`),
+  and a failure not saved over an index made after its try began, by a row or by the status
+  (`testAFailureIsntSavedOverANewerIndex`). `ReindexTestHooks`, in `healdan-core`'s test-jar, sets the
   worker's seams: how it indexes (`real()`, `unwritable()`, `indexWith`, `fail(id, reason)`, `indexUnwritable()`), the
   search index it reaches (`indexDown()`, which doesn't answer, and `dropLeavesEntries()`), its batch (`batch(n)`) and
-  its threads (`threads(n)`, one making a test's order fixed), and `reset()` puts them back. `AdminReindexResourceTest`,
+  its threads (`threads(n)`, one making a test's order fixed), and `reset()` puts them back, `IndexFilesFail`'s store
+  too. `AdminReindexResourceTest`,
   in `healdan-api`, checks a preview's count as the started reindex's total, each kind, targets that aren't live, an
   empty set refused, the fields' `422`s and the body's `400`s, the refusals' order, the list, a reindex and its cancel,
   and administrators on the web session only.

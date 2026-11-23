@@ -4,6 +4,7 @@
 package com.logicaldoc.healdan.admin.index;
 
 import java.io.UncheckedIOException;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -18,7 +19,6 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 import com.logicaldoc.core.PersistenceException;
-import com.logicaldoc.core.document.DocumentManager;
 import com.logicaldoc.core.document.IndexingStatus;
 import com.logicaldoc.core.parser.ParsingException;
 import com.logicaldoc.core.security.Session;
@@ -57,6 +57,10 @@ public class IndexReview {
 	/** The refusal of Try Again while the search index itself can't be written (ruling P6-R29) */
 	public static final String INDEX_UNWRITABLE = "The search index can't be written just now. Try again later.";
 
+	/** Try Again's reason for a document the tenant's file-pattern rules leave out of the index, which it sets to Skip */
+	public static final String LEFT_OUT = "The server's settings leave this kind of file out of the index, so it's set"
+			+ " to Skip.";
+
 	/** The action Try Again records */
 	public static final String RETRIED = "index.retried";
 
@@ -80,8 +84,14 @@ public class IndexReview {
 
 	private final JdbcTemplate jdbc;
 
+	/**
+	 * How a document is indexed when no test changes it: CE's own index of it, its text read first
+	 * ({@link DocumentIndexing}), which writes no event of its own
+	 */
+	static final Indexing REAL = DocumentIndexing::index;
+
 	/** Indexes a document through CE's index, which then writes no event of its own; a seam for tests */
-	volatile Indexing indexing = docId -> DocumentManager.get().index(docId, null, null);
+	volatile Indexing indexing = REAL;
 
 	/** The search index, asked whether it answers after an index fault; tests set it and put it back */
 	volatile IndexFaults.Index index = IndexFaults.REAL;
@@ -153,6 +163,14 @@ public class IndexReview {
 	 * <p>
 	 * CE's index reads the file inside itself, and when it's given an event it writes the error's row before it
 	 * throws, so it's given none, and the row is written here once the failure is known to be the document's own.
+	 * The file's text is read first ({@link DocumentIndexing}), so a file whose storage can't be reached is the outage
+	 * whatever {@code index.ignorecontenterror} says (review of #312, finding 2).
+	 * <p>
+	 * The tenant's file-pattern rules decide how, as CE's own save of a document does ({@link IndexRules}; finding
+	 * 1): a document they have indexed by its properties alone is set so first, so CE reads no file of it, and stays
+	 * so after a failure; one they leave out isn't indexed but set to Skip, with {@link #LEFT_OUT} as its reason and
+	 * its error's row. A failure isn't written over an index of the document made since the try began, as by CE's
+	 * Indexer at that moment ({@link IndexEventRows#indexedSince}; finding 4): it's answered as indexed.
 	 *
 	 * @param docId the document's id
 	 * @param actor who asks
@@ -169,6 +187,22 @@ public class IndexReview {
 		FailedDocument failed = requireFailed(docId, actor);
 
 		String sessionId = session != null ? session.getSid() : null;
+		record Found(int status, String fileName) {
+		}
+		List<Found> found = jdbc.query("select ld_indexed, ld_filename from ld_document where ld_id = ?",
+				(rs, i) -> new Found(rs.getInt(1), rs.getString(2)), docId);
+		if (found.isEmpty())
+			throw new HealdanRuleException(NOT_FAILED);
+		IndexingStatus before = IndexingStatus.values()[found.get(0).status()];
+		IndexingStatus as = IndexRules.of(actor.getTenantId()).statusFor(found.get(0).fileName(), before);
+		if (as == IndexingStatus.SKIP)
+			return leaveOut(docId, failed, actor, sessionId);
+		boolean marked = as == IndexingStatus.TO_INDEX_METADATA && before != as;
+		// CE's index reads no file of a document set to be indexed by its properties
+		if (marked && !setStatus(docId, before, as))
+			throw new HealdanRuleException(NOT_FAILED);
+
+		Instant began = Instant.ofEpochMilli(System.currentTimeMillis());
 		Tried tried = null;
 		try {
 			try {
@@ -177,10 +211,21 @@ public class IndexReview {
 				throw e;
 			} catch (Throwable e) {
 				StorageUnreachableException outage = StorageUnreachableException.in(e);
-				if (outage != null)
+				if (outage != null) {
+					if (marked)
+						setStatus(docId, as, before);
 					throw new UncheckedIOException(outage);
-				if (IndexFaults.indexFault(e) && !IndexFaults.answers(index))
+				}
+				if (IndexFaults.indexFault(e) && !IndexFaults.answers(index)) {
+					if (marked)
+						setStatus(docId, as, before);
 					throw new HealdanRuleException(INDEX_UNWRITABLE);
+				}
+				// Indexed meanwhile, as by CE's Indexer: its failure isn't written over that
+				if (IndexEventRows.indexedSince(jdbc, docId, began, false)) {
+					tried = new Tried(INDEXED, null);
+					return tried;
+				}
 				// The document's own failure, whatever it is. Its message can name the file, so it isn't logged
 				log.debug("Document {} couldn't be indexed again: {}", docId, e.getClass().getName());
 				String reason = IndexFaults.reason(e);
@@ -195,7 +240,7 @@ public class IndexReview {
 				return tried;
 			}
 			tried = new Tried(INDEXED, null);
-			IndexEventRows.indexed(docId, actor, IndexingStatus.TO_INDEX, sessionId);
+			IndexEventRows.indexed(docId, actor, before, sessionId);
 		} finally {
 			// Once the index has been asked, the document's state may have changed, even if writing its row failed
 			if (tried != null) {
@@ -205,6 +250,33 @@ public class IndexReview {
 			}
 		}
 		return tried;
+	}
+
+	/**
+	 * Try Again on a document the tenant's file-pattern rules leave out of the index: it isn't indexed, but given its
+	 * error's row, {@link #LEFT_OUT}, and set to Skip, as CE's own save of it would; counted and recorded as a failure.
+	 */
+	private Tried leaveOut(long docId, FailedDocument failed, User actor, String sessionId)
+			throws PersistenceException {
+		Tried tried = new Tried(FAILED, LEFT_OUT);
+		try {
+			IndexEventRows.failed(docId, actor, LEFT_OUT, sessionId);
+			if (counts.skip(docId, actor.getTenantId()))
+				evictor.evictDocuments(List.of(docId));
+		} finally {
+			counts.moved();
+			events.recordAfter(new AdminEvent(AdminArea.SEARCH_INDEX, RETRIED, TARGET, docId, name(failed),
+					Map.of("outcome", new Change(null, tried.outcome()))), actor);
+		}
+		return tried;
+	}
+
+	/** @return whether the document's indexing status was {@code from}, and is now {@code to} */
+	private boolean setStatus(long docId, IndexingStatus from, IndexingStatus to) {
+		boolean changed = jdbc.update("update ld_document set ld_indexed = ? where ld_id = ? and ld_indexed = ?",
+				to.ordinal(), docId, from.ordinal()) > 0;
+		evictor.evictDocuments(List.of(docId));
+		return changed;
 	}
 
 	/**

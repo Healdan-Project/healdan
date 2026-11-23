@@ -10,7 +10,8 @@ import com.logicaldoc.util.spring.Context;
 /**
  * What other packages' and modules' tests change in the reindex worker, through its seams: how it indexes a document
  * (one that fails, an index that can't be written), the search index it empties and asks whether it answers, how
- * many documents a batch takes and on how many threads, all put back with {@link #reset}.
+ * many documents a batch takes and on how many threads, and the files {@link IndexFilesFail} makes unreadable, all put
+ * back with {@link #reset}.
  */
 public final class ReindexTestHooks {
 
@@ -146,5 +147,10 @@ public final class ReindexTestHooks {
 		worker.batch = ReindexWorker.BATCH;
 		worker.threads = 0;
 		worker.index = IndexFaults.REAL;
+		try {
+			IndexFilesFail.reset();
+		} catch (Exception e) {
+			throw new IllegalStateException("DocumentManager's store couldn't be put back", e);
+		}
 	}
 }

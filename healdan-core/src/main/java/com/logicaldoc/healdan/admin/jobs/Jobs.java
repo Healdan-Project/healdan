@@ -149,6 +149,31 @@ public class Jobs {
 	}
 
 	/**
+	 * When a job's last run ended, as {@link #one} gives it, worked out without reading its errors: cheap enough to
+	 * ask at every read of a page that follows a job's runs, as the Search Index's kept counts follow the Indexer's.
+	 *
+	 * @param name a job's name
+	 * @return when its last run that ended did; null while it runs, if none has ended, or if there's no such job
+	 */
+	public Instant lastEnd(String name) {
+		if (name == null)
+			return null;
+		HealdanJob job = healdanJob(name);
+		if (job != null)
+			return status.report(job.name()).lastEnd();
+		Task task = task(name);
+		return task != null ? lastEnd(task) : null;
+	}
+
+	/** @return when the task's last run ended: its last start plus its last duration, once idle; null otherwise */
+	private static Instant lastEnd(Task task) {
+		TaskScheduling scheduling = task.getScheduling();
+		Instant lastStart = instant(scheduling.getPreviousFireTime());
+		boolean running = task.getStatus() != Task.STATUS_IDLE;
+		return !running && lastStart != null ? lastStart.plusMillis(scheduling.getLastDuration()) : null;
+	}
+
+	/**
 	 * @param name a job's name
 	 * @return the one of Healdan's of that name, null if there's none
 	 */
@@ -197,7 +222,7 @@ public class Jobs {
 		int state = task.getStatus();
 		boolean running = state != Task.STATUS_IDLE;
 		Instant lastStart = instant(scheduling.getPreviousFireTime());
-		Instant lastEnd = !running && lastStart != null ? lastStart.plusMillis(scheduling.getLastDuration()) : null;
+		Instant lastEnd = lastEnd(task);
 		String error = lastStart != null ? lastError(task, lastStart) : null;
 		String result;
 		if (lastStart == null)

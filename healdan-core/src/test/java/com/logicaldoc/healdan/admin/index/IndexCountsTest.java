@@ -5,6 +5,7 @@ package com.logicaldoc.healdan.admin.index;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertNull;
 
@@ -99,6 +100,9 @@ public class IndexCountsTest extends AbstractHealdanTestCase {
 		event(changed, DocumentEvent.INDEXED, null, base.plusSeconds(60));
 		// Its properties changed: the Indexer takes it too
 		document("metadata.txt", IndexingStatus.TO_INDEX_METADATA);
+		// Indexed by its properties alone, and its latest try failed: failed too (review of #312, finding 1)
+		Document metadataFailed = document("metadata-failed.iso", IndexingStatus.TO_INDEX_METADATA);
+		event(metadataFailed, DocumentEvent.INDEXED_ERROR, "The index refused it", base.plusSeconds(120));
 		// Indexed, with no error ever
 		document("indexed.txt", IndexingStatus.INDEXED);
 		// Skipped after its error: the Indexer leaves it, so it's neither
@@ -118,8 +122,10 @@ public class IndexCountsTest extends AbstractHealdanTestCase {
 				archived.getId(), archivedNew.getId());
 
 		// Indexed, waiting and failed, all three in one pass, for the Dashboard
-		assertEquals(new IndexCounts.Counts(2, 3, 1), counts.counts());
-		assertEquals(List.of(failed.getId()), counts.failed(0, 10).stream().map(FailedDocument::id).toList());
+		assertEquals(new IndexCounts.Counts(2, 3, 2), counts.counts());
+		assertEquals(List.of(metadataFailed.getId(), failed.getId()),
+				counts.failed(0, 10).stream().map(FailedDocument::id).toList());
+		assertNotNull(counts.failure(metadataFailed.getId(), Tenant.DEFAULT_ID));
 	}
 
 	// The latest of many tries decides, as a document failing for weeks has an error row for each of them

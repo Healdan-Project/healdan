@@ -3,6 +3,12 @@
 
 package com.logicaldoc.healdan.admin.index;
 
+import java.sql.Timestamp;
+import java.time.Instant;
+import java.util.List;
+
+import org.springframework.jdbc.core.JdbcTemplate;
+
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentDAO;
@@ -66,6 +72,31 @@ public final class IndexEventRows {
 		history.setEvent(DocumentEvent.INDEXED_ERROR);
 		history.setComment(reason);
 		DocumentHistoryDAO.get().store(history);
+	}
+
+	/**
+	 * Whether a document was indexed since a try to index it began, by Try Again, LogicalDOC's Indexer or another
+	 * reindex, so the try's failure isn't saved over it (review of #312, finding 4): its {@code event.indexed} row
+	 * dated then or later (read through {@code ld_history}'s index on the document), or, when it wasn't in the index
+	 * as the try began, its status {@code INDEXED} now.
+	 *
+	 * @param jdbc the database
+	 * @param docId the document
+	 * @param since when the try began, to the millisecond, as the rows' dates are written
+	 * @param indexedThen whether the document's status was {@code INDEXED} as the try began
+	 * @return whether it was indexed since
+	 */
+	static boolean indexedSince(JdbcTemplate jdbc, long docId, Instant since, boolean indexedThen) {
+		Boolean row = jdbc.queryForObject("select exists (select 1 from ld_history where ld_docid = ?"
+				+ " and ld_deleted = 0 and ld_event = ? and ld_date >= ?)", Boolean.class, docId,
+				DocumentEvent.INDEXED.toKey(), Timestamp.from(since));
+		if (Boolean.TRUE.equals(row))
+			return true;
+		if (indexedThen)
+			return false;
+		List<Integer> status = jdbc.queryForList("select ld_indexed from ld_document where ld_id = ?", Integer.class,
+				docId);
+		return !status.isEmpty() && status.get(0) == IndexingStatus.INDEXED.ordinal();
 	}
 
 	/** @return a row of the document by the actor, null if the document no longer exists */

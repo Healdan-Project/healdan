@@ -242,8 +242,9 @@ tags:
         marked to be indexed, its file or its properties alone, and isn't
         archived, which LogicalDOC's Indexer leaves alone; the Indexer takes
         those waiting a batch at a time, on its schedule. It couldn't be
-        indexed when it's marked to have its file indexed, isn't archived,
-        and the last time it was tried it couldn't be: those are counted and
+        indexed when it's marked to be indexed, its file or its properties
+        alone, isn't archived, and the last time it was tried it couldn't
+        be: those are counted and
         listed apart from those waiting, and the Indexer goes on trying each
         on its schedule until it's indexed or set to Skip. One set to Skip is
         counted in none of the three.
@@ -5044,7 +5045,8 @@ paths:
         Search Index tag counts them, never taken from the Dashboard's copy:
         the server keeps one count for up to 10 seconds, which this and both
         lists' totals share, and counts again at once after **Try Again**,
-        **Skip**, a reindex's end or a waiting reindex's cancel; how many
+        **Skip**, a reindex's end or a waiting reindex's cancel, and once a
+        run of LogicalDOC's Indexer has ended; how many
         entries the index holds and how big its folder is, where those can
         be read; its health, as the Dashboard's Search Index tile works it
         out; and LogicalDOC's Indexer, with what **Run Indexer Now** would
@@ -5225,7 +5227,14 @@ paths:
         **Try Again** (Admin app spec sections 8.9 and 9.6): indexes the
         document now, while the request waits, as LogicalDOC's Indexer would,
         and answers how that went, `200` either way: any failure but the
-        index's or the storage's (below) is the document's own. Indexed, it
+        index's or the storage's (below) is the document's own. It follows
+        LogicalDOC's file patterns as a document's save does: one they have
+        indexed by its properties alone is indexed so, its file never read,
+        and one they leave out is set to Skip and answered `failed`, with
+        the reason
+        `The server's settings leave this kind of file out of the index, so it's set to Skip.`
+        A failure after which the document was indexed meanwhile, as by the
+        Indexer, is answered `indexed`, with nothing written over it. Indexed, it
         leaves **Couldn't Be Indexed**. Not, it stays there with the new reason,
         and the Indexer goes on trying it on its schedule, unless the
         server is set to stop trying a document once it can't be indexed,
@@ -5249,7 +5258,8 @@ paths:
           answers it: its `detail` names the Store, and is meant to be
           shown as it is. The document stays as it was, among those that
           couldn't be indexed, the History tab gets no row, and nothing is
-          recorded: ask again later.
+          recorded, whatever the server's Ignore Content Error says: ask
+          again later.
 
         Recorded as `index.retried`, straight after it, aimed at the
         document (`document`, its id), named by its doc # and file name, as
@@ -5423,20 +5433,27 @@ paths:
           History tab: a reindex once the storage is back covers it. One
           moved or given a new version is indexed as it is then, and one
           whose save meets another write at that moment is tried once more
-          at the end of its batch. A document it couldn't index joins
-          **Couldn't Be Indexed**, keeping the entry it had, unless the
-          server is set to stop trying a document once it can't be indexed,
-          which sets it to Skip, as **Try Again** does. A reindex that ends
+          at the end of its batch. Each follows LogicalDOC's file patterns as
+          they are at its turn, as **Try Again** does: one they have indexed
+          by its properties alone is indexed so, its file never read, and
+          one they leave out is counted `skipped` and set to Skip. A document
+          it couldn't index joins **Couldn't Be Indexed**, keeping the entry
+          it had, unless the server is set to stop trying a document once it
+          can't be indexed, which sets it to Skip, as **Try Again** does; but
+          one indexed after its try began, by **Try Again** or the Indexer,
+          is counted `done`. A reindex that ends
           `done` has `done`, `failed` and `skipped` adding up to `total`.
         - When the index can't be written, it waits and tries again, its
-          `stalledSince` saying since when, and counts nothing meanwhile.
+          `stalledSince` saying since when, and counts nothing meanwhile,
+          not even a document indexed in the same batch before it went.
           Before it waits, the index is asked whether it answers: if it
           does, the documents it refused are counted `failed`.
         - When the server's reindex worker itself fails, it tries again
           every 30 seconds, `failingSince` saying since when, and Background
           Jobs giving the failure.
         - `emptyFirst`, with `everything` only, marks every document to be
-          indexed, then empties the index, as its run begins, not as it's
+          indexed, by its file or its properties as the file patterns have
+          it, or set to Skip where they leave it out, then empties the index, as its run begins, not as it's
           started, so no other reindex is running then. An index the server
           can't empty is waited for, as one that can't be written. Search
           then misses documents until each is done again, and LogicalDOC's
