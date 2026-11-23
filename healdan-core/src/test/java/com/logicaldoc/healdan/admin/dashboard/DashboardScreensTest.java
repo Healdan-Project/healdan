@@ -22,7 +22,8 @@ import com.logicaldoc.healdan.admin.storage.StorageRecords.StoreBackendInfo;
 /**
  * Where the Dashboard's links go (Admin app spec section 8.1): each screen the Admin app has shipped at its address
  * there, and every other at the Classic Interface until its phase ships it. Phase 2 shipped Clients, Matters and
- * Workspace Templates, Phase 3 Stores and Backends, and Phase 4 Users.
+ * Workspace Templates, Phase 3 Stores and Backends, Phase 4 Users, and Phase 5 Errors, the Server Log, the Audit Trail
+ * and Background Jobs.
  */
 public class DashboardScreensTest {
 
@@ -38,6 +39,11 @@ public class DashboardScreensTest {
 		shipped.put(Screen.STORES, "/admin/stores");
 		shipped.put(Screen.BACKENDS, "/admin/backends");
 		shipped.put(Screen.USERS, "/admin/users");
+		// The Errors list with Unresolved Only set, in the form the Errors screen's address takes it
+		shipped.put(Screen.UNRESOLVED_ERRORS, "/admin/errors?unresolved=true");
+		shipped.put(Screen.SERVER_LOG, "/admin/server-log");
+		shipped.put(Screen.AUDIT_TRAIL, "/admin/audit");
+		shipped.put(Screen.BACKGROUND_JOBS, "/admin/jobs");
 
 		for (Screen screen : Screen.values())
 			assertEquals(screen.name(), shipped.getOrDefault(screen, CLASSIC), screen.link);

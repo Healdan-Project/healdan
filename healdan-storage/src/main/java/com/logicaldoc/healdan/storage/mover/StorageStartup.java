@@ -7,6 +7,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalTime;
 import java.time.ZonedDateTime;
+import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
@@ -22,6 +23,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import com.logicaldoc.healdan.HealdanStartListener;
+import com.logicaldoc.healdan.admin.jobs.JobRuns;
 import com.logicaldoc.healdan.admin.jobs.JobStatus;
 import com.logicaldoc.healdan.storage.BackendHealth;
 import com.logicaldoc.healdan.storage.NightlyCheck;
@@ -51,6 +53,11 @@ import jakarta.annotation.PreDestroy;
  * {@link StorageJob} bean of its own below, switched off where CE's Store isn't a {@code HealdanStorage}: each
  * scheduled run reports to {@link JobStatus} under its name, with its next run, and each first run is reported
  * scheduled. An early retest isn't a run of the retests' job.
+ * <p>
+ * An administrator's Run Now (Admin app ruling P5-R16) of the retests, the purge or the nightly check runs it at once,
+ * on a thread of its own ({@link #runNow}), and reports as its scheduled runs do, with its next scheduled run left as
+ * it was. A job's two never run side by side ({@link JobRuns}): Run Now is refused while a run goes on, and a
+ * scheduled run that comes due during one asked for now waits for it to end, then runs. The alert never runs now.
  */
 @Component
 public class StorageStartup implements HealdanStartListener {
@@ -89,7 +96,14 @@ public class StorageStartup implements HealdanStartListener {
 
 	private final StorageSettings settings;
 
-	/** Runs the start, the purge, the alert and the nightly check */
+	/** Each job's work, by its name, and what its failure's log line calls it, for its scheduled runs and Run Now */
+	private final Map<String, Work> works;
+
+	/** The runs, scheduled and asked for now, one at a time, of each job that runs now when asked */
+	private final Map<String, JobRuns> runs = Map.of(RETEST_JOB, new JobRuns(RETEST_JOB), PURGE_JOB,
+			new JobRuns(PURGE_JOB), NIGHTLY_JOB, new JobRuns(NIGHTLY_JOB));
+
+	/** Runs the start, the purge, the alert and the nightly check, on three threads */
 	private volatile ScheduledExecutorService scheduler;
 
 	/** Runs the backends' retests, and nothing else */
@@ -120,6 +134,18 @@ public class StorageStartup implements HealdanStartListener {
 		this.nightly = nightly;
 		this.alert = alert;
 		this.settings = settings;
+		this.works = Map.of(RETEST_JOB, new Work("backend retest", health::retest), PURGE_JOB,
+				new Work("purge", purge::run), ALERT_JOB, new Work("storage alert", alert::run), NIGHTLY_JOB,
+				new Work("nightly Store check", nightly::run));
+	}
+
+	/**
+	 * A job's work
+	 *
+	 * @param what what its failure's log line calls it
+	 * @param run the work
+	 */
+	private record Work(String what, Runnable run) {
 	}
 
 	@Override
@@ -135,7 +161,9 @@ public class StorageStartup implements HealdanStartListener {
 		purge.setInTransfer(mover::moving);
 
 		ZonedDateTime start = ZonedDateTime.now();
-		ScheduledExecutorService running = Executors.newScheduledThreadPool(2, threads("healdan-storage-start-"));
+		// A thread for each of the purge, the alert and the nightly check: a scheduled purge or nightly check waits on its
+		// thread for a Run Now of it to end (JobRuns), and the alert, which never runs now, must still find one free
+		ScheduledExecutorService running = Executors.newScheduledThreadPool(3, threads("healdan-storage-start-"));
 		scheduler = running;
 		ScheduledExecutorService retesting = Executors
 				.newSingleThreadScheduledExecutor(threads("healdan-storage-retest-"));
@@ -176,12 +204,11 @@ public class StorageStartup implements HealdanStartListener {
 		status.scheduled(PURGE_JOB, first);
 		status.scheduled(ALERT_JOB, first);
 		try {
-			running.scheduleAtFixedRate(() -> atFixedRate(PURGE_JOB, "purge", purge::run, DAY_MS), purgeDelay, DAY_MS,
-					TimeUnit.MILLISECONDS);
+			running.scheduleAtFixedRate(() -> atFixedRate(PURGE_JOB, DAY_MS), purgeDelay, DAY_MS, TimeUnit.MILLISECONDS);
 			// Hourly, so a send that failed is tried again within the hour; storage.alert.sent keeps it to one email a
 			// day, and the first alert comes within 25 hours. Its failures are logged and never end its schedule
-			running.scheduleAtFixedRate(() -> atFixedRate(ALERT_JOB, "storage alert", alert::run, alertMillis),
-					purgeDelay, alertMillis, TimeUnit.MILLISECONDS);
+			running.scheduleAtFixedRate(() -> atFixedRate(ALERT_JOB, alertMillis), purgeDelay, alertMillis,
+					TimeUnit.MILLISECONDS);
 		} catch (RejectedExecutionException e) {
 			return; // stopped meanwhile
 		}
@@ -210,8 +237,13 @@ public class StorageStartup implements HealdanStartListener {
 		health.retestsEvery(delay);
 		Instant at = Instant.now().plus(delay);
 		JobStatus.get().scheduled(RETEST_JOB, at);
-		schedule(retests, () -> reported(RETEST_JOB, "backend retest", health::retest, this::scheduleRetest), delay);
+		schedule(retests, this::scheduledRetest, delay);
 		return at;
+	}
+
+	/** A scheduled retest, once a run asked for now that goes on has ended, which schedules the next */
+	void scheduledRetest() {
+		runs(RETEST_JOB).scheduled(() -> reported(RETEST_JOB, this::scheduleRetest));
 	}
 
 	/** @return {@code storage.retestSeconds}; the default if it can't be read, as in a database outage */
@@ -233,9 +265,18 @@ public class StorageStartup implements HealdanStartListener {
 	private Instant scheduleNightly(ZonedDateTime at) {
 		nightlyScheduled.accept(at);
 		JobStatus.get().scheduled(NIGHTLY_JOB, at.toInstant());
-		schedule(scheduler, () -> reported(NIGHTLY_JOB, "nightly Store check", nightly::run,
-				() -> scheduleNightly(nightlyAfter(at.plusSeconds(1)))), Duration.between(ZonedDateTime.now(), at));
+		schedule(scheduler, () -> scheduledNightly(at), Duration.between(ZonedDateTime.now(), at));
 		return at.toInstant();
+	}
+
+	/**
+	 * A night's check, once a run asked for now that goes on has ended, which schedules the next night's
+	 *
+	 * @param at the night it was scheduled for
+	 */
+	void scheduledNightly(ZonedDateTime at) {
+		ZonedDateTime next = nightlyAfter(at.plusSeconds(1));
+		runs(NIGHTLY_JOB).scheduled(() -> reported(NIGHTLY_JOB, () -> scheduleNightly(next)));
 	}
 
 	private static void schedule(ScheduledExecutorService running, Runnable work, Duration delay) {
@@ -270,22 +311,58 @@ public class StorageStartup implements HealdanStartListener {
 		}
 	}
 
-	/** Runs a job of a fixed rate's as {@link #reported} does: its next run is its period after this one began */
-	private static void atFixedRate(String job, String what, Runnable work, long periodMillis) {
-		Instant begun = Instant.now();
-		reported(job, what, work, () -> begun.plusMillis(periodMillis));
+	/**
+	 * Runs a job of a fixed rate's as {@link #reported} does, once a run asked for now that goes on has ended, if it
+	 * runs now: its next run is its period after this one was due, as the executor has it, not after a wait
+	 *
+	 * @param job the purge or the alert
+	 * @param periodMillis its period
+	 */
+	void atFixedRate(String job, long periodMillis) {
+		Instant due = Instant.now();
+		JobRuns one = runs.get(job);
+		if (one != null)
+			one.scheduled(() -> reported(job, () -> due.plusMillis(periodMillis)));
+		else
+			reported(job, () -> due.plusMillis(periodMillis));
 	}
 
 	/**
-	 * Runs one of the jobs as {@link #safely} does, then {@code then}, which may schedule its next run, whatever the
-	 * job did, and reports the run to {@link JobStatus} with the time {@code then} gives as its next run
+	 * Runs the retests, the purge or the nightly check now (Admin app ruling P5-R16), on a thread of its own, unless a
+	 * run of it goes on: it reports as its scheduled runs do, with its next scheduled run as it was. Nothing runs
+	 * where CE's Store isn't a {@code HealdanStorage}.
+	 *
+	 * @param job {@link #RETEST_JOB}, {@link #PURGE_JOB} or {@link #NIGHTLY_JOB}
+	 * @return whether it started a run
+	 * @throws IllegalArgumentException for another job, which never runs now
 	 */
-	private static void reported(String job, String what, Runnable work, Supplier<Instant> then) {
+	boolean runNow(String job) {
+		JobRuns one = runs.get(job);
+		if (one == null)
+			throw new IllegalArgumentException("Job " + job + " never runs now");
+		if (!StoreTracking.active())
+			return false;
+		return one.now(() -> reported(job, () -> JobStatus.get().nextRun(job)));
+	}
+
+	/** @return the runs of a job that runs now when asked; null for the alert */
+	JobRuns runs(String job) {
+		return runs.get(job);
+	}
+
+	/**
+	 * Runs one of the jobs' work ({@link #works}) as {@link #safely} does, then {@code then}, which may schedule its
+	 * next run, whatever the job did, and reports the run to {@link JobStatus} with the time {@code then} gives as its
+	 * next run
+	 */
+	private void reported(String job, Supplier<Instant> then) {
+		Work work = works.get(job);
+		String what = work.what();
 		JobStatus status = JobStatus.get();
 		status.started(job);
 		Throwable failure = null;
 		try {
-			work.run();
+			work.run().run();
 		} catch (VirtualMachineError e) {
 			failure = e;
 			throw e;
@@ -302,9 +379,37 @@ public class StorageStartup implements HealdanStartListener {
 		}
 	}
 
+	/**
+	 * One of the jobs that runs now when asked, through the storage's start ({@link StorageStartup#runNow}), which
+	 * keeps it from running beside its scheduled runs
+	 */
+	abstract static class RunNowJob extends StorageJob {
+
+		private final StorageStartup startup;
+
+		RunNowJob(StorageStartup startup) {
+			this.startup = startup;
+		}
+
+		@Override
+		public boolean canRunNow() {
+			return true;
+		}
+
+		@Override
+		public boolean runNow() {
+			return enabled() && startup.runNow(name());
+		}
+	}
+
 	/** The backends' retests, as the background jobs list them */
 	@Component
-	static class RetestJob extends StorageJob {
+	static class RetestJob extends RunNowJob {
+
+		@Autowired
+		RetestJob(StorageStartup startup) {
+			super(startup);
+		}
 
 		@Override
 		public String name() {
@@ -319,7 +424,12 @@ public class StorageStartup implements HealdanStartListener {
 
 	/** The purge, as the background jobs list it */
 	@Component
-	static class PurgeJob extends StorageJob {
+	static class PurgeJob extends RunNowJob {
+
+		@Autowired
+		PurgeJob(StorageStartup startup) {
+			super(startup);
+		}
 
 		@Override
 		public String name() {
@@ -349,7 +459,12 @@ public class StorageStartup implements HealdanStartListener {
 
 	/** The nightly Store check, as the background jobs list it */
 	@Component
-	static class NightlyCheckJob extends StorageJob {
+	static class NightlyCheckJob extends RunNowJob {
+
+		@Autowired
+		NightlyCheckJob(StorageStartup startup) {
+			super(startup);
+		}
 
 		@Override
 		public String name() {
@@ -363,11 +478,13 @@ public class StorageStartup implements HealdanStartListener {
 	}
 
 	/**
-	 * Stops the scheduled work; the mover stops itself.
+	 * Stops the scheduled work, and interrupts the runs asked for now, as the scheduled ones are; the mover stops
+	 * itself.
 	 */
 	@PreDestroy
 	public void stop() {
 		health.onEarlyRetest(null);
+		runs.values().forEach(JobRuns::stop);
 		ScheduledExecutorService running;
 		ScheduledExecutorService retesting;
 		synchronized (this) {

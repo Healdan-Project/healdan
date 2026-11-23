@@ -4,7 +4,7 @@
 - **Written:** 2026-10-23, for the [M2 design](../superpowers/specs/2026-10-23-m2-api-foundation-design.md) (§12), from the code at `808d5395b`.
 - **Kept current:** each milestone that adds endpoints updates its entries' tags and endpoints in the same pull request.
 - **After M6**, the User app's later phases add their endpoints to §0.3, each marked "built after M6", and their old calls move from `Later` to `M6`: a favourite's name and renaming folders (2026-11-14), and moving and deleting folders and the Trash (2026-11-17, the [folders and Trash spec](../superpowers/specs/2026-11-16-folders-and-trash-design.md) §6).
-- **The Admin app's Phase 1 built** its endpoints on 2026-11-19 (§0.5), in pull request `Admin app: the foundation and the Dashboard` ([Admin app spec](../superpowers/specs/2026-11-18-admin-app-design.md) §10). Its later phases add theirs to §0.5: Phase 2 built its clients', matters', workspaces', templates', Stores' and groups' on 2026-11-20, in pull request `Admin app: clients, matters and workspaces` (Healdan-Project/healdan#287), Phase 3 its Stores' and storage's on 2026-11-21, in pull request `Admin app: Stores and Backends` (Healdan-Project/healdan#294), and Phase 4 its users' and groups' on 2026-11-21, in pull request `Admin app: Users and Groups` (Healdan-Project/healdan#298). Of the corrections the spec's §10 names, Healdan's storage service (`HealdanStorageService`, the Classic Interface's Storage tab, `/frontend/healdanstorage`), which §1 doesn't list and §0's totals don't count, has each of its calls mapped in §0.5, as Phase 3 replaces it whole; the sign-in methods M4 added to `HealdanSettingsService`, which this file doesn't list yet, wait for Stage 2, which replaces them.
+- **The Admin app's Phase 1 built** its endpoints on 2026-11-19 (§0.5), in pull request `Admin app: the foundation and the Dashboard` ([Admin app spec](../superpowers/specs/2026-11-18-admin-app-design.md) §10). Its later phases add theirs to §0.5: Phase 2 built its clients', matters', workspaces', templates', Stores' and groups' on 2026-11-20, in pull request `Admin app: clients, matters and workspaces` (Healdan-Project/healdan#287), Phase 3 its Stores' and storage's on 2026-11-21, in pull request `Admin app: Stores and Backends` (Healdan-Project/healdan#294), Phase 4 its users' and groups' on 2026-11-21, in pull request `Admin app: Users and Groups` (Healdan-Project/healdan#298), and Phase 5 its errors', logs', audit trail's and background jobs' on 2026-11-22, in pull request `Admin app: monitoring` (Healdan-Project/healdan#311). Of the corrections the spec's §10 names, Healdan's storage service (`HealdanStorageService`, the Classic Interface's Storage tab, `/frontend/healdanstorage`), which §1 doesn't list and §0's totals don't count, has each of its calls mapped in §0.5, as Phase 3 replaces it whole; the sign-in methods M4 added to `HealdanSettingsService`, which this file doesn't list yet, wait for Stage 2, which replaces them.
 - **M6 built** its endpoints on 2026-11-10 to 2026-11-12 (§0.3), and its design left the rest of the old calls it weighed to later phases of the User app (`Later`) or to none (M6 spec §4, §16).
 - **M3 built** its endpoints on 2026-10-24 (§0.2): the bookmarks, `FolderService.create` and `/thumbnail` moved from M6 to M3, and the rest of M3's additions have no old call behind them.
 - **M2 built** every `M2` endpoint named here on 2026-10-23 and 2026-10-24 (§0.1). Its `openapi.yaml` (`healdan-api/src/main/resources/healdan/api/openapi.yaml`) is the reference for what they do; this file only maps the old calls to them.
@@ -171,9 +171,9 @@ M6 built every endpoint in this table, for the User app ([M6 spec](../superpower
 | SetupService | 2 |  |  |  |  |  |  |  | 2 |
 | DropboxService | 6 |  |  |  |  |  |  |  | 6 |
 
-### 0.5 What the Admin app adds (Phases 1 to 4 built)
+### 0.5 What the Admin app adds (Phases 1 to 5 built)
 
-Phase 1 built the first three endpoints in this table, for the Admin app's Dashboard and its find (Admin app spec §8.1, §10), Phase 2 those from `listClients` to `/data/groups.xml`, for its clients, its matters, their workspaces, the workspace templates, and the Stores and groups a first matter needs (§8.2 to §8.6, §14), Phase 3 those from `HealdanMatterService.listStores` with each Store's backend to `HealdanStorageService.saveSettings`, for the Stores and the storage backends (§8.6, §9.7), which do everything the Classic Interface's Storage tab does, through `HealdanStorageService`'s calls, and Phase 4 the rest so far, for the users and groups (§8.7), through LogicalDOC's user and group DAOs, none of `SecurityService`'s calls, which stay the Classic Interface's. They're under `/api/v1/admin`, described in `openapi-admin.yaml`, not `openapi.yaml`, and answer administrators' web sessions only. The rows marked "(none: …)" have no old call behind them.
+Phase 1 built the first three endpoints in this table, for the Admin app's Dashboard and its find (Admin app spec §8.1, §10), Phase 2 those from `listClients` to `/data/groups.xml`, for its clients, its matters, their workspaces, the workspace templates, and the Stores and groups a first matter needs (§8.2 to §8.6, §14), Phase 3 those from `HealdanMatterService.listStores` with each Store's backend to `HealdanStorageService.saveSettings`, for the Stores and the storage backends (§8.6, §9.7), which do everything the Classic Interface's Storage tab does, through `HealdanStorageService`'s calls, Phase 4 those from `/data/users.xml` to `/data/users.xml?groupId=`, for the users and groups (§8.7), through LogicalDOC's user and group DAOs, none of `SecurityService`'s calls, which stay the Classic Interface's, and Phase 5 the rest so far, for the errors, the server log, the audit trail and the background jobs (§8.8, §9.3 to §9.5), through Healdan's own services over LogicalDOC's history tables, its logging configuration and its task scheduling, none of `SystemService`'s calls, which stay the Classic Interface's. They're under `/api/v1/admin`, described in `openapi-admin.yaml`, not `openapi.yaml`, and answer administrators' web sessions only. The rows marked "(none: …)" have no old call behind them. Phase 5 also makes three of the User app's routes record a reading of the document in its history (`event.viewed`), with no change to their answers but a `HEAD` of `/message/body`, which now answers the headers alone: `GET /documents/{docNumber}/preview`, `GET /documents/{docNumber}/message/body` and `GET /documents/{docNumber}/message/parts/{id}?inline=true`, the last two as a view of the email. Those three are under `/api/v1`, in `openapi.yaml`.
 
 | Old call | Admin endpoint |
 |---|---|
@@ -248,6 +248,17 @@ Phase 1 built the first three endpoints in this table, for the Admin app's Dashb
 | `SecurityService.saveGroup` of a group's name and description | `PATCH /admin/groups/{id}` (the fixed groups' names refused) |
 | `SecurityService.deleteGroup` | `DELETE /admin/groups/{id}` (fixed groups, and groups a sign-in provider's map names, refused) |
 | `/data/users.xml?groupId=` | `GET /admin/groups/{id}/members`, paged, with `q` |
+| (none: the errors the server logged, grouped by fault, are new) | `GET /admin/errors`, by window, area, words and whether resolved, and `GET /admin/errors/{id}`, with its stack, the documents it names and its log |
+| (none: marking a fault resolved is new) | `POST /admin/errors/{id}/resolve`, `/reopen`, each recorded |
+| `/data/log.xml`'s appenders | `GET /admin/logs`, the logs written to files, the HTML copies left out; the loggers' levels stay the Classic Interface's |
+| `/log?appender=`, to show one log | `GET /admin/logs/{name}/lines`, a log's current and rolled-over files read as one, by position, with a level and words, followed as it grows |
+| `/log?appender=`, to download one log | `GET /admin/logs/{name}/file`, the log's files as they are, zipped; `appender=all`, every log with the server's settings, stays the Classic Interface's (System Information) |
+| `SystemService.search`, `/data/userhistory.xml`, `/data/documenthistory.xml` and `/data/folderhistory.xml`, for an administrator | `GET /admin/audit`, one feed of the document, folder and account histories, the administration record and the storage record of recovery keys, newest first, by cursor, with the kind, a person, a matter, a doc #, days and words; a person's and a matter's Activity tabs are its `userId` and `matterId` |
+| (none: exporting the audit trail is new) | `GET /admin/audit/export`, the same rows as CSV, to 100,000 |
+| `SystemService.loadTasks`, `getTaskByName`, `/data/tasks.xml` | `GET /admin/jobs`, Healdan's jobs and LogicalDOC's six tasks, each with its last run, result, error, next run and schedule |
+| `SystemService.startTask`, `stopTask` | `POST /admin/jobs/{name}/run`, `/stop`, Run Now for five of Healdan's jobs too |
+| `SystemService.enableTask`, `disableTask` | `POST /admin/jobs/{name}/enable`, `/disable` |
+| `SystemService.saveTask`'s schedule | `PUT /admin/jobs/{name}/schedule`, every so many seconds or a cron expression; a task's delay and maximum duration stay the Classic Interface's |
 
 ## 1. GWT-RPC services
 
@@ -744,15 +755,15 @@ Transport: each interface is bound to a servlet by `@RemoteServiceRelativePath`;
 - Interface: `gui/frontend/client/services/SystemService.java`; RPC URL `/frontend/system` (`@RemoteServiceRelativePath("system")`)
 - Server impl: **SystemServiceImpl**
 - Methods: 17 (Admin 17)
-- Lands in: `/admin/system`, `/admin/tasks`, `/admin/history` (Admin)
+- Lands in: `/admin/jobs` and `/admin/audit` (Admin, built in the Admin app's Phase 5, §0.5), `/admin/system` (Admin)
 
 | Method(s) | Purpose | First needed by |
 |---|---|---|
 | `getStatistics` | Server statistics for the system screen. | Admin (`GET /admin/dashboard/usage`, §0.5) |
-| `loadTasks`, `getTaskByName`, `startTask`, `stopTask`, `enableTask`, `disableTask`, `saveTask`, `unscheduleJobs` | Scheduled tasks: list, run, stop, enable, schedule. | Admin |
+| `loadTasks`, `getTaskByName`, `startTask`, `stopTask`, `enableTask`, `disableTask`, `saveTask`, `unscheduleJobs` | Scheduled tasks: list, run, stop, enable, schedule. | Admin (all but `unscheduleJobs` in `/admin/jobs`, §0.5; a task's delay and maximum duration stay the Classic Interface's) |
 | `setGUILanguageStatus`, `getPlugins`, `confirmUpdate`, `restart` | Language toggle, installed plugins, restart. | Admin |
 | `saveLogger`, `removeLogger` | Log4j logger levels. | Admin |
-| `search` | Audit history search (users, events, dates, root folder). | Admin |
+| `search` | Audit history search (users, events, dates, root folder). | Admin (`/admin/audit`, §0.5) |
 | `searchApiCalls` | API call log search. | Admin |
 
 ### TagService
@@ -889,8 +900,8 @@ All extend `AbstractDataServlet`: GET only, require a session (`isAuthenticated(
 | `/data/attributeoptions.xml` | AttributeOptionsDataServlet | setId, attribute, category, withempty | Option values for a dropdown/preset attribute. | M2 | the `options` of each form field |
 | `/data/lockeddocs.xml` | LockedDocsDataServlet | userId | Documents locked/checked out (by a user). "My checked-out documents". **Broken upstream:** its SQL is missing a comma (capability map §6). | M2 | `/me/checkouts` (built on `DocumentDAO.findByLockUserAndStatus` instead); a person's, for an administrator: `/admin/users/{id}/checkouts` (§0.5) |
 | `/data/versions.xml` | VersionsDataServlet | docId, archiveId | Version history of a document (or versions of an Import/Export archive). | M2 | `/documents/{docNumber}/versions` |
-| `/data/documenthistory.xml` | DocumentHistoryDataServlet | docId (plus max, locale) | Audit events for one document (author, event, version, date, comment). Possible source for "recent documents". | Later | `/documents/{docNumber}/history` |
-| `/data/folderhistory.xml` | FolderHistoryDataServlet | id | Audit events for one folder. | Later | `/folders/{id}/history` |
+| `/data/documenthistory.xml` | DocumentHistoryDataServlet | docId (plus max, locale) | Audit events for one document (author, event, version, date, comment). Possible source for "recent documents". | Later | `/documents/{docNumber}/history`; an administrator's: `/admin/audit?docNumber=` (§0.5) |
+| `/data/folderhistory.xml` | FolderHistoryDataServlet | id | Audit events for one folder. | Later | `/folders/{id}/history`; an administrator's, a matter's folders together: `/admin/audit?matterId=` (§0.5) |
 | `/data/acl.xml` | AclDataServlet | id, type (document/folder/menu/template) | Access control list entries (groups, users, permission flags) of an object. | Later | `/documents/{docNumber}/permissions`, `/folders/{id}/permissions` |
 | `/data/bookmarks.xml` | BookmarksDataServlet | (none)  | The user's bookmarks (documents and folders). Healdan stores My Matters as folder bookmarks. | M3 | `GET /me/favorites` (built; leaves out My Matters and what the user can't read) |
 | `/data/notes.xml` | NotesDataServlet | docId, userId, page | Notes/annotations of a document or by a user. | Later | `/documents/{docNumber}/notes` |
@@ -918,9 +929,9 @@ All extend `AbstractDataServlet`: GET only, require a session (`isAuthenticated(
 | `/data/stores.xml` | StoresDataServlet | types, parameters, empty | Configured file-storage backends (CE "Store"; unrelated to Healdan Store). | Admin | `/admin/storage` |
 | `/data/menus.xml` | MenusDataServlet | (none) | Menu tree (admin screens). | Admin | `/admin/security` |
 | `/data/sessions.xml (also /sessions/sessions.xml)` | SessionsDataServlet | node, status, kill, csv | Open sessions; can kill one or export CSV. | Admin | `/admin/sessions` |
-| `/data/userhistory.xml` | UserHistoryDataServlet | id, event, comment | User audit events (logins etc.). | Admin | `/admin/history` |
-| `/data/events.xml` | EventsDataServlet | folder, workflow, importfolder, user, ocr, webservice, ai, all | Audit event-type names for filters. | Admin | `/admin/history` |
-| `/data/tasks.xml` | TasksDataServlet | (none) | Scheduled tasks and status. | Admin | `/admin/tasks` |
+| `/data/userhistory.xml` | UserHistoryDataServlet | id, event, comment | User audit events (logins etc.). | Admin | `/admin/audit` (`kind=sign-in`, `kind=user`, `userId`; §0.5) |
+| `/data/events.xml` | EventsDataServlet | folder, workflow, importfolder, user, ocr, webservice, ai, all | Audit event-type names for filters. | Admin | `/admin/audit`'s rows carry their own words (`what`), and its filter is the kind (§0.5) |
+| `/data/tasks.xml` | TasksDataServlet | (none) | Scheduled tasks and status. | Admin | `/admin/jobs` (§0.5) |
 | `/data/jobs.xml` | JobsDataServlet | group, groupsonly | Quartz jobs. | Admin | `/admin/tasks` |
 | `/data/indexingqueue.xml` | IndexingQueueDataServlet | (none) | Documents waiting to be indexed. | Admin | `/admin/search-engine` |
 | `/data/parsers.xml` | ParsersDataServlet | (none) | Registered parsers (extension -> parser). | Admin | `/admin/search-engine` |
@@ -932,7 +943,7 @@ All extend `AbstractDataServlet`: GET only, require a session (`isAuthenticated(
 | `/data/sequences.xml` | SequencesDataServlet | prefix | Named sequences (counters). | Admin | `/admin/system` |
 | `/data/aspects.xml` | AspectsDataServlet | (none) | Run-level aspects (features on/off). | Admin | `/admin/system` |
 | `/data/environment.xml` | EnvironmentDataServlet | (none) | System/Java/DB environment values. | Admin | `/admin/system` |
-| `/data/log.xml` | LogDataServlet | loggers | Log4j loggers and appenders. | Admin | `/admin/system` |
+| `/data/log.xml` | LogDataServlet | loggers | Log4j loggers and appenders. | Admin | the appenders: `/admin/logs` (§0.5); the loggers, `/admin/system` |
 | `/data/updatehistory.xml` | UpdateHistoryDataServlet | (none) | Installed updates and patches. | Admin | `/admin/system` |
 
 ## 3. Other servlets and endpoints
@@ -954,7 +965,7 @@ All extend `AbstractDataServlet`: GET only, require a session (`isAuthenticated(
 | `/display, /display/*` | DisplayServlet | query string or /type/id | Redirects deep links to `frontend.jsp?...` (GUI deep links). Replaced by the new UI's own routing. | none | – (the new UI routes its own links) |
 | `/stat` | StatChartServlet (stat package; abstract ChartServlet base) | objectId, tenantId, width, height, locale | Chart images of repository stats for the Admin screens. | Admin | `/admin/system` |
 | `/webservicechart` | WebserviceChartServlet (webservice module) | as /stat | Chart of web-service calls. | Admin | `/admin/system` |
-| `/log` | LogDownload | appender | Downloads a log file / appender output (menu right). | Admin | `/admin/system` |
+| `/log` | LogDownload | appender | Downloads a log file / appender output (menu right). | Admin | one log: `/admin/logs/{name}/lines` and `/file` (§0.5); `appender=all`, `/admin/system` |
 | `/echo` | EchoServlet | any | Debug: logs the request when echo.enabled=true. | none | – |
 | `/frontend/gwteventservice` | de.novanic.eventservice (GWT Event Service) | GWT-RPC long-poll | Third-party GWT server-push; legacy, not part of the Healdan code. | none | – |
 | `/frontend/dropbox` | DropboxServiceImpl | GWT-RPC | See Dropbox section. | none | – |

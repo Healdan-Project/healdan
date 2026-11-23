@@ -6,21 +6,25 @@ import { createRootRoute, createRoute, createRouter, type ErrorComponentProps, t
 import { ErrorPanel, parseSearch, stringifySearch } from '@healdan/shell'
 import { ADMIN_BASE, routes } from './addresses'
 import { Frame } from './frame/Frame'
+import { AuditView, auditSearch } from './views/AuditView'
 import { BackendsView } from './views/BackendsView'
 import { BackendView } from './views/BackendView'
 import { ClientView, clientSearch } from './views/ClientView'
 import { ClientsView, clientsSearch } from './views/ClientsView'
 import { DashboardView } from './views/DashboardView'
+import { ErrorsView, errorsSearch } from './views/ErrorsView'
 import { GroupsView, groupsSearch } from './views/GroupsView'
 import { GroupView } from './views/GroupView'
+import { JobsView } from './views/JobsView'
 import { MattersView, mattersSearch } from './views/MattersView'
 import { MatterView, matterSearch } from './views/MatterView'
+import { ServerLogView, serverLogSearch } from './views/ServerLogView'
 import { StoresView } from './views/StoresView'
 import { StoreView, storeSearch } from './views/StoreView'
 import { TemplatesView } from './views/TemplatesView'
 import { TemplateView } from './views/TemplateView'
 import { UsersView, usersSearch } from './views/UsersView'
-import { UserView } from './views/UserView'
+import { UserView, userSearch } from './views/UserView'
 import { NotFoundView } from './views/NotFoundView'
 
 // The frame holds every page, and an address no page has is said in the frame, in the app's own words. A page reads only
@@ -105,8 +109,8 @@ const backendRoute = createRoute({
   },
 })
 
-// /users: every person, their filters and order in the address (UsersView); /users/$id, a person's page (UserView), which
-// says itself when the id names nobody
+// /users: every person, their filters and order in the address (UsersView); /users/$id, a person's page, its tab in the
+// address (UserView), which says itself when the id names nobody
 const usersRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: routes.users,
@@ -119,8 +123,9 @@ const usersRoute = createRoute({
 const userRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: routes.user,
+  validateSearch: userSearch,
   component: function UserRoute() {
-    return <UserView id={userRoute.useParams().id} />
+    return <UserView id={userRoute.useParams().id} search={userRoute.useSearch()} />
   },
 })
 
@@ -143,6 +148,38 @@ const groupRoute = createRoute({
   },
 })
 
+// /errors: each kind of fault the server logged, how far back, its filters and the open fault in the address (ErrorsView);
+// /server-log, a log's lines, the log, level and words in the address (ServerLogView); /audit, what was done, its filters
+// in the address (AuditView); /jobs, every background job (JobsView)
+const errorsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: routes.errors,
+  validateSearch: errorsSearch,
+  component: function ErrorsRoute() {
+    return <ErrorsView search={errorsRoute.useSearch()} />
+  },
+})
+
+const serverLogRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: routes.serverLog,
+  validateSearch: serverLogSearch,
+  component: function ServerLogRoute() {
+    return <ServerLogView search={serverLogRoute.useSearch()} />
+  },
+})
+
+const auditRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: routes.audit,
+  validateSearch: auditSearch,
+  component: function AuditRoute() {
+    return <AuditView search={auditRoute.useSearch()} />
+  },
+})
+
+const jobsRoute = createRoute({ getParentRoute: () => rootRoute, path: routes.jobs, component: JobsView })
+
 const routeTree = rootRoute.addChildren([
   dashboardRoute,
   clientsRoute,
@@ -159,6 +196,10 @@ const routeTree = rootRoute.addChildren([
   storeRoute,
   backendsRoute,
   backendRoute,
+  errorsRoute,
+  serverLogRoute,
+  auditRoute,
+  jobsRoute,
 ])
 
 /**
@@ -178,14 +219,17 @@ export function RouteError({ error, reset }: ErrorComponentProps) {
   )
 }
 
+// The parameters that can repeat, so they come as lists: the Audit Trail's kinds (?kind=document&kind=folder)
+const REPEATED = ['kind']
+
 // The app lives under /admin (ADMIN_BASE), served by AdminAppServlet. Addresses carry plain strings, as the User app's do
-// (@healdan/shell's parseSearch); no parameter repeats yet.
+// (@healdan/shell's parseSearch), and those in REPEATED come as lists.
 export function createAdminRouter(history?: RouterHistory) {
   return createRouter({
     routeTree,
     basepath: ADMIN_BASE,
     history,
-    parseSearch: (search) => parseSearch(search),
+    parseSearch: (search) => parseSearch(search, REPEATED),
     stringifySearch,
     defaultErrorComponent: RouteError,
   })

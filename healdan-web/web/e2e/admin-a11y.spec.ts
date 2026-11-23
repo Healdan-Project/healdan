@@ -9,15 +9,19 @@ import { ADMIN_PASSWORD, ADMIN_USERNAME, expectListUnder, signIn } from './helpe
 // Phase 2's screens (8.2 to 8.5: Clients, Matters, a matter's Overview and Workspace, and Workspace Templates), on
 // Phase 3's (8.6: Stores, a Store's three tabs, Backends with the storage settings, and a backend's page, with the Add
 // Backend, Key History and Change Backend dialogs) and on Phase 4's (8.7: Users, a person's page, Groups and a group's
-// page, with the New User, Reset Password, Disable, New Group and Add Member dialogs), in the light theme and in the dark
-// one, which Playwright's `colorScheme` switches as the system's setting would, and in a tablet-wide window with the left
-// pane opened over the main area, where the Stores and Backends lists are checked too. A real browser draws the page, so
-// this is where the screens' colour contrast is checked: the app's Vitest checks run in jsdom, which has no colours. It
-// signs in as the stack's admin and depends on nothing an earlier step left. It changes nothing global: Phase 3's dialogs
-// are closed with nothing sent, and Phase 4's are opened on a person and a group it makes, with names of its own run, in
-// each theme, whose password it resets and whose Disable it cancels. The find and Phase 2's screens look at the smoke
-// fixture's client and matter, and Phase 3's at its Store Smoke and the storage overlay's Smoke Garage, which every smoke
-// stack has, and which it only reads.
+// page, with the New User, Reset Password, Disable, New Group and Add Member dialogs) and on Phase 5's (8.8: Errors with a
+// fault's details, the Server Log following and paused, the Audit Trail with a row's details and its Person and Matter
+// lists open, Background Jobs with a task's Schedule… and Disable question, and a matter's and a person's Activity tabs),
+// in the light theme and in the dark one, which Playwright's `colorScheme` switches as the system's setting would, and in
+// a tablet-wide window with the left pane opened over the main area, where the Stores, Backends, Errors and Audit Trail
+// lists are checked too. A real browser draws the page, so this is where the screens' colour contrast is checked: the
+// app's Vitest checks run in jsdom, which has no colours. It signs in as the stack's admin and depends on nothing an
+// earlier step left. It changes nothing global: Phase 3's dialogs are closed with nothing sent, and Phase 4's are opened
+// on a person and a group it makes, with names of its own run, in each theme, whose password it resets and whose Disable
+// it cancels. Phase 5's resolve no fault and run, stop, switch or reschedule no job: Schedule… and Disable's question are
+// cancelled with nothing sent. The find and Phase 2's screens look at the smoke fixture's client and matter, Phase 3's at
+// its Store Smoke and the storage overlay's Smoke Garage, which every smoke stack has, and Phase 5's at matter 1.1, all of
+// which it only reads.
 
 for (const scheme of ['light', 'dark'] as const) {
   test.describe(`the Dashboard in the ${scheme} theme`, () => {
@@ -325,6 +329,150 @@ for (const scheme of ['light', 'dark'] as const) {
       await expect(main().getByRole('heading', { level: 1, name: 'Dashboard' })).toBeVisible()
     })
 
+    // Phase 5's screens (admin spec 8.8), opened from the left pane, whose Errors and Background Jobs entries can carry their
+    // counts: Errors with the first fault's details, when there is one, the Server Log following and paused, the Audit
+    // Trail with a row's details and its Person and Matter lists open, Background Jobs with Tags Processor's Schedule… and
+    // Disable question, both cancelled, the focus back on the button each time, and the Activity tabs of matter 1.1, with a
+    // To Date before its From Date, and of the person this theme made. It only reads: no request it makes may change
+    // anything
+    test('Errors, the Server Log, the Audit Trail, Background Jobs and the Activity tabs, with their dialogs', async () => {
+      test.setTimeout(150_000)
+      const pane = page.getByRole('navigation', { name: 'Navigation' })
+      const entry = (name: string) => pane.getByRole('link', { name: new RegExp(`^${name}(,|$)`) })
+      const list = (name: string) => main().getByRole('grid', { name })
+      /** The rows of a list, without its headings */
+      const rows = (name: string) => list(name).getByRole('row').filter({ has: page.getByRole('rowheader') })
+      const changes: string[] = []
+      const writes = (request: Request) => {
+        if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method())) changes.push(`${request.method()} ${new URL(request.url()).pathname}`)
+      }
+      page.on('request', writes)
+
+      // Taken off whatever happens, so a failing step leaves it on no later test
+      try {
+        await test.step("Errors, with a fault's details", async () => {
+          await entry('Errors').click()
+          await expect(main().getByRole('heading', { level: 1, name: 'Errors' })).toBeVisible()
+          await expect(list('Errors')).toBeVisible()
+          await expect(main().getByText('Loading…')).toHaveCount(0)
+          await check('the Errors list')
+          // A fresh stack has faults of its own; a stack with none has no details to open
+          if ((await rows('Errors').count()) > 0) {
+            await rows('Errors').first().getByRole('rowheader').click()
+            const details = main().getByRole('region', { name: 'Error Details' })
+            await expect(details.getByRole('group', { name: 'Latest Message' })).not.toBeEmpty()
+            await check("a fault's details")
+          }
+        })
+
+        await test.step('the Server Log, following and paused', async () => {
+          await entry('Server Log').click()
+          await expect(main().getByRole('heading', { level: 1, name: 'Server Log' })).toBeVisible()
+          await expect(main().getByRole('region', { name: 'Lines of Main Log' }).getByRole('listitem').first()).toBeVisible()
+          await expect(main().getByRole('status').filter({ hasText: 'Following Live' })).toBeVisible()
+          await check('the Server Log, following')
+          await main().getByRole('button', { name: 'Pause', exact: true }).click()
+          await expect(main().getByRole('status').filter({ hasText: 'Paused' })).toBeVisible()
+          await check('the Server Log, paused')
+          await main().getByRole('button', { name: 'Follow', exact: true }).click()
+          await expect(main().getByRole('status').filter({ hasText: 'Following Live' })).toBeVisible()
+        })
+
+        await test.step("the Audit Trail, with a row's details and its pickers' lists open", async () => {
+          await entry('Audit Trail').click()
+          await expect(main().getByRole('heading', { level: 1, name: 'Audit Trail' })).toBeVisible()
+          await expect(rows('Audit Trail').first()).toBeVisible()
+          await expect(main().getByText('Loading…')).toHaveCount(0)
+          // Refresh and Export CSV, buttons beside the title
+          await expect(main().getByRole('button', { name: 'Refresh', exact: true })).toBeVisible()
+          await expect(main().getByRole('button', { name: 'Export CSV' })).toBeVisible()
+          await check('the Audit Trail')
+          await rows('Audit Trail').first().getByRole('rowheader').click()
+          await expect(main().getByRole('region', { name: 'Row Details' })).toBeVisible()
+          await check("the Audit Trail with a row's details")
+          // The person this theme made, by their username, and matter 1.1, each list drawn after its field, as the forms' are;
+          // Esc closes each list, and the typing is taken away, with nothing picked
+          const filters = main().getByRole('group', { name: 'Filters' })
+          const person = filters.getByRole('combobox', { name: 'Person' })
+          await person.fill(own.username)
+          await expect(page.getByRole('option', { name: new RegExp(own.username) })).toBeVisible()
+          await check("the Audit Trail's list of people")
+          await page.keyboard.press('Escape')
+          await expect(page.getByRole('listbox')).toBeHidden()
+          await person.fill('')
+          const matter = filters.getByRole('combobox', { name: 'Matter' })
+          await matter.fill('Smoke Matter')
+          await expect(page.getByRole('option', { name: /^1\.1 – Smoke Matter/ })).toBeVisible()
+          await check("the Audit Trail's list of matters")
+          await page.keyboard.press('Escape')
+          await expect(page.getByRole('listbox')).toBeHidden()
+          await matter.fill('')
+          await expect(page).toHaveURL(/\/admin\/audit$/)
+        })
+
+        await test.step("Background Jobs, with a task's Schedule… and its Disable question, cancelled", async () => {
+          await entry('Background Jobs').click()
+          const table = main().getByRole('table', { name: 'Background Jobs' })
+          await expect(table.getByRole('rowheader', { name: "LogicalDOC's Tasks" })).toBeVisible()
+          await check('Background Jobs')
+          const opens = table.getByRole('button', { name: 'Schedule of Tags Processor' })
+          await opens.click()
+          const schedule = page.getByRole('dialog', { name: 'Schedule of Tags Processor' })
+          await expect(schedule.getByRole('radio', { name: 'Every So Often' })).toBeChecked()
+          await check('Schedule…')
+          await schedule.getByRole('button', { name: 'Cancel' }).click()
+          await expect(schedule).toBeHidden()
+          // Each closed, its focus goes back to the button that opened it
+          await expect(opens).toBeFocused()
+          const disable = table.getByRole('button', { name: 'Disable Tags Processor' })
+          await disable.click()
+          const question = page.getByRole('alertdialog', { name: 'Disable Tags Processor?' })
+          await expect(question).toBeVisible()
+          await check("Disable's question")
+          await question.getByRole('button', { name: 'Cancel' }).click()
+          await expect(question).toBeHidden()
+          await expect(disable).toBeFocused()
+        })
+
+        await test.step("matter 1.1's Activity, and the person's", async () => {
+          await entry('Matters').click()
+          await list('Matters').getByRole('row', { name: /^1\.1 Smoke Matter/ }).click()
+          await main().getByRole('tab', { name: 'Activity' }).click()
+          await expect(rows('Activity of 1.1 Smoke Matter').first()).toBeVisible()
+          await expect(main().getByText('Loading…')).toHaveCount(0)
+          const panel = main().getByRole('tabpanel', { name: 'Activity' })
+          await expect(panel.getByRole('button', { name: 'Refresh', exact: true })).toBeVisible()
+          await check("a matter's Activity")
+          // Its own days, a To Date before the From Date, which the tab says can keep no row: typed into each date's parts,
+          // which go on to the next as each is filled. The days are the tab's own, and go with the page
+          for (const [field, typed] of [['From Date', '01022026'], ['To Date', '01012026']]) {
+            await panel.getByRole('group', { name: field }).getByRole('spinbutton', { name: new RegExp(`^month, ${field}`) }).click()
+            await page.keyboard.type(typed)
+          }
+          await expect(panel.getByText('The To Date is before the From Date, so no row can match.')).toBeVisible()
+          await expect(main().getByText('Loading…')).toHaveCount(0)
+          await check("a matter's Activity with a To Date before its From Date")
+
+          await entry('Users').click()
+          await main().getByRole('group', { name: 'Filter Users' }).getByRole('textbox', { name: 'Name, Username or Email' }).fill(own.username)
+          await rows('Users').filter({ has: page.getByRole('gridcell', { name: own.username, exact: true }) }).getByRole('rowheader').click()
+          await expect(main().getByRole('heading', { level: 1, name: own.person })).toBeVisible()
+          await main().getByRole('tab', { name: 'Activity' }).click()
+          // Their account's making, its password's reset, and their groups
+          await expect(rows(`Activity of ${own.person}`).first()).toBeVisible()
+          await expect(main().getByText('Loading…')).toHaveCount(0)
+          await check("a person's Activity")
+        })
+
+        // Back where the next test starts
+        await pane.getByRole('link', { name: 'Dashboard' }).click()
+        await expect(main().getByRole('heading', { level: 1, name: 'Dashboard' })).toBeVisible()
+      } finally {
+        page.off('request', writes)
+      }
+      expect(changes, "Phase 5's screens and dialogs, only read").toEqual([])
+    })
+
     test('a tablet-wide window, with the left pane opened over the main area', async () => {
       await page.setViewportSize({ width: 768, height: 1024 })
       const navigation = banner().getByRole('button', { name: 'Navigation' })
@@ -340,13 +488,17 @@ for (const scheme of ['light', 'dark'] as const) {
       await page.keyboard.press('Escape')
       await expect(page.getByRole('navigation', { name: 'Navigation' })).toHaveCount(0)
       await expect(navigation).toBeFocused()
-      // Phase 3's lists at the same width, each reached from the pane, which closes as its link is followed
-      for (const screen of ['Stores', 'Backends']) {
+      // Phase 3's and Phase 5's lists at the same width, each reached from the pane, which closes as its link is followed. The
+      // Errors entry can carry its count, and the Errors list can be empty, which it then says
+      for (const screen of ['Stores', 'Backends', 'Errors', 'Audit Trail']) {
         await navigation.click()
-        await page.getByRole('navigation', { name: 'Navigation' }).getByRole('link', { name: screen }).click()
+        await page.getByRole('navigation', { name: 'Navigation' }).getByRole('link', { name: new RegExp(`^${screen}(,|$)`) }).click()
         await expect(page.getByRole('navigation', { name: 'Navigation' })).toHaveCount(0)
-        await expect(main().getByRole('grid', { name: screen }).getByRole('row').nth(1)).toBeVisible()
+        await expect(main().getByRole('heading', { level: 1, name: screen })).toBeVisible()
+        if (screen !== 'Errors') await expect(main().getByRole('grid', { name: screen }).getByRole('row').nth(1)).toBeVisible()
         await expect(main().getByText('Loading…')).toHaveCount(0)
+        // Nothing scrolls sideways, the filters included
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), `${screen} at 768 pixels`).toBe(true)
         await check(`the ${screen} list at 768 pixels`)
       }
       await navigation.click()

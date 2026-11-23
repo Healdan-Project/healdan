@@ -25,10 +25,15 @@ import org.junit.Before;
 import org.junit.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 
+import com.logicaldoc.core.document.Document;
+import com.logicaldoc.core.folder.Folder;
+import com.logicaldoc.core.folder.FolderDAO;
+import com.logicaldoc.core.security.Tenant;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.healdan.AbstractHealdanTestCase;
 import com.logicaldoc.healdan.admin.Page;
 import com.logicaldoc.healdan.admin.errors.ErrorQuery.Window;
+import com.logicaldoc.healdan.matter.Matter;
 import com.logicaldoc.healdan.support.HealdanFixtures;
 import com.logicaldoc.util.spring.Context;
 
@@ -202,13 +207,56 @@ public class ErrorStoreTest extends AbstractHealdanTestCase {
 		long id = idOf(STORAGE, "It failed");
 		store.resolve(id, admin);
 
-		store.reopen(id);
+		assertTrue(store.reopen(id));
 
 		ErrorGroup reopened = store.find(id).orElseThrow();
 		assertFalse(reopened.resolved());
 		assertNull(reopened.resolvedBy());
 		assertNull(reopened.resolvedAt());
 		assertTrue(store.find(id + 1000).isEmpty());
+	}
+
+	@Test
+	public void testResolveAndReopenSayWhetherTheyChangedTheFault() throws Exception {
+		store.add(error(Instant.now(), STORAGE, "It failed", null));
+		long id = idOf(STORAGE, "It failed");
+
+		assertFalse("not resolved", store.reopen(id));
+		assertTrue(store.resolve(id, admin));
+		assertFalse("already resolved", store.resolve(id, fx.user("other", "admin")));
+		assertEquals("admin", store.find(id).orElseThrow().resolvedBy());
+		assertTrue(store.reopen(id));
+		assertFalse(store.reopen(id));
+		assertFalse("no fault", store.resolve(id + 1000, admin));
+		assertFalse("no fault", store.reopen(id + 1000));
+	}
+
+	@Test
+	public void testDocuments() throws Exception {
+		Matter matter = fx.matter(fx.client(1, "Ashcombe"), 1, "Charter", fx.store("Client Work"));
+		Folder documents = fx.folder(FolderDAO.get().findById(matter.getFolderId()), "Documents");
+		Document named = fx.upload(documents, "letter.txt", "Dear Sir", admin);
+		Document deleted = fx.upload(documents, "draft.txt", "Draft", admin);
+		jdbc.update("update ld_document set ld_deleted = 1 where ld_id = ?", deleted.getId());
+		Document unnumbered = fx.upload(documents, "note.txt", "Note", admin);
+		jdbc.update("update ld_document set ld_customid = 'A-12' where ld_id = ?", unnumbered.getId());
+		long missing = unnumbered.getId() + 1000;
+		Document elsewhere = fx.upload(documents, "other.txt", "Another tenant's", admin);
+		jdbc.update("update ld_document set ld_tenantid = 2 where ld_id = ?", elsewhere.getId());
+
+		List<ErrorDocument> found = store.findDocuments(Tenant.DEFAULT_ID, List.of(deleted.getId(), missing,
+				named.getId(), unnumbered.getId(), named.getId(), elsewhere.getId()));
+
+		// In the order the message names them, a deleted one too, and an id no document of the reader's tenant has
+		// with nothing else
+		assertEquals(List.of(
+				new ErrorDocument(deleted.getId(), Long.valueOf(deleted.getCustomId()), "draft.txt"),
+				new ErrorDocument(missing, null, null),
+				new ErrorDocument(named.getId(), Long.valueOf(named.getCustomId()), "letter.txt"),
+				new ErrorDocument(unnumbered.getId(), null, "note.txt"),
+				new ErrorDocument(named.getId(), Long.valueOf(named.getCustomId()), "letter.txt"),
+				new ErrorDocument(elsewhere.getId(), null, null)), found);
+		assertEquals(List.of(), store.findDocuments(Tenant.DEFAULT_ID, List.of()));
 	}
 
 	@Test
@@ -247,16 +295,16 @@ public class ErrorStoreTest extends AbstractHealdanTestCase {
 		store.add(error(now.minus(Duration.ofDays(3)), SERVER, "The listing failed", null));
 
 		assertEquals(List.of("The preview of document 5 failed"), messages(query(Window.HOUR), now));
-		Page<ErrorGroup> day = store.list(query(Window.DAY), now);
+		Page<ErrorGroup> day = store.list(query(Window.DAY), now).page();
 		assertEquals(List.of("The preview of document 5 failed", "Backend 'Cloud' isn't 100% there"),
 				day.items().stream().map(ErrorGroup::message).toList());
 		assertEquals(2, day.total());
 		assertEquals(List.of("The preview of document 5 failed", "Backend 'Cloud' isn't 100% there",
 				"The listing failed"), messages(query(Window.WEEK), now));
-		assertEquals(3, store.list(query(Window.MONTH), now).total());
+		assertEquals(3, store.list(query(Window.MONTH), now).page().total());
 
 		// Times counts the hours in the window; Total, every time
-		ErrorGroup preview = store.list(query(Window.HOUR), now).items().get(0);
+		ErrorGroup preview = store.list(query(Window.HOUR), now).page().items().get(0);
 		assertEquals(2, preview.times());
 		assertEquals(3, preview.total());
 		assertEquals(3, day.items().get(0).times());
@@ -284,12 +332,59 @@ public class ErrorStoreTest extends AbstractHealdanTestCase {
 				messages(new ErrorQuery(Window.WEEK, "documentresource", "", false, 0, 50), now));
 
 		// Paging
-		Page<ErrorGroup> second = store.list(new ErrorQuery(Window.WEEK, null, null, false, 1, 1), now);
+		Page<ErrorGroup> second = store.list(new ErrorQuery(Window.WEEK, null, null, false, 1, 1), now).page();
 		assertEquals(List.of("Backend 'Cloud' isn't 100% there"),
 				second.items().stream().map(ErrorGroup::message).toList());
 		assertEquals(1, second.offset());
 		assertEquals(1, second.limit());
 		assertEquals(3, second.total());
+	}
+
+	@Test
+	public void testTheWordsNeverMatchAUrlsCredentials() {
+		Instant now = Instant.now().truncatedTo(ChronoUnit.MILLIS);
+		String reach = "Can't reach jdbc:postgresql://healdan:Hunter2@db/healdan";
+		String list = "Can't read amqp://u:Secret9@h1,amqp://v:Other7@h2/queue";
+		store.add(error(now.minus(Duration.ofMinutes(10)), STORAGE, reach, null));
+		store.add(error(now.minus(Duration.ofMinutes(5)), SERVER, list, null));
+
+		// The user part of each URL's authority, password and all, isn't what the words are compared with
+		for (String hidden : List.of("hunter2", "healdan:", "secret9", "other7", "v:"))
+			assertEquals(hidden, List.of(), messages(new ErrorQuery(Window.DAY, hidden, null, false, 0, 50), now));
+		// What the screen shows of them is
+		assertEquals(List.of(reach), messages(new ErrorQuery(Window.DAY, "postgresql://db/", null, false, 0, 50), now));
+		assertEquals(List.of(list), messages(new ErrorQuery(Window.DAY, "amqp://h1,amqp://h2", null, false, 0, 50), now));
+		// An @ outside a URL's authority is the message's own
+		store.add(error(now, SERVER, "Mail to ops@example.com failed", null));
+		assertEquals(List.of("Mail to ops@example.com failed"),
+				messages(new ErrorQuery(Window.DAY, "ops@example", null, false, 0, 50), now));
+	}
+
+	@Test
+	public void testListCountsTheErrorsOfEveryPage() {
+		Instant now = Instant.now().truncatedTo(ChronoUnit.MILLIS);
+		store.add(error(now.minus(Duration.ofHours(3)), PREVIEWS, "The preview of document 5 failed", null));
+		store.add(error(now.minus(Duration.ofMinutes(30)), PREVIEWS, "The preview of document 5 failed", null));
+		store.add(error(now.minus(Duration.ofMinutes(20)), PREVIEWS, "The preview of document 5 failed", null));
+		store.add(error(now.minus(Duration.ofMinutes(10)), STORAGE, "Backend 'Cloud' isn't there", null));
+		store.add(error(now.minus(Duration.ofDays(3)), SERVER, "The listing failed", null));
+		store.add(error(now.minus(Duration.ofDays(3)), SERVER, "The listing failed", null));
+
+		// The heading's errors: the times of every fault the filters keep, not only the page's
+		ErrorPage first = store.list(new ErrorQuery(Window.WEEK, null, null, false, 0, 1), now);
+		assertEquals(1, first.page().items().size());
+		assertEquals(3, first.page().total());
+		assertEquals(6, first.errors());
+		// By the window's hours, as each fault's times
+		ErrorPage hour = store.list(query(Window.HOUR), now);
+		assertEquals(hour.page().items().stream().mapToLong(ErrorGroup::times).sum(), hour.errors());
+		assertEquals(3, hour.errors());
+		// With the filters
+		assertEquals(3, store.list(new ErrorQuery(Window.DAY, null, ErrorAreas.PREVIEWS, false, 0, 50), now).errors());
+		assertEquals(2, store.list(new ErrorQuery(Window.WEEK, "listing", null, false, 0, 50), now).errors());
+		ErrorPage none = store.list(new ErrorQuery(Window.WEEK, "nothing like it", null, false, 0, 50), now);
+		assertEquals(0, none.page().total());
+		assertEquals(0, none.errors());
 	}
 
 	@Test
@@ -337,7 +432,7 @@ public class ErrorStoreTest extends AbstractHealdanTestCase {
 	}
 
 	private List<String> messages(ErrorQuery query, Instant now) {
-		return store.list(query, now).items().stream().map(ErrorGroup::message).toList();
+		return store.list(query, now).page().items().stream().map(ErrorGroup::message).toList();
 	}
 
 	private static ErrorQuery query(Window window) {

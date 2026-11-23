@@ -1,0 +1,146 @@
+/* SPDX-FileCopyrightText: 2026 The Healdan Project
+   SPDX-License-Identifier: LGPL-3.0-only */
+
+/* Background Jobs: every job in one plain table, as a person's devices are (People.module.css), since each row holds its
+   own buttons: Healdan's jobs under their heading, then LogicalDOC's tasks under theirs, a failed run's error under its
+   row. And Schedule…'s Every, its number and unit side by side. */
+
+.about {
+  max-width: 760px;
+  margin: var(--hd-space-2) 0 var(--hd-space-4);
+  color: var(--hd-text-secondary);
+}
+
+/* The table scrolls sideways in a narrow window, never the page */
+.tableBox {
+  max-width: 100%;
+  margin-bottom: var(--hd-space-5);
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table th,
+.table td {
+  padding: var(--hd-space-2) var(--hd-space-4) var(--hd-space-2) 0;
+  border-bottom: 1px solid var(--hd-line);
+  text-align: start;
+  vertical-align: middle;
+}
+
+.table thead th {
+  color: var(--hd-text-secondary);
+  font-size: var(--hd-font-size-small);
+  font-weight: var(--hd-weight-bold);
+}
+
+.table td {
+  white-space: nowrap;
+}
+
+/* Healdan's Jobs and LogicalDOC's Tasks, each over its rows */
+.table .group {
+  padding-top: var(--hd-space-5);
+  color: var(--hd-text-secondary);
+  font-size: var(--hd-font-size-small);
+  font-weight: var(--hd-weight-bold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* The job's name takes what the rest leave, and wraps between words; the focus comes to it when its button goes */
+.table .name {
+  width: 99%;
+  min-width: 140px;
+  font-weight: var(--hd-weight-medium);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.name:focus-visible {
+  outline: var(--hd-focus-outline);
+  outline-offset: calc(var(--hd-focus-offset) * -1);
+}
+
+.muted {
+  color: var(--hd-text-secondary);
+}
+
+/* What Stop's and Disable's questions say */
+.line {
+  margin: 0;
+}
+
+/* After a next run long past */
+.overdue {
+  margin-inline-start: var(--hd-space-2);
+  color: var(--hd-caution-text);
+  font-size: var(--hd-font-size-small);
+  font-weight: var(--hd-weight-medium);
+}
+
+.cron {
+  font-family: ui-monospace, "SF Mono", menlo, consolas, monospace;
+  font-size: var(--hd-font-size-small);
+}
+
+/* The row's buttons, at its end, in one line */
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--hd-space-2);
+}
+
+/* Under a job's row: its last error, and what the server refused of a button pressed in it */
+.table tr:has(+ .more) > * {
+  border-bottom: 0;
+}
+
+.table .more > td {
+  padding-top: 0;
+  white-space: normal;
+}
+
+.more p {
+  margin: 0;
+}
+
+.errorLabel {
+  display: block;
+  color: var(--hd-text-secondary);
+  font-size: var(--hd-font-size-small);
+  font-weight: var(--hd-weight-bold);
+}
+
+/* As the server logged it: its own lines kept, wrapped where they're long */
+.error {
+  display: block;
+  max-width: 100%;
+  margin: var(--hd-space-1) 0 0;
+  overflow-wrap: anywhere;
+  color: var(--hd-text);
+  font-family: ui-monospace, "SF Mono", menlo, consolas, monospace;
+  font-size: var(--hd-font-size-small);
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+/* Schedule…'s Every: the number, and its unit beside it, their labels level; what's said under the number grows it alone */
+.every {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--hd-space-3);
+}
+
+.every > :first-child {
+  flex: 1 1 140px;
+  max-width: 200px;
+}
+
+.every > :last-child {
+  flex: 0 1 160px;
+}

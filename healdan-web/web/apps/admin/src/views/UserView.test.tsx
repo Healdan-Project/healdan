@@ -6,10 +6,12 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import type { adminComponents } from '@healdan/api'
 import { formatDate, formatDateTime } from '@healdan/ui'
+import { AUDIT_PAGE_SIZE } from '../monitoring/queries'
 import { expectNoAxeViolations } from '../test/axe'
 import {
   adminGroup,
   adminRow,
+  auditTrail,
   everyone,
   helenRow,
   jamieRow,
@@ -23,6 +25,7 @@ import {
   userCheckout,
   userOf,
   users,
+  type FakeApi,
   type Routes,
 } from '../test/fakeApi'
 import { renderApp } from '../test/renderApp'
@@ -527,5 +530,90 @@ describe("A person's page", () => {
     expect(await screen.findByText("Couldn't refresh this, so it shows what was read last.")).toBeTruthy()
     expect(screen.getByRole('dialog', { name: 'Edit Priya Nair' })).toBe(dialog)
     expect((within(dialog).getByRole('textbox', { name: 'First Name' }) as HTMLInputElement).value).toBe('Priyanka')
+  })
+})
+
+describe("A person's Activity", () => {
+  const ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone
+  const asked = (api: FakeApi) => api.callsTo('GET /v1/admin/audit').map((call) => call.query)
+  const audit: Routes = { 'GET /v1/admin/audit': ({ query }: { query?: Record<string, unknown> }) => auditTrail(query) }
+
+  it('is the Audit Trail with the person fixed, in a tab beside their Overview, the tab in the address, with no export', async () => {
+    const { api, router, view } = await openPerson(priyaRow.id, audit)
+    const tabs = within(main()).getByRole('tablist', { name: 'Sections' })
+    expect(within(tabs).getAllByRole('tab').map((tab) => [tab.textContent, tab.getAttribute('aria-selected')])).toEqual([
+      ['Overview', 'true'],
+      ['Activity', 'false'],
+    ])
+    expect(asked(api)).toEqual([])
+    await userEvent.click(within(tabs).getByRole('tab', { name: 'Activity' }))
+    await waitFor(() => expect(router.state.location.search).toEqual({ tab: 'activity' }))
+    const panel = within(main()).getByRole('tabpanel', { name: 'Activity' })
+    const list = await within(panel).findByRole('grid', { name: 'Activity of Priya Nair' })
+    await waitFor(() => expect(within(list).getAllByRole('row').length).toBeGreaterThan(1))
+    expect(asked(api)).toEqual([{ userId: priyaRow.id, zone: ZONE, limit: AUDIT_PAGE_SIZE }])
+    const kinds = within(panel).getByRole('group', { name: 'Kind' })
+    expect(within(kinds).getAllByRole('checkbox').map((box) => box.closest('label')?.textContent)).toEqual(['Sign-In', 'Document', 'Folder', 'User', 'Administration'])
+    expect(within(panel).queryByRole('combobox')).toBeNull()
+    expect(within(panel).queryByRole('link', { name: 'Export CSV' })).toBeNull()
+    expect(within(panel).getByRole('link', { name: 'Open in the Audit Trail' }).getAttribute('href')).toBe(`/admin/audit?user=${priyaRow.id}`)
+    await expectNoAxeViolations(view.container)
+
+    await userEvent.click(within(kinds).getByRole('checkbox', { name: 'Sign-In' }))
+    await waitFor(() => expect(asked(api).at(-1)).toEqual({ userId: priyaRow.id, kind: ['sign-in'], zone: ZONE, limit: AUDIT_PAGE_SIZE }))
+
+    await userEvent.click(within(tabs).getByRole('tab', { name: 'Overview' }))
+    await waitFor(() => expect(router.state.location.search).toEqual({}))
+    expect(within(main()).getByRole('region', { name: 'Details' })).toBeTruthy()
+  })
+
+  it('asks the list again after a change made on the page, as the change is recorded', async () => {
+    const { api } = await renderApp(`/users/${priyaRow.id}?tab=activity`, {
+      ...peopleRoutes(),
+      ...audit,
+      'POST /v1/admin/users/7/disable': () => userOf({ ...priyaRow, status: 'disabled', devices: 0 }),
+    })
+    await within(main()).findByRole('grid', { name: 'Activity of Priya Nair' })
+    await waitFor(() => expect(asked(api)).toHaveLength(1))
+    await userEvent.click(action('Disable')!)
+    await userEvent.click(within(await screen.findByRole('alertdialog', { name: 'Disable Priya Nair?' })).getByRole('button', { name: 'Disable' }))
+    await waitFor(() => expect(asked(api)).toHaveLength(2))
+    expect(asked(api).at(-1)).toEqual({ userId: priyaRow.id, zone: ZONE, limit: AUDIT_PAGE_SIZE })
+  })
+
+  it('asks the list again with Refresh, which holds while it reads and keeps the focus', async () => {
+    const { api } = await renderApp(`/users/${priyaRow.id}?tab=activity`, { ...peopleRoutes(), ...audit })
+    const panel = await within(main()).findByRole('tabpanel', { name: 'Activity' })
+    await within(panel).findByRole('grid', { name: 'Activity of Priya Nair' })
+    await waitFor(() => expect(asked(api)).toHaveLength(1))
+    const refresh = within(panel).getByRole('button', { name: 'Refresh' })
+    await userEvent.click(refresh)
+    await waitFor(() => expect(asked(api)).toHaveLength(2))
+    await waitFor(() => expect(refresh.hasAttribute('data-pending')).toBe(false))
+    expect(document.activeElement).toBe(refresh)
+  })
+
+  it('opens at Activity when the address names it', async () => {
+    await renderApp(`/users/${priyaRow.id}?tab=activity`, { ...peopleRoutes(), ...audit })
+    expect(await within(main()).findByRole('grid', { name: 'Activity of Priya Nair' })).toBeTruthy()
+    expect(within(main()).getByRole('tab', { name: 'Activity' }).getAttribute('aria-selected')).toBe('true')
+  })
+
+  it('opens at the Overview for a tab it doesn\'t know', async () => {
+    await renderApp(`/users/${priyaRow.id}?tab=devices`, { ...peopleRoutes(), ...audit })
+    await within(main()).findByRole('heading', { level: 1 })
+    expect(within(main()).getByRole('tab', { name: 'Overview' }).getAttribute('aria-selected')).toBe('true')
+  })
+
+  it("keeps their groups' unsaved change through a change of tab, asking nothing", async () => {
+    const { router } = await openPerson(priyaRow.id, audit)
+    await userEvent.click(within(main()).getByRole('button', { name: 'Remove Trainees' }))
+    expect(groupsOf('Priya Nair').map((item) => item.textContent)).toEqual(['EveryoneEveryone but a read-only account is in Everyone.'])
+    await userEvent.click(within(main()).getByRole('tab', { name: 'Activity' }))
+    await waitFor(() => expect(router.state.location.search).toEqual({ tab: 'activity' }))
+    expect(screen.queryByRole('alertdialog')).toBeNull()
+    await userEvent.click(within(main()).getByRole('tab', { name: 'Overview' }))
+    expect(groupsOf('Priya Nair').map((item) => item.textContent)).toEqual(['EveryoneEveryone but a read-only account is in Everyone.'])
+    expect(screen.queryByRole('alertdialog')).toBeNull()
   })
 })

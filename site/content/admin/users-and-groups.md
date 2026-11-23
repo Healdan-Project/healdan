@@ -88,11 +88,25 @@ the actions, in Healdan's own words, such as "You can't disable your own account
 [What Healdan Refuses](#what-healdan-refuses). Should something change meanwhile, Healdan's refusal shows when you try,
 under the actions, until you open a dialog or their status changes.
 
-Below them are **Details**: their **Username**, **Email**, **Signs In With** (their sign-in provider, or their
-password, with when it was last set, or that they must change it at their next sign-in), **Language**, **Time Zone**,
-**Account Made** and **Last Sign-In**. A read-only account's details say it's one, and an administrator's that they
-can use the Admin app and read every document. Then come **Groups**, **Signed-In Devices** and **What They Hold**,
-which the sections below describe.
+Below them are two tabs, **Overview** and **Activity**. The page's address keeps the tab, so a reload or a copied
+link opens the same one.
+
+The **Overview** tab has **Details**: their **Username**, **Email**, **Signs In With** (their sign-in provider, or
+their password, with when it was last set, or that they must change it at their next sign-in), **Language**,
+**Time Zone**, **Account Made** and **Last Sign-In**. A read-only account's details say it's one, and an
+administrator's that they can use the Admin app and read every document. Then come **Groups**, **Signed-In Devices**
+and **What They Hold**, which the sections below describe.
+
+The **Activity** tab is the [Audit Trail](../monitoring/audit-trail/) for them alone: what they did, their sign-ins
+among it, and what was done to their account, newest first, with **Kind** tick boxes to keep some kinds of row, and
+**From Date** and **To Date**. A change to their account is listed under who made it, the account named in its
+Detail, and what was done in a session opened as them, by an allowed impersonator, is listed as theirs (see
+[The List](../monitoring/audit-trail/#the-list) and [What Isn't
+Recorded](../monitoring/audit-trail/#what-isnt-recorded)). **Refresh** asks for the list again. Moving to the tab
+keeps what you were changing to their groups, and asks nothing. **Open in the Audit Trail** opens the Audit Trail with
+them, the kinds you ticked and the days, as its filters, for the rest of its filters and **Export CSV**. On a large
+server the tab can say it has found nothing back to a date before a quiet person's rows come: see [Reading Further
+Back](../monitoring/audit-trail/#reading-further-back).
 
 An address that names no person says "Person Not Found", with **Go to Users**, as one naming a system account or a
 deleted account does.
@@ -453,7 +467,9 @@ Healdan records each change made here, with who made it, when and from where:
 - **a group** made, with its name and description; renamed or given a new description, before and after; deleted; and
   given a member or losing one.
 
-A change that changes nothing, such as saving someone's groups as they were, isn't recorded.
+A change that changes nothing, such as saving someone's groups as they were, isn't recorded. The
+[Audit Trail](../monitoring/audit-trail/) lists these changes, and a person's **Activity** tab those about them and
+those they made.
 
 ## In the Classic Interface
 

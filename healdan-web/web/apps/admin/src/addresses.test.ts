@@ -3,7 +3,7 @@
 
 import { createMemoryHistory } from '@tanstack/react-router'
 import { describe, expect, it } from 'vitest'
-import { ADMIN_BASE, appAddressOf, clientHref, groupHref, groupIdFrom, pathOf, routes } from './addresses'
+import { ADMIN_BASE, appAddressOf, clientHref, groupHref, groupIdFrom, pathOf, routes, searchId } from './addresses'
 import { createAdminRouter } from './router'
 
 // CE's UrlRewriteFilter isn't anchored at the start of the path, and login.jsp drops some return paths, so no address
@@ -70,6 +70,25 @@ describe('The Admin app\'s addresses', () => {
       ].sort(),
     )
     expect(routes.dashboard).toBe('/')
+  })
+
+  it("routes Monitoring's four screens", () => {
+    const router = createAdminRouter(createMemoryHistory({ initialEntries: ['/admin/'] }))
+    expect(Object.keys(router.routesByPath)).toEqual(expect.arrayContaining(['/errors', '/server-log', '/audit', '/jobs']))
+  })
+})
+
+describe('An id in a search parameter', () => {
+  it('is read as the address gives it, as text, or as the router validated it before, as a number', () => {
+    expect(searchId('10388')).toBe(10388)
+    expect(searchId(10388)).toBe(10388)
+    expect(searchId('0')).toBe(0)
+  })
+
+  it("isn't read from anything else: no digits, a sign, a fraction, words, a list, or more than a safe integer", () => {
+    for (const value of [undefined, null, '', '-5', '+5', '1.5', ' 7', '7x', '99999999999999999', 1.5, -5, Number.NaN, ['7'], true]) {
+      expect(searchId(value)).toBeUndefined()
+    }
   })
 })
 

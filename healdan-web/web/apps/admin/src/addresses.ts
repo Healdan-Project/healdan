@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
+import { idFrom } from '@healdan/shell'
+
 /** Where AdminAppServlet serves the app, the router's basepath. Only the root context is supported. */
 export const ADMIN_BASE = '/admin'
 
@@ -30,6 +32,14 @@ export const routes = {
   jobs: '/jobs',
   searchIndex: '/search-index',
 } as const
+
+/**
+ * An id or a doc # in a search parameter, as the address gives it (as text) or as the router validated it before (as a
+ * number), or undefined: @healdan/shell's idFrom reads it, digits only, no bigger than a safe integer.
+ */
+export function searchId(value: unknown): number | undefined {
+  return idFrom(typeof value === 'number' ? String(value) : typeof value === 'string' ? value : undefined)
+}
 
 /** A client's page, with ADMIN_BASE: the client's id, as one segment */
 export function clientHref(id: number): string {
@@ -82,6 +92,11 @@ export function groupHref(id: number): string {
 /** A folder in the User app, as Open in Healdan opens a matter's (spec 6.4): its folder's id, as one segment */
 export function userAppFolderHref(folderId: number): string {
   return `/app/folders/${encodeURIComponent(String(folderId))}`
+}
+
+/** A document in the User app, by its # handle, as the Audit Trail's details open one: the doc #, as one segment */
+export function userAppDocHref(docNumber: number): string {
+  return `/app/doc/${encodeURIComponent(String(docNumber))}`
 }
 
 /** A link as the browser reads it against the page, when it's on this origin: a server's link to another is no page here */

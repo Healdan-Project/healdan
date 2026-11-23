@@ -42,6 +42,7 @@ import com.logicaldoc.core.security.Session;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.store.Store;
 import com.logicaldoc.core.store.StoreResource;
+import com.logicaldoc.healdan.admin.DocumentViews;
 import com.logicaldoc.healdan.api.model.DocumentView;
 import com.logicaldoc.healdan.api.model.MoveRequest;
 import com.logicaldoc.healdan.api.model.NewDocument;
@@ -418,7 +419,7 @@ public class DocumentResource {
 	 * draws is its own bytes, as its own content type; a PDF is its own file; any other file's, a TIFF or a HEIC
 	 * included, is its PDF conversion ({@link PreviewState}), which Healdan makes in the background for Office files. Read through the checks of the old UI's preview: the Preview permission on
 	 * top of reading, and not for a document protected by a password. It is not recorded as a download, and needs no
-	 * Download permission.
+	 * Download permission. Served, it is recorded as the person's view of the document ({@link DocumentViews}).
 	 *
 	 * @param docNumber the doc #
 	 * @param version a version of the document, such as {@code 1.0}; the current file by default
@@ -465,6 +466,9 @@ public class DocumentResource {
 			// Opened before the answer starts, as the content's is: an outage is a 503, never a 200 that stops short.
 			// A HEAD opens nothing, which would be left unclosed
 			InputStream in = head ? null : openStream(resource);
+			// Served: the person reads it. A HEAD shows nothing of it
+			if (!head)
+				DocumentViews.get().viewed(document, caller.user(), caller.session(), asked.fileVersion());
 			StreamingOutput body = head ? out -> {
 				// No body: CXF would send the file itself, and a missing entity would make it send Content-Length 0
 			} : out -> {

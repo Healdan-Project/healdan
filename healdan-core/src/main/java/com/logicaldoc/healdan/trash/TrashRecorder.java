@@ -433,7 +433,7 @@ public class TrashRecorder {
 	/**
 	 * @return the doc # a custom id is, when it is a number
 	 */
-	static String docNumber(String customId) {
+	public static String docNumber(String customId) {
 		boolean numbered = customId != null && !customId.isEmpty() && customId.length() <= ListingSql.DOC_NUMBER_DIGITS
 				&& customId.chars().allMatch(c -> c >= '0' && c <= '9');
 		return numbered ? customId : null;

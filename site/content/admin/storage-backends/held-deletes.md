@@ -23,8 +23,10 @@ with, so that a backup restored later still finds every file it names:
   looks for it there. If the delete doesn't go through, as when the operation around it fails, the file moves back to
   its place, or, if the folder can't be reached just then, at the purge's next run.
 
-Once a day, the purge deletes the held copies whose date has come, but not in the first 10 minutes after the server
-starts. It leaves an S3 object that Healdan is using again, as when the same file was uploaded to it since.
+Once a day, the purge deletes the held copies whose date has come, but its daily run never comes in the first 10
+minutes after the server starts. **Run Now**, for the Storage Purge on the Admin app's
+[Background Jobs](../../monitoring/background-jobs/), runs it at once, and it still deletes only what's due. It leaves
+an S3 object that Healdan is using again, as when the same file was uploaded to it since.
 
 ## The Holding Period
 

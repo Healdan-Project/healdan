@@ -895,13 +895,18 @@ password.
 | Route | Answers |
 |---|---|
 | `GET /documents/{docNumber}/message` | The subject, From, To, Cc, Sent and Received, the attachments (`index`, `name`, `type`, `size`, `message`, and the `docNumber` of a document already filed from it that the caller can read), and the `body` address. Pictures the body shows aren't attachments |
-| `GET /documents/{docNumber}/message/body?pictures=` | The body as a page of its own, `text/html;charset=utf-8` |
-| `GET /documents/{docNumber}/message/parts/{id}` | An attachment, by its `index`, as a download: `Content-Disposition: attachment`, recorded as a download of the email. With `?inline=true`, a PDF or a picture every browser draws (JPEG, PNG, GIF, WebP, BMP or SVG), known by its type or by its name, to show in place as that type, under Preview, recorded as nothing; any other, a TIFF or a HEIC included, is `404 no-preview` |
+| `GET /documents/{docNumber}/message/body?pictures=` | The body as a page of its own, `text/html;charset=utf-8`, recorded as the caller's view of the email (`event.viewed`), once per person and email in half an hour |
+| `GET /documents/{docNumber}/message/parts/{id}` | An attachment, by its `index`, as a download: `Content-Disposition: attachment`, recorded as a download of the email. With `?inline=true`, a PDF or a picture every browser draws (JPEG, PNG, GIF, WebP, BMP or SVG), known by its type or by its name, to show in place as that type, under Preview, recorded as a view of the email, as the body is; any other, a TIFF or a HEIC included, is `404 no-preview` |
 | `POST /documents/{docNumber}/message/attachments/{id}/file` | Save to Matter: files the attachment in the email's folder as a document of its own, linked to the email as `attachment`, as `POST /emails` does. It takes the properties the email was filed with (its own values of the properties that can be changed, without the email fields, the legacy doc # and any a new document there can't take now, such as an author whose account was deleted), and an optional JSON body, `{"properties": {…}}`, as `POST /documents` takes them, is laid over them. `201`; saving it again files another copy, but an attached message the matter holds is `409 already-filed` with the copy |
 
 Each of them takes `?version=`, a version from the email's timeline such as `1.0`, as `/preview` does: that version's
 message, its body, its attachments and Save to Matter of one of them. `/message`'s `body` address names it too. A
 version the document doesn't have is `404 not-found`.
+
+Reading the email is recorded as a view of it, as a preview is (see [Previews](#previews)): its body and its
+attachments shown in place are one view, once per person and email in half an hour, whichever is served first, so the
+body asked again with `pictures=true`, or an attachment shown after it, adds none. `/message` itself records nothing,
+and nor do a `HEAD`, a refusal or a `404`.
 
 The body page is cleaned by the server: no script, event handler, form, `object`, `embed`, `iframe`, `base` or meta
 refresh, no link but `http`, `https` and `mailto` (each opening in a new window, `noopener noreferrer`), and styles
@@ -949,7 +954,11 @@ document you can't read through the web page doesn't exist through the API eithe
 (`image/*`) of a picture every browser draws (JPEG, PNG, GIF, WebP, BMP or SVG), or the PDF conversion of any other
 file, a TIFF or a HEIC included (M1.5's queue makes one in the background for Office files; asking never makes one). `HEAD` answers the headers alone. `?version=` asks for a version's, as
 for `/content`. It needs the Preview permission on top of reading (`403` without it, and for a document protected by a
-password), and isn't recorded as a download, for a picture as for a PDF (it needs no Download permission).
+password), and isn't recorded as a download, for a picture as for a PDF (it needs no Download permission). Served, it's
+recorded in the document's history as the caller's view of it (`event.viewed`), once per person and document in half
+an hour, with the address the caller's session signed in from; a `202`, a refusal, a `404`, a `503` and a `HEAD`
+record nothing, and a failure to record it never fails the preview. A preview of an earlier file is recorded with the
+version that made it. The half hour is kept in the server's memory, so a restart can record one more.
 
 | Answer | When |
 |---|---|
@@ -1600,6 +1609,129 @@ The routes:
   name, ignoring case, then username, with `q` as the Users list's. Paging's `400` comes before the group's `404`.
 - **`PUT`** and **`DELETE /v1/admin/groups/{id}/members/{userId}`** add and remove one person, and answer `204`: the
   group's `404` first, then the person's, then the change that would change nothing, then the refusals above.
+
+### Monitoring
+
+The Monitoring area's routes, for the Errors, Server Log, Audit Trail and Background Jobs screens. None takes a body
+but a schedule's, and none answers a problem beyond those above. A fault's message and stack, each log line and a
+job's error are answered as the server logged them, but for the user name and password of each URL written plainly in
+them, which are cut: `https://user:secret@host` reads `https://host`, and so does a URL that follows another's host
+directly, as in a list of hosts joined by commas. What isn't recognised stays as it was logged: a password that itself
+holds a raw `/`, `?`, `#`, a space, a quote or an angle bracket; a URL that is JSON-escaped or percent-encoded; and a
+URL cut short by a length limit before its `@`. So a client treats these answers as holding what the server logged. A
+log's download is its files as they are. Marking a fault resolved or unresolved is recorded inside its transaction,
+and a job's action straight after it, as a task's schedule is kept in the server's configuration; a change that
+changes nothing, and anything that only reads, a log's download and the export included, records nothing.
+
+- **`GET /v1/admin/errors`** is a page of faults (`ErrorList`), one row for each kind of fault logged at error level
+  or above that was last seen in `window`, the one last seen first: `id`, `message` (the latest), `area`, `times` in
+  the window, `firstSeen`, `lastSeen` and `resolved`, beside `total`, the faults the filters keep, and `errors`, how
+  many times they were seen in the window. `window` is `1h`, `24h` (the default), `7d` or `30d`, counted by whole
+  clock hours in UTC from the start of the hour the window begins in, so the last hour's counts are the hour now and
+  the one before. `q`, read trimmed, in any case, with `%` and `_` taken as they are, keeps the faults whose latest
+  message or logger's name holds it, compared as stored, before URLs' user names and passwords are cut; `area` keeps
+  one area's faults; and `unresolved=true` those nobody has marked resolved since they were last seen. A `window` or
+  an `area` that isn't one of these, and an `unresolved` that is neither `true` nor `false`, are `400`.
+- **`GET /v1/admin/errors/{id}`** is a fault (`ErrorDetail`): the row but for `times`, with its `level`, `logger`,
+  latest `stack`, `total`, `resolvedBy` and `resolvedAt` (null unless it's resolved), `documents`, those its latest
+  message names (each `id`, with `docNumber` and `fileName`, null for a document with no doc # or no longer there),
+  and `log`, the log its logger writes to, as `GET /v1/admin/logs` names it, or null, for **Show in Server Log**. A
+  fault the server has deleted, as it deletes a resolved one unseen for 90 days, is `404`.
+- **`POST /v1/admin/errors/{id}/resolve`** and **`/reopen`** mark the fault resolved by the caller, now, or
+  unresolved again, forgetting who resolved it and when, and answer it as `GET` does. A fault already so is answered
+  as it is. They're recorded as `error.resolved` and `error.reopened`, aimed at the fault (`error`) by its id and
+  named by its message, as the routes answer it, cut to fit. A resolved fault that's seen again is unresolved again,
+  of itself.
+- **`GET /v1/admin/logs`** is the logs, as a plain array (`LogInfo`: `name`, the appender's, `label`, `size`, its
+  files together, and `modified`, when its current file last changed): the main log, `DMS`, labelled Main Log,
+  first, then each other log whose files hold anything, by label, ignoring case. The logs' HTML copies, whose names
+  end `_WEB`, aren't listed. A log's `{name}` is taken only as one of these, and any other is `404`: nothing a request
+  sends is read as a file's name or path.
+- **`GET /v1/admin/logs/{name}/lines`** is at most 200 entries (`LogLines`), oldest first, of the log's current file
+  and the files it rolled over to, read as one. Each entry has its `position`, `time`, `level`, `source`, `message`
+  and `continuation`, the lines after it, such as a stack's. An entry starts with its time, as the server's logging
+  writes it; the main log and most others then write the level, the source and the message, and a few the level and
+  the message, or the message alone, whose entries have no `source`, or neither `level` nor `source`. A line that
+  starts no entry at the start of what was read is an entry of its own, with no time, level or source, and a line is
+  cut at 10,000 characters. Positions are
+  opaque strings. With neither `before` nor `after` the answer is the newest entries; with `before`, the newest
+  before it, going back into older files, until `atStart`; with `after`, the oldest at it or after it, in the current
+  file, until `atEnd`, or, when its file has rolled over since, the current file's first entries, with `rolled`.
+  `level` (`all`, `warn` or `error`) and `q` (in any case, on the message, the source and the continuation lines, as
+  answered) keep what they match. A read looks through at most 5 MiB and 50,000 lines, so a filtered one can give few
+  entries, or none, before its end: ask again from its `before` or `after`. Both `before` and `after`, a position the
+  route didn't give, or another `level`, is `400`.
+- **`GET /v1/admin/logs/{name}/file`** is the log's files as they are, zipped, each under its own name, as an
+  attachment named after the log's file and the time, in UTC, such as `dms-20261122-104107.zip`. It's `no-store`, as
+  the files hold what the server logged, and a `HEAD` answers the headers and reads no file.
+- **`GET /v1/admin/audit`** is a page of the Audit Trail (`AuditPage`: `items`, `nextCursor` and `readBackTo`), newest
+  first, from
+  LogicalDOC's history of documents, folders and accounts, the administration record, and the record of storage
+  backends' recovery keys shown and entered, a showing through the Admin app being one row, the administration
+  record's. A row (`AuditRow`) has `id`, `when`, `who` (the person's name now, or, where no account has the row's
+  user, the person as the row kept them: their name at the time in LogicalDOC's history, their username in Healdan's
+  records), `kind` (`sign-in`, `document`, `folder`, `user` or `administration`), `event` (the stored key) and `what`
+  (its words, in US English, true whoever did it), `detail` (one line), `from` (the address), `docNumber` and
+  `folderId` where it names one, and an administration row's `changes`, each `{ "before", "after" }`, or
+  `{ "secret": true }` with no value. On a `user` row, `who` is the person who made the change, where the row names
+  them, as a change made in the Admin app does, and null where it doesn't, and `detail` is the account, as the
+  administration record names a person, then, for an account created, changed, disabled, enabled or deleted, a
+  password changed, an API key made, a sign-in as another account, a change of who can sign in as it, or a legal
+  notice confirmed, the note LogicalDOC kept, cut to 300 characters, as
+  `Sam Okafor (sokafor): By admin in the Admin app`. A failed sign-in for a username no account has has `who` null and
+  the detail `Unknown username`: what was typed is never answered, exported or compared. The filters all
+  apply together: `kind`, repeated; `userId`, the rows the person did and those about them, which a person's Activity
+  tab is; `matterId`, the document and folder rows of the matter's folders, those in the Trash included, and the
+  administration rows aimed at the matter or at a folder or search folder in it, which a matter's Activity tab is;
+  `docNumber`; `from` and `to`, days in `zone` (the server's without it); and `q`, on a file name, a folder's path, a
+  target's name, an address, or the person as the row kept them (their username, and in LogicalDOC's history their
+  name at the time), never a name read now. A page holds at most `limit` rows, 200 at most, and where no index
+  serves the filter it reads each source only so far, so it can hold fewer, or none, and still have a `nextCursor`,
+  which goes back as `cursor`, with the same filters, for the rows after it. It's null once every source has been read
+  to its end, and there's no total. `readBackTo` says how far back the reading has reached: every row the filters keep
+  that's newer has been given, on this page or an earlier one, and the next page's rows are no newer; it's null when
+  `nextCursor` is. A `kind`, a `zone`, a `limit` or a `cursor` that isn't one of these, a `userId`, `matterId` or
+  `docNumber` that isn't a whole number from 0 up, and a day that isn't one of the years 0001 to 9999 written as
+  `2026-11-22`, are `400`; an id or a doc # that names nothing keeps no row, `0` included, and so does a `to` before
+  `from`.
+- **`GET /v1/admin/audit/export`** is the rows the same filters keep, newest first, as CSV (`text/csv;charset=utf-8`),
+  streamed: UTF-8 with a byte order mark, its lines ending in CR LF, with the columns Time (UTC, ISO 8601, to the
+  millisecond), Who, Kind, What, Detail, From and Changes (`name: before → after`, `(none)` for no value, and a secret
+  as `name: changed`). A cell that starts with `=`, `+`, `-`, `@`, a tab or a CR starts with `'` before it, and a cell
+  holding a comma, a double quote, a CR or an LF is then quoted. It's named after the day, in `zone`, as
+  `audit-trail-2026-11-22.csv`, and is `no-store`. Its filters are checked, as the page's are, and its first page of
+  rows read, before anything is sent, so a first page that can't be read is a `500` problem; then the column names go
+  out at once, and the rows as each page is read. It stops at 100,000 rows, with a last line that says so, and one that
+  can't finish says so in its last line, a cell of its own: "Stopped before the end: the server couldn't read the
+  rest. Export again." when a later page can't be read, and "Stopped before the end: only an administrator can export
+  the Audit Trail." when, as the next page is read, the person exporting is no longer an administrator, which is asked
+  at each page. A `HEAD` answers the headers once the filters are checked, and reads no row.
+- **`GET /v1/admin/jobs`** is every job (`Job`), as a plain array, Healdan's first, in a fixed order, then
+  LogicalDOC's six tasks (`logicalDocTask`), each with its `name`, `label`, `lastStart`, `lastEnd`, `result`, `error`,
+  `nextRun`, `overdue`, `enabled` and `running`, what it allows now, `canRun`, `canStop` and `switchable`, and a task's
+  `schedule` (`mode` `simple` with `intervalSeconds`, or `cron` with `cron`), null for Healdan's. Healdan's jobs report
+  as they run, so a restart forgets their last runs.
+- **`POST /v1/admin/jobs/{name}/run`**, **`/stop`**, **`/enable`** and **`/disable`** take no body and answer the job.
+  Run Now is for a task that's enabled and idle, while the server has scheduled tasks on, and for five of Healdan's
+  jobs, `trash-destroyer`, `storage-mover`, `storage-retest`, `storage-purge` and `storage-nightly-check`, while
+  they're switched on and not running. It runs on a thread of its own, reporting as a scheduled run does, so the answer
+  may not show it running yet. Stop asks a task's run to stop, at its next check. Enable and Disable save whether a
+  task runs on its schedule, so they last across a restart. None of Healdan's jobs is stopped, enabled or disabled
+  here. What a job doesn't allow now is `409 refused`, with a sentence that says why, and a name the list doesn't have
+  is `404`, whose sentence doesn't repeat the name.
+- **`PUT /v1/admin/jobs/{name}/schedule`** with `{ "mode", "intervalSeconds", "cron" }` saves a task's schedule, as the
+  Classic Interface's Scheduled Tasks saves it, and answers the job with its next run: `simple`, every 1 to 31,536,000
+  seconds, or `cron`, an expression in Quartz's form, in the server's time zone. Its other settings stay, and so does
+  whether it's enabled. A body that isn't the object, a member it doesn't take, an `intervalSeconds` that isn't a whole
+  number, and a `cron` that isn't text are `400`; then the job's `404`; then `422 validation`, naming `mode`,
+  `intervalSeconds` or `cron` (`required`, `invalid` or `out-of-range`), a `mode` of any other value or type
+  `invalid`, and the other mode's member sent with a value among them; and last `409 refused` for one of Healdan's
+  jobs, which keep their own schedules.
+- **What's recorded:** `job.run-requested`, `job.stop-requested`, `job.enabled`, `job.disabled` and
+  `job.schedule-changed`, with the schedule before and after as `every 1800 seconds` or `cron 0 0 3 * * ?`, each aimed
+  at the job by its name. The Dashboard's jobs, and so the Admin app's left pane, follow each of them at their next
+  read, and so do a run of one of Healdan's jobs that ends otherwise than the one before and a task's run that Run Now
+  started; a task's scheduled run shows within the Dashboard's minute or two.
 
 ## Healdan's Own Client
 

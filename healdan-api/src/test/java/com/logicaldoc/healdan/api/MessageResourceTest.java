@@ -219,7 +219,7 @@ public class MessageResourceTest extends ApiTestCase {
 	}
 
 	@Test
-	public void testPdfAndPictureShowInPlaceUnderPreviewWithNoHistory() throws Exception {
+	public void testPdfAndPictureShowInPlaceUnderPreviewWithNoDownload() throws Exception {
 		Document email = file("parts-attached.eml");
 		Document pictured = fileBytes("pictured.eml", emailWithPicture());
 		String token = signIn(previewer);
@@ -863,5 +863,66 @@ public class MessageResourceTest extends ApiTestCase {
 				.path("items"))
 			if ("author".equals(field.path("name").textValue()))
 				assertNotEquals(leaver.getId(), field.path("value").path("id").asLong());
+	}
+
+	// Reading an email, recorded as a view of it (Admin app spec section 8.8)
+
+	private List<Map<String, Object>> views() {
+		return jdbc().queryForList("select * from ld_history where ld_event = 'event.viewed' order by ld_id");
+	}
+
+	@Test
+	public void testReadingAnEmailIsOneViewOfIt() throws Exception {
+		Document email = file("parts-attached.eml");
+		String token = signIn(clerk);
+
+		// Its headers and list of attachments alone aren't reading it
+		assertEquals(200, get(path(email, "")).token(token).send().status());
+		assertEquals(0, views().size());
+
+		assertEquals(200, get(path(email, "/body")).token(token).send().status());
+		assertEquals(200, get(path(email, "/body?pictures=true")).token(token).send().status());
+		assertEquals(200, get(path(email, "/parts/1?inline=true")).token(token).send().status());
+
+		List<Map<String, Object>> views = views();
+		assertEquals(1, views.size());
+		assertEquals(email.getId(), ((Number) views.get(0).get("ld_docid")).longValue());
+		assertEquals(clerk.getId(), ((Number) views.get(0).get("ld_userid")).longValue());
+		assertEquals(documents.getId(), ((Number) views.get(0).get("ld_folderid")).longValue());
+		assertEquals(email.getFileVersion(), views.get(0).get("ld_fileversion"));
+		assertEquals(0, downloads());
+	}
+
+	@Test
+	public void testAnAttachmentShownInPlaceIsAViewOfTheEmail() throws Exception {
+		Document email = fileBytes("pictured.eml", emailWithPicture());
+
+		ApiResponse picture = get(path(email, "/parts/0?inline=true")).token(signIn(previewer)).send();
+
+		assertEquals(picture.toString(), 200, picture.status());
+		List<Map<String, Object>> views = views();
+		assertEquals(1, views.size());
+		assertEquals(email.getId(), ((Number) views.get(0).get("ld_docid")).longValue());
+		assertEquals(previewer.getId(), ((Number) views.get(0).get("ld_userid")).longValue());
+		assertEquals(email.getFileName(), views.get(0).get("ld_filename"));
+	}
+
+	@Test
+	public void testWhatShowsNothingOfAnEmailRecordsNoView() throws Exception {
+		Document email = file("parts-attached.eml");
+		String token = signIn(clerk);
+
+		// An attachment downloaded is a download of the email, as before
+		assertEquals(200, get(path(email, "/parts/1")).token(token).send().status());
+		assertEquals(1, downloads());
+		assertEquals(200, head(path(email, "/body")).token(token).send().status());
+		assertEquals(200, head(path(email, "/parts/1?inline=true")).token(token).send().status());
+		assertEquals("no-preview", get(path(email, "/parts/2?inline=true")).token(token).send().code());
+		assertEquals(404, get(path(email, "/parts/9?inline=true")).token(token).send().status());
+		assertEquals(404, get(path(email, "/body?version=9.9")).token(token).send().status());
+		assertEquals(403, get(path(email, "/body")).token(signIn(reader)).send().status());
+		assertEquals(403, get(path(email, "/parts/1?inline=true")).token(signIn(reader)).send().status());
+
+		assertEquals(0, views().size());
 	}
 }

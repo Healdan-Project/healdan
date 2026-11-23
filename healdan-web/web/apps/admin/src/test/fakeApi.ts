@@ -1060,6 +1060,491 @@ export function groupRoutes(): Routes {
   }
 }
 
+// Monitoring (Phase 5): the faults the server logged and its logs, what was done, and the background jobs, each screen's
+// fixtures in a section of its own.
+
+// Monitoring: Errors and the Server Log
+
+/** A kind of fault as the Errors list gives it: the preview that timed out, seen 6 times today, unless `over` says otherwise */
+export function errorRow(over: Partial<A['ErrorRow']> = {}): A['ErrorRow'] {
+  return {
+    id: 12,
+    message: 'Preview conversion timed out after 180 seconds, doc 10412 version 3',
+    area: 'Previews',
+    times: 6,
+    firstSeen: '2026-11-18T14:02:00Z',
+    lastSeen: '2026-11-19T10:41:00Z',
+    resolved: false,
+    ...over,
+  }
+}
+
+/** The four kinds of fault seen in the last 24 hours, the one last seen first: 14 errors of 4 kinds, the last resolved */
+export const errorRows: A['ErrorRow'][] = [
+  errorRow(),
+  errorRow({ id: 13, message: 'Upload to Wasabi EU failed: connection reset\nThe mover tries again in 5 minutes.', area: 'Storage', times: 5, firstSeen: '2026-11-19T09:12:00Z', lastSeen: '2026-11-19T10:37:00Z' }),
+  errorRow({ id: 14, message: "Couldn't read PDF text: the file is encrypted", area: 'Search Index', times: 2, firstSeen: '2026-11-19T08:30:00Z', lastSeen: '2026-11-19T08:31:00Z' }),
+  errorRow({ id: 15, message: 'Outgoing email refused: authentication failed', area: 'Email', times: 1, firstSeen: '2026-11-18T17:20:00Z', lastSeen: '2026-11-18T17:20:00Z', resolved: true }),
+]
+
+/**
+ * GET /v1/admin/errors over `rows`: those its words (in the message or the logger's name, as errorDetails gives it), area
+ * and Unresolved keep, a page from `offset`, their times added up. The window isn't looked at: the fake has no hour counts.
+ */
+export function errorList(query?: Record<string, unknown>, rows: A['ErrorRow'][] = errorRows): A['ErrorList'] {
+  const q = String(query?.q ?? '').trim().toLowerCase()
+  const said = (row: A['ErrorRow']) => [row.message, errorDetails[row.id]?.logger ?? ''].some((text) => text.toLowerCase().includes(q))
+  const kept = rows.filter((row) => (q === '' || said(row)) && (query?.area === undefined || row.area === query.area) && (query?.unresolved !== true || !row.resolved))
+  const offset = Number(query?.offset ?? 0)
+  const limit = Number(query?.limit ?? 100)
+  return { items: kept.slice(offset, offset + limit).map((row) => ({ ...row })), offset, limit, total: kept.length, errors: kept.reduce((sum, row) => sum + row.times, 0) }
+}
+
+/** A fault, for its details: its row's facts, logged through the preview worker into the main log, unless `over` says otherwise */
+export function errorDetailOf(row: A['ErrorRow'], over: Partial<A['ErrorDetail']> = {}): A['ErrorDetail'] {
+  return {
+    id: row.id,
+    level: 'ERROR',
+    area: row.area,
+    logger: 'com.logicaldoc.healdan.preview.PreviewWorker',
+    message: row.message,
+    stack: null,
+    documents: [],
+    total: row.times,
+    firstSeen: row.firstSeen,
+    lastSeen: row.lastSeen,
+    resolved: row.resolved,
+    resolvedBy: row.resolved ? 'sam' : null,
+    resolvedAt: row.resolved ? '2026-11-19T09:00:00Z' : null,
+    log: 'DMS',
+    ...over,
+  }
+}
+
+/** Each fault of errorRows, as GET /v1/admin/errors/{id} gives it */
+export const errorDetails: Record<number, A['ErrorDetail']> = {
+  12: errorDetailOf(errorRows[0]!, {
+    stack: [
+      'com.logicaldoc.healdan.preview.PreviewTimeoutException: soffice did not finish within 180 s',
+      '\tat com.logicaldoc.healdan.preview.OfficeConverter.convert(OfficeConverter.java:142)',
+      '\tat com.logicaldoc.healdan.preview.PreviewWorker.run(PreviewWorker.java:366)',
+    ].join('\n'),
+    documents: [
+      { id: 5012, docNumber: 10412, fileName: 'Witness Statement.docx' },
+      { id: 5013, docNumber: null, fileName: 'Board Minutes.xlsx' },
+      { id: 4999, docNumber: null, fileName: null },
+    ],
+    total: 31,
+  }),
+  13: errorDetailOf(errorRows[1]!, { logger: 'com.logicaldoc.healdan.storage.Mover', stack: 'java.net.SocketException: Connection reset' }),
+  14: errorDetailOf(errorRows[2]!, { level: 'FATAL', logger: 'com.logicaldoc.core.parser.PDFParser', log: 'IndexerTask' }),
+  15: errorDetailOf(errorRows[3]!, { logger: 'com.logicaldoc.core.communication.EMailSender', log: null }),
+}
+
+/**
+ * The Errors screen's routes, to spread over the defaults: the list and each fault over copies of errorRows and
+ * errorDetails of their own, which Mark Resolved and Reopen change, so the list read after one follows it
+ */
+export function errorRoutes(): Routes {
+  const rows = errorRows.map((row) => ({ ...row }))
+  const details = new Map(Object.values(errorDetails).map((detail) => [detail.id, { ...detail }]))
+  function mark(id: number, resolved: boolean): A['ErrorDetail'] | ApiError {
+    const detail = details.get(id)
+    if (detail === undefined) return notFound()
+    const changed = { ...detail, resolved, resolvedBy: resolved ? 'admin' : null, resolvedAt: resolved ? '2026-11-19T10:45:00Z' : null }
+    details.set(id, changed)
+    // A row of its own, as a server's answer is: the list's answer read before keeps what it said
+    rows.forEach((row, index) => {
+      if (row.id === id) rows[index] = { ...row, resolved }
+    })
+    return changed
+  }
+  return {
+    'GET /v1/admin/errors': ({ query }: { query?: Record<string, unknown> }) => errorList(query, rows),
+    'GET /v1/admin/errors/*': ({ params }: { params: string[] }) => details.get(Number(params[0])) ?? notFound(),
+    'POST /v1/admin/errors/*/resolve': ({ params }: { params: string[] }) => mark(Number(params[0]), true),
+    'POST /v1/admin/errors/*/reopen': ({ params }: { params: string[] }) => mark(Number(params[0]), false),
+  }
+}
+
+/** The server's logs, as GET /v1/admin/logs lists them: the main log first, then the Indexer's */
+export const logInfos: A['LogInfo'][] = [
+  { name: 'DMS', label: 'Main Log', size: 31_457_280, modified: '2026-11-19T10:41:07Z' },
+  { name: 'IndexerTask', label: 'Indexer', size: 524_288, modified: '2026-11-19T10:41:07Z' },
+]
+
+/** An entry of a log, at the position given: the Indexer's last run, unless `over` says otherwise */
+export function logLine(position: string, over: Partial<A['LogLine']> = {}): A['LogLine'] {
+  return {
+    position,
+    time: '2026-11-19T10:41:07Z',
+    level: 'INFO',
+    source: 'com.logicaldoc.core.searchengine.IndexerTask:212',
+    message: 'Finished indexing 5 documents in 4.2 s',
+    continuation: [],
+    ...over,
+  }
+}
+
+/** The main log's last entries, oldest first, as the mockup draws them (newest at the top there); fakeLog gives the positions */
+export function logEntries(): A['LogLine'][] {
+  return [
+    logLine('', { time: '2026-11-19T10:24:58Z', level: 'WARN', source: 'com.logicaldoc.core.stats.StatsCollector:118', message: 'Statistics took longer than expected: 42 s' }),
+    logLine('', { time: '2026-11-19T10:28:12Z', source: 'com.logicaldoc.healdan.api.ApiTokens:77', message: 'Device token issued to treeve for MacBook' }),
+    logLine('', { time: '2026-11-19T10:30:00Z', source: 'com.logicaldoc.core.task.TaskScheduler:54', message: 'Task IndexOptimizer started' }),
+    logLine('', { time: '2026-11-19T10:36:10Z', source: 'com.logicaldoc.healdan.storage.Mover:301', message: 'Moved 18 files to Wasabi EU' }),
+    logLine('', {
+      time: '2026-11-19T10:37:44Z',
+      level: 'ERROR',
+      source: 'com.logicaldoc.healdan.storage.Mover:322',
+      message: 'Upload to Wasabi EU failed: connection reset, will retry in 5 minutes',
+      continuation: ['java.net.SocketException: Connection reset', '\tat java.base/sun.nio.ch.NioSocketImpl.implRead(NioSocketImpl.java:318)'],
+    }),
+    logLine('', { time: '2026-11-19T10:39:30Z', source: 'com.logicaldoc.core.security.SessionManager:140', message: 'Session opened for pnair' }),
+    logLine('', { time: '2026-11-19T10:40:51Z', level: 'WARN', source: 'com.logicaldoc.healdan.signin.HealdanThrottle:90', message: 'Sign-in failed for username jclarke (2 of 5)' }),
+    logLine('', { time: '2026-11-19T10:41:02Z', level: 'ERROR', source: 'com.logicaldoc.healdan.preview.PreviewWorker:366', message: 'Preview conversion timed out after 180 seconds, doc 10412 version 3' }),
+    logLine('', {}),
+  ]
+}
+
+/** What GET /v1/admin/logs/{name}/lines keeps of an entry: its level at `level` or above, and `q` in its text, in any case */
+export function logKeeps(entry: A['LogLine'], query?: Record<string, unknown>): boolean {
+  const levels: Record<string, readonly string[]> = { warn: ['WARN', 'ERROR', 'FATAL'], error: ['ERROR', 'FATAL'] }
+  const level = String(query?.level ?? 'all')
+  if (level !== 'all' && (entry.level === null || !levels[level]?.includes(entry.level))) return false
+  const q = String(query?.q ?? '').trim().toLowerCase()
+  return q === '' || [entry.message, entry.source ?? '', ...entry.continuation].some((text) => text.toLowerCase().includes(q))
+}
+
+/**
+ * A log for GET /v1/admin/logs/{name}/lines over `entries`, which a test may add to as the log grows. Each entry's
+ * position is `p<its index>`, whatever it was given, and so are `before` and `after`: before `p4` are entries 0 to 3, and
+ * after it entries 4 on. Each read looks through at most `scan` entries, as the server looks through at most 5 MiB, so a
+ * level or words can make an answer short, or empty, before the start; it keeps 200 at most, as the server does: going
+ * back, the last 200 it found, and going forward the first 200, ending at the entry after them.
+ */
+export function fakeLog(entries: A['LogLine'][], scan = 200) {
+  const at = (index: number) => `p${index}`
+  const indexOf = (position: unknown) => Number(String(position).slice(1))
+  return ({ query }: { query?: Record<string, unknown> }): A['LogLines'] => {
+    const all = entries.map((entry, index) => ({ ...entry, position: at(index) }))
+    const kept = (from: number, to: number) => all.slice(from, to).filter((entry) => logKeeps(entry, query)).slice(-200)
+    if (query?.after !== undefined) {
+      const from = Math.min(indexOf(query.after), all.length)
+      const found = all.slice(from, Math.min(all.length, from + scan)).filter((entry) => logKeeps(entry, query))
+      // Past 200, the read ends at the entry after the 200th kept
+      const to = found.length > 200 ? indexOf(found[200]!.position) : Math.min(all.length, from + scan)
+      return { lines: found.slice(0, 200), before: at(from), after: at(to), atStart: false, atEnd: to === all.length, rolled: false }
+    }
+    const to = query?.before === undefined ? all.length : Math.min(indexOf(query.before), all.length)
+    const from = Math.max(0, to - scan)
+    return { lines: kept(from, to), before: at(from), after: at(to), atStart: from === 0, atEnd: to === all.length, rolled: false }
+  }
+}
+
+/** The Server Log's routes, to spread over the defaults: the logs, and each one's entries, over `main` for the main log */
+export function logRoutes(main: A['LogLine'][] = logEntries()): Routes {
+  const indexer = [logLine('', { message: 'Indexing started' }), logLine('', {})]
+  const logs: Record<string, ReturnType<typeof fakeLog>> = { DMS: fakeLog(main), IndexerTask: fakeLog(indexer) }
+  return {
+    'GET /v1/admin/logs': logInfos,
+    'GET /v1/admin/logs/*/lines': ({ params, query }: { params: string[]; query?: Record<string, unknown> }) => logs[params[0]!]?.({ query }) ?? notFound(),
+  }
+}
+
+// Monitoring: the Audit Trail and Activity
+
+/** A row of the Audit Trail: Tom Reeve downloading # 10388 of 1001.1 at 10:33 on 19 November 2026, unless `over` says otherwise */
+export function auditRow(over: Partial<A['AuditRow']> = {}): A['AuditRow'] {
+  return {
+    id: 'd501',
+    when: '2026-11-19T10:33:00Z',
+    who: 'Tom Reeve',
+    kind: 'document',
+    event: 'event.downloaded',
+    what: 'Downloaded',
+    detail: '# 10388, Skeleton Argument.docx, version 1.4',
+    from: '192.0.2.12',
+    docNumber: 10388,
+    folderId: 115,
+    changes: null,
+    ...over,
+  }
+}
+
+/**
+ * The morning of 19 November 2026, newest first: a row of each kind, a secret changed, and as the server answers them, a
+ * failed sign-in for a username no account has (no one named, its typed text not answered), a change an administrator
+ * made to another's account (Who is who made it, the Detail the account), and one whose row names no author
+ */
+export const auditRows: A['AuditRow'][] = [
+  auditRow({
+    id: 'a41',
+    when: '2026-11-19T10:44:07.120Z',
+    who: 'Sam Okafor',
+    kind: 'administration',
+    event: 'backend.changed',
+    what: 'Changed a storage backend',
+    detail: 'Wasabi EU',
+    from: '192.0.2.9',
+    docNumber: null,
+    folderId: null,
+    changes: { name: { before: 'Wasabi', after: 'Wasabi EU' }, secret: { secret: true } },
+  }),
+  auditRow({ id: 'u17', when: '2026-11-19T10:39:00Z', who: 'Priya Nair', kind: 'sign-in', event: 'event.user.login', what: 'Signed in', detail: 'Password, Safari on a Mac', from: '192.0.2.17', docNumber: null, folderId: null }),
+  auditRow(),
+  auditRow({
+    id: 'f88',
+    when: '2026-11-19T10:05:00Z',
+    who: 'Helen Ashcombe',
+    kind: 'folder',
+    event: 'event.folder.permission',
+    what: 'Changed permissions',
+    detail: '/Client Work/1001.1 Charter Dispute – MV Northern Star/Privileged',
+    from: '192.0.2.11',
+    docNumber: null,
+    folderId: 115,
+  }),
+  auditRow({
+    id: 'a40',
+    when: '2026-11-19T09:58:00Z',
+    who: 'Sam Okafor',
+    kind: 'administration',
+    event: 'client.renamed',
+    what: 'Renamed a client',
+    detail: '1001 – Saltmarsh Shipping Ltd',
+    from: '192.0.2.9',
+    docNumber: null,
+    folderId: null,
+    changes: { description: { before: null, after: 'Shipping and charters' }, name: { before: 'Saltmarsh Shipping', after: 'Saltmarsh Shipping Ltd' } },
+  }),
+  auditRow({ id: 'u16', when: '2026-11-19T09:47:00Z', who: null, kind: 'sign-in', event: 'event.user.login.failed', what: 'Failed to sign in', detail: 'Unknown username', from: '192.0.2.21', docNumber: null, folderId: null }),
+  auditRow({
+    id: 'u15',
+    when: '2026-11-19T09:12:00Z',
+    who: 'Sam Okafor',
+    kind: 'user',
+    event: 'event.user.passwordchanged',
+    what: 'Password changed',
+    detail: 'Jamie Clarke (jclarke): By sokafor in the Admin app',
+    from: '192.0.2.9',
+    docNumber: null,
+    folderId: null,
+  }),
+  auditRow({ id: 'u14', when: '2026-11-19T08:50:00Z', who: null, kind: 'user', event: 'event.user.disabled', what: 'Account disabled', detail: 'Ben Hollis (bhollis)', from: null, docNumber: null, folderId: null }),
+]
+
+/**
+ * A page of the Audit Trail: its rows, where the next one starts (none, the end, unless given), and how far back its
+ * reading reached, null exactly at the end, as the server says, and otherwise 1 November 2026 unless given
+ */
+export function auditPage(items: A['AuditRow'][], nextCursor: string | null = null, readBackTo = '2026-11-01T00:00:00Z'): A['AuditPage'] {
+  return { items, nextCursor, readBackTo: nextCursor === null ? null : readBackTo }
+}
+
+/** GET /v1/admin/audit over `rows`: those of the kinds asked for (every kind without), in one page, the end */
+export function auditTrail(query?: Record<string, unknown>, rows: A['AuditRow'][] = auditRows): A['AuditPage'] {
+  const kinds = query?.kind === undefined ? undefined : ([] as unknown[]).concat(query.kind)
+  return auditPage(rows.filter((row) => kinds === undefined || kinds.includes(row.kind)))
+}
+
+/** GET /v1/admin/matters as a search: the matters whose number starts with `q`, or whose name or client's name holds it, in any case */
+export function auditMatters(query?: Record<string, unknown>): A['MatterList'] {
+  const q = String(query?.q ?? '').trim().toLowerCase()
+  const items = matterRows.filter((row) => row.number.startsWith(q) || row.name.toLowerCase().includes(q) || row.client.name.toLowerCase().includes(q))
+  const limit = Number(query?.limit ?? 100)
+  return matterList(items.slice(0, limit), { limit, total: items.length })
+}
+
+/** What the Audit Trail and the Activity tabs read, to spread over the defaults: the rows, the people and the matters */
+export function auditRoutes(): Routes {
+  return {
+    ...peopleRoutes(),
+    'GET /v1/admin/audit': ({ query }: { query?: Record<string, unknown> }) => auditTrail(query),
+    'GET /v1/admin/matters': ({ query }: { query?: Record<string, unknown> }) => auditMatters(query),
+    'GET /v1/admin/matters/*': ({ params }: { params: string[] }) => {
+      const row = matterRows.find((one) => one.id === Number(params[0]))
+      return row ? matterPage(row) : notFound()
+    },
+  }
+}
+
+// Monitoring: Background Jobs
+
+/**
+ * A job as GET /v1/admin/jobs gives it: LogicalDOC's Indexer, enabled and idle, its last run a success, every 30 minutes,
+ * unless `over` says otherwise
+ */
+export function jobOf(over: Partial<A['Job']> = {}): A['Job'] {
+  return {
+    name: 'IndexerTask',
+    label: 'Indexer',
+    logicalDocTask: true,
+    enabled: true,
+    running: false,
+    lastStart: '2026-11-19T10:30:00Z',
+    lastEnd: '2026-11-19T10:30:42Z',
+    result: 'succeeded',
+    error: null,
+    nextRun: '2026-11-19T11:00:00Z',
+    overdue: false,
+    canRun: true,
+    canStop: false,
+    switchable: true,
+    schedule: { mode: 'simple', intervalSeconds: 1800, cron: null },
+    ...over,
+  }
+}
+
+/** One of Healdan's jobs, `name` and `label` given: switched on, idle, never switched off or rescheduled here */
+export function jobOfHealdan(name: string, label: string, over: Partial<A['Job']> = {}): A['Job'] {
+  return jobOf({ name, label, logicalDocTask: false, switchable: false, schedule: null, canRun: false, ...over })
+}
+
+/**
+ * Every job, Healdan's eight in their order then LogicalDOC's six: none running, the Storage Retests' last run failed,
+ * the Storage Nightly Check not run yet, the Statistics Collector overdue and the Tags Processor disabled
+ */
+export const jobRows: A['Job'][] = [
+  jobOfHealdan('preview', 'Previews', { lastStart: '2026-11-19T10:41:00Z', lastEnd: '2026-11-19T10:41:02Z', nextRun: '2026-11-19T10:41:07Z' }),
+  jobOfHealdan('email-index', 'Email Index', { result: 'done', lastStart: '2026-11-13T08:00:00Z', lastEnd: '2026-11-13T08:04:00Z', nextRun: null }),
+  jobOfHealdan('trash-destroyer', 'Trash Destroyer', { canRun: true, lastStart: '2026-11-19T02:47:00Z', lastEnd: '2026-11-19T02:47:05Z', nextRun: '2026-11-20T02:47:00Z' }),
+  jobOfHealdan('storage-mover', 'Storage Mover', { canRun: true, lastStart: '2026-11-19T10:36:00Z', lastEnd: '2026-11-19T10:36:12Z', nextRun: '2026-11-19T10:41:00Z' }),
+  jobOfHealdan('storage-retest', 'Storage Retests', {
+    canRun: true,
+    result: 'failed',
+    error: "Wasabi EU can't be reached: connect timed out",
+    lastStart: '2026-11-19T10:40:00Z',
+    lastEnd: '2026-11-19T10:40:30Z',
+    nextRun: '2026-11-19T10:45:00Z',
+  }),
+  jobOfHealdan('storage-purge', 'Storage Purge', { canRun: true, lastStart: '2026-11-19T04:00:00Z', lastEnd: '2026-11-19T04:00:09Z', nextRun: '2026-11-20T04:00:00Z' }),
+  jobOfHealdan('storage-alert', 'Storage Alert', { lastStart: '2026-11-19T10:00:00Z', lastEnd: '2026-11-19T10:00:01Z', nextRun: '2026-11-19T11:00:00Z' }),
+  jobOfHealdan('storage-nightly-check', 'Storage Nightly Check', { canRun: true, result: null, lastStart: null, lastEnd: null, nextRun: '2026-11-20T03:15:00Z' }),
+  jobOf(),
+  jobOf({
+    name: 'IndexOptimizer',
+    label: 'Index Optimizer',
+    lastStart: '2026-11-19T02:30:00Z',
+    lastEnd: '2026-11-19T02:31:10Z',
+    nextRun: '2026-11-20T02:30:00Z',
+    schedule: { mode: 'cron', intervalSeconds: null, cron: '0 30 2 * * ?' },
+  }),
+  jobOf({
+    name: 'StatsCollector',
+    label: 'Statistics Collector',
+    lastStart: '2026-11-15T04:00:00Z',
+    lastEnd: '2026-11-15T04:00:42Z',
+    nextRun: '2026-11-16T04:00:00Z',
+    overdue: true,
+    schedule: { mode: 'simple', intervalSeconds: 86_400, cron: null },
+  }),
+  jobOf({ name: 'TagsProcessor', label: 'Tags Processor', enabled: false, canRun: false, result: null, lastStart: null, lastEnd: null, nextRun: null, schedule: { mode: 'simple', intervalSeconds: 3600, cron: null } }),
+  jobOf({
+    name: 'DigestProcessor',
+    label: 'Digest Processor',
+    lastStart: '2026-11-19T07:00:00Z',
+    lastEnd: '2026-11-19T07:00:03Z',
+    nextRun: '2026-11-20T07:00:00Z',
+    schedule: { mode: 'cron', intervalSeconds: null, cron: '0 0 7 ? * MON-FRI' },
+  }),
+  jobOf({ name: 'PathCalculator', label: 'Paths Calculator', lastStart: '2026-11-19T10:40:00Z', lastEnd: '2026-11-19T10:40:01Z', nextRun: '2026-11-19T10:45:00Z', schedule: { mode: 'simple', intervalSeconds: 300, cron: null } }),
+]
+
+/** A `422 validation` that names one member of a schedule's change, as PUT /v1/admin/jobs/{name}/schedule answers it */
+export function jobFieldProblem(field: string, code: string): ApiError {
+  return new ApiError(422, 'validation', 'Some details need fixing.', { status: 422, code: 'validation', detail: 'Some details need fixing.', fields: [{ field, code, detail: 'A server sentence.' }] })
+}
+
+/**
+ * What PUT /v1/admin/jobs/{name}/schedule refuses of a change, as the server checks it, in its order: the mode, then the
+ * member for it (an interval from 1 to 31,536,000 seconds, or a cron expression that isn't blank, which the server gives
+ * to Quartz and the fake asks only to have six fields or seven), then the other mode's member, sent with a value
+ */
+export function jobScheduleProblem(body: unknown): ApiError | undefined {
+  const change = (body ?? {}) as Record<string, unknown>
+  if (change.mode === undefined || change.mode === null) return jobFieldProblem('mode', 'required')
+  if (change.mode === 'simple') {
+    const seconds = change.intervalSeconds
+    if (seconds === undefined || seconds === null) return jobFieldProblem('intervalSeconds', 'required')
+    if (typeof seconds !== 'number' || !Number.isInteger(seconds) || seconds < 1 || seconds > 31_536_000) return jobFieldProblem('intervalSeconds', 'out-of-range')
+    if (change.cron !== undefined && change.cron !== null) return jobFieldProblem('cron', 'invalid')
+    return undefined
+  }
+  if (change.mode === 'cron') {
+    const cron = typeof change.cron === 'string' ? change.cron.trim() : ''
+    if (cron === '') return jobFieldProblem('cron', 'required')
+    const fields = cron.split(/\s+/).length
+    if (fields < 6 || fields > 7) return jobFieldProblem('cron', 'invalid')
+    if (change.intervalSeconds !== undefined && change.intervalSeconds !== null) return jobFieldProblem('intervalSeconds', 'invalid')
+    return undefined
+  }
+  return jobFieldProblem('mode', 'invalid')
+}
+
+/** When a run asked for now begins, in the fakes' answers */
+export const JOB_RUN_STARTED = '2026-11-19T10:42:00Z'
+
+export interface JobRoutesOptions {
+  /**
+   * The run begins off the request's thread, so Run Now's answer is the job as it was, and only a later read shows it
+   * running; by default the answer shows it running already
+   */
+  runAnswersBefore?: boolean
+}
+
+/**
+ * Background Jobs' routes, to spread over the defaults: the jobs, over copies of `rows`, and their actions, which change
+ * those copies as the server would and answer the job, or refuse what it doesn't allow now with a `409 refused`, as the
+ * server does; a name the list doesn't have is `404`
+ */
+export function jobRoutes(rows: A['Job'][] = jobRows, options: JobRoutesOptions = {}): Routes {
+  const jobs = new Map(rows.map((job) => [job.name, { ...job }]))
+  const refused = (sentence: string) => problem(409, 'refused', sentence)
+  function change(job: A['Job'], next: Partial<A['Job']>): A['Job'] {
+    const changed = { ...job, ...next }
+    jobs.set(job.name, changed)
+    return { ...changed }
+  }
+  // The job the path names, decided on, or a 404
+  function act(params: string[], decide: (job: A['Job']) => A['Job'] | ApiError): A['Job'] | ApiError {
+    const job = jobs.get(decodeURIComponent(params[0] ?? ''))
+    return job === undefined ? notFound() : decide(job)
+  }
+  const unswitchable = (job: A['Job']) => refused(`${job.label} isn't switched on or off here.`)
+  return {
+    'GET /v1/admin/jobs': () => [...jobs.values()].map((job) => ({ ...job })),
+    'POST /v1/admin/jobs/*/run': ({ params }: { params: string[] }) =>
+      act(params, (job) => {
+        if (!job.canRun) return refused(`${job.label} can't run now.`)
+        const before = { ...job }
+        const begun = change(job, {
+          running: true,
+          canRun: false,
+          canStop: job.logicalDocTask,
+          lastStart: JOB_RUN_STARTED,
+          ...(job.logicalDocTask ? { lastEnd: null, result: null, error: null } : {}),
+        })
+        return options.runAnswersBefore ? before : begun
+      }),
+    'POST /v1/admin/jobs/*/stop': ({ params }: { params: string[] }) => act(params, (job) => (job.canStop ? change(job, { canStop: false }) : refused(`${job.label} isn't running.`))),
+    'POST /v1/admin/jobs/*/enable': ({ params }: { params: string[] }) =>
+      act(params, (job) => (job.switchable ? change(job, { enabled: true, canRun: !job.running, nextRun: job.nextRun ?? '2026-11-19T11:00:00Z' }) : unswitchable(job))),
+    'POST /v1/admin/jobs/*/disable': ({ params }: { params: string[] }) =>
+      act(params, (job) => (job.switchable ? change(job, { enabled: false, canRun: false, nextRun: null, overdue: false }) : unswitchable(job))),
+    'PUT /v1/admin/jobs/*/schedule': ({ params, body }: { params: string[]; body?: unknown }) =>
+      act(params, (job) => {
+        const invalid = jobScheduleProblem(body)
+        if (invalid !== undefined) return invalid
+        if (job.schedule === null) return refused(`${job.label} has no schedule here.`)
+        const sent = body as A['JobScheduleChange']
+        return change(job, {
+          schedule: sent.mode === 'simple' ? { mode: 'simple', intervalSeconds: sent.intervalSeconds ?? null, cron: null } : { mode: 'cron', intervalSeconds: null, cron: (sent.cron ?? '').trim() },
+        })
+      }),
+  }
+}
+
 export interface Call {
   method: string
   path: string

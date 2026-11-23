@@ -146,15 +146,17 @@ takes Esc first).
 `NAV`, in `frame/LeftPane.tsx`, is the left pane: the Dashboard, then the spec's groups in its order (Firm, People,
 Storage, Search and Monitoring), each a heading from the catalogue and its `NavItem`s. A group with no items isn't
 drawn, so the pane shows only the groups a shipped screen is in: Firm, with Clients, Matters and Workspace Templates;
-People, with Users and Groups; and Storage, with Stores and Backends, so far. **Classic Interface** is at the pane's
-foot, apart from `NAV`. A screen joins when its phase ships:
+People, with Users and Groups; Storage, with Stores and Backends; and Monitoring, with Errors, Server Log, Audit Trail
+and Background Jobs, so far. **Classic Interface** is at the pane's foot, apart from `NAV`. A screen joins when its
+phase ships:
 
 1. Write the view in `views/`. Take its data through `useAdminQuery` (below), and its pieces from `@healdan/ui`.
 2. Give it a route in `router.tsx`, a child of the root, at its path in `addresses.ts`' `routes`.
 3. Add a `NavItem` to its group in `NAV`: `label`, an `admin.` key of the catalogue; `route`, typed `NavRoute`, the
    registered router's route ids, so only a routed path type-checks; `icon`; and, where something there can need
    attention, `count`, the attention codes whose counts its badge adds up from the Dashboard's answer, as **Backends**
-   has `backend-unreachable`. The pane reads them with `useDashboardCounts` (`queries.ts`), only while an entry it
+   has `backend-unreachable`, **Errors** `errors`, and **Background Jobs** `job-failed` and `job-overdue`. The pane
+   reads them with `useDashboardCounts` (`queries.ts`), only while an entry it
    shows has a `count`: the Dashboard's own query, under its key, asked as the frame loads and at each return to the
    window, with no timer of its own, so the counts come every 30 seconds only while the Dashboard is open and polls
    (the spec's section 7.2 keeps the 30-second asks to the Dashboard and running jobs). `aria-current="page"` marks
@@ -164,7 +166,10 @@ foot, apart from `NAV`. A screen joins when its phase ships:
    and `HealthTile.link`, from `healdan-core`'s `DashboardService.Screen`, `/frontend.jsp` until the screen ships; Phase
    2 gave Clients, Matters and Workspace Templates theirs, which no row or tile links to yet, Phase 3 Stores, which
    stuck files link to, and Backends, which a backend that can't be reached, a disk nearly full and the Storage Backends
-   and Disk tiles link to, and Phase 4 Users, which none links to yet), and the find's `DESTINATIONS`. The Dashboard's
+   and Disk tiles link to, Phase 4 Users, which none links to yet, and Phase 5 Errors, which the unresolved errors link
+   to, Server Log, which the Server, Database and Memory tiles link to, Audit Trail, and Background Jobs, which the
+   previews given up on, a job that failed or is overdue, and the Previews and Background Jobs tiles link to), and the
+   find's `DESTINATIONS`. The Dashboard's
    rows and tiles draw their links with `frame/ServerLink.tsx`: a plain click on a link to one of the app's own
    addresses (`appAddressOf`) opens it with the router, without a page load, and the Classic Interface, another origin,
    a click with a modifier or another button and a link with a `target` stay the browser's. An attention row's link
@@ -234,20 +239,37 @@ What the screens from Phase 2 on share (the spec's section 7.2):
   Its `boxRef` goes on the box around the `Table`. Such a list takes the page's width, never a form section's
   (`Storage.module.css`'s `.section`, 760 pixels), which is too narrow for the matter columns.
 - **Paged lists.** `lists/usePagedList(path, query, pageSize, ids)` is a list that comes a page at a time, the Clients,
-  Matters, Users and Groups lists and a group's members (whose `{id}` segment `ids` fills, the key holding the id as a
-  number, so the members are under the group's own key): TanStack Query's infinite query over the route by `offset`,
-  which keeps the last question's rows while a new filter or order loads and asks again at each return to the window
-  (`ASK_ON_RETURN`), with the summary's `figuresAt`. `lists/useWords(q, send)` is such a list's words field: what's
-  typed shows at once and goes into the address, trimmed, once the typing pauses (`TYPING_DELAY_MS`, 150 ms, in
-  `pickers/typing.ts`), and the field follows the address when something else changes it, as the left pane's entry does.
-  `lists/useChosen(id)` holds what was picked for a filter, shown at once while the address, which names it by id,
-  follows a moment later, so a picker doesn't wait for the address with its list open: the Matters list's Client and
-  Owner and the Users list's Group.
+  Matters, Users, Groups and Errors lists and a group's members (whose `{id}` segment `ids` fills, the key holding the
+  id as a number, so the members are under the group's own key): TanStack Query's infinite query over the route by
+  `offset`, which keeps the last question's rows while a new filter or order loads and asks again at each return to
+  the window (`ASK_ON_RETURN`), with the summary's `figuresAt`, and the Errors list's `errors`, from its last page.
+- **Cursor lists.** `lists/useCursorList(path, query, pageSize)` is a list that comes by cursor, the Audit Trail and
+  the Activity tabs: an infinite query by each answer's `nextCursor`, sent back as `cursor`, which keeps the last
+  question's rows while a new one loads, asks again at each return to the window, as `usePagedList` does, and asks
+  again each time it's shown (`refetchOnMount: 'always'`), however fresh its last answer; it gives the last page as
+  the server gave it (`last`), and drops a row a later page gives again (`distinct`). The
+  server reads each source only so far for a page, so a page can come back short, or empty, with a cursor: the list
+  then asks for the next by itself, `FOLLOW_SHORT_PAGES` (3) pages in a row at most after the page that started the
+  run, then stops, and `hasMore` offers the rest to **Show More**, which starts a run again. A full page, a null
+  cursor or a failure ends a run. The Table's `loadMore`, as the list's end comes into view, is `loadMoreOnScroll`,
+  which reads on only after a full page and never while a read has failed: a browser says the end is in view again
+  each time the rows change, and a short list whose run has stopped has its end in view, so without that the list
+  would read on over nothing, or ask a failing server again and again. `lists/useWords(q, send)` is such a list's
+  words field: what's typed shows at once and goes into the address, trimmed, once the typing pauses
+  (`TYPING_DELAY_MS`, 150 ms, in `pickers/typing.ts`), and the field follows the address when something else changes
+  it, as the left pane's entry does. `lists/useChosen(id)` holds what was picked for a filter, shown at once while the
+  address, which names it by id, follows a moment later, so a picker doesn't wait for the address with its list open:
+  the Matters list's Client and Owner and the Users list's Group.
 - **Pickers.** Anything that can grow long is a search, `@healdan/ui`'s `PickField` asking as it's typed:
   `pickers/ClientPicker.tsx`, by a client's number or name (`useClientSearch`), and `pickers/PersonPicker.tsx`, whose
   `accounts` each caller chooses. `enabled` offers the people who can sign in, from `GET /v1/users`, for a field that
   makes someone an owner; `all` the admin find's people, those whose accounts are disabled marked **Disabled**, for a
-  filter, as their matters stay theirs. `pickers/GroupPicker.tsx` finds one group, for the Users list's Group filter.
+  filter, as their matters stay theirs; and `users` everyone the Users list lists, from `GET /v1/admin/users`, 20 at
+  most, disabled accounts marked, for a filter whose person may be one of many who match, as the Audit Trail's
+  **Person** is, which the find's five would cap. `pickers/MatterPicker.tsx` finds a matter by its number, its name
+  or its client's name, from `GET /v1/admin/matters`, 20 at most, each offered as `1001.1 – Charter Dispute` with its
+  client's name beside it, for the Audit Trail's **Matter**. `pickers/GroupPicker.tsx` finds one group, for the Users
+  list's Group filter.
   `pickers/GroupsField.tsx` is a list of groups that more are added to from a search (**Add a Group**, through
   `pickers/useGroupPicker`) and each removed from, the focus moving to the next Remove, or to the field after the
   last: New Store, a Store's **Who Can See It**, New User and a person's groups use it. An item can be `locked`, its
@@ -330,11 +352,75 @@ What the screens from Phase 2 on share (the spec's section 7.2):
   describes both its Rename and its Delete). The server's own refusal still shows for a change made meanwhile, and on a
   person's page until a dialog opens or their status changes. After **Clear Sign-In Block**, which goes once the block
   is cleared, the focus moves to **Sign Out Everywhere**.
-- **The last good answer stays.** The Users and Groups lists, a person's page, a group's page and the panels on them
-  keep their last answer while a new read fails, with `people/StaleNote.tsx`, "Couldn't refresh this, so it shows what
-  was read last." and **Try Again**, in place of the error that would take the page, and any dialog open on it,
-  away; only a read that has never answered shows `ErrorPanel`. A `404` on a new read still shows the page's Not
-  Found. The older screens don't do this yet.
+- **Monitoring** is `monitoring/`, with `views/ErrorsView.tsx`, `ServerLogView.tsx`, `AuditView.tsx` and
+  `JobsView.tsx`, and the Activity tabs on a matter's and a person's page. A screen's filters, and the Errors screen's
+  open fault, are in the address's search, never a path segment, so a log's name (`?log=DMS`) can't look like a file.
+  - **Errors** (`errorQueries.ts`, `errorColumns.tsx`, `ErrorDetails.tsx`, `errorText.ts`): the paged list, 100 a time,
+    with a row's details in a region of their own below it, as the list's rows keep their height; the open fault is
+    `?id=`. **Mark Resolved** and **Reopen** are one button whose words follow the fault, so the focus stays on it, and
+    `errorChanged` puts the answer in place and invalidates the list and the Dashboard's query, which the left pane's
+    count reads. A `404` on either makes the fault's own query stale, so its details say it has gone, and the focus
+    the button had goes to them.
+  - **The Server Log** (`useLogLines.ts`, `LogLines.tsx`, `logQueries.ts`): `useLogLines(name, level, q)` reads the
+    newest entries, then, while following, the page is visible and the person hasn't paused, what's new every
+    `FOLLOW_MS` (3 seconds) from the last answer's `after`, at once again while an answer isn't `atEnd`, `QUICK_READS`
+    (5) in a row at most; going back, a short answer not at the start is followed by another by itself, `EARLIER_RUN`
+    (3) at most after the read that started the run, the first read or **Show Earlier**. Each request has its own
+    `AbortController`, and a pause, the page hidden, leaving the page, or a new log, level or words cancels the one on
+    its way and drops its answer. It keeps `MAX_KEPT` (1,000) entries, one per `position`: following drops the oldest
+    while the box is at its end, and with the reader further up pauses instead (`pausedToKeep`), as **Show Earlier**
+    past the cap does, so the lines being read stay; a new log or filter after such a pause follows again. A follow
+    that fails waits twice as long each time (`FOLLOW_MS` × 2 to the failures in a row, `FOLLOW_MOST_MS`, a minute, at
+    most), back to 3 seconds at the first answer, and one answered `400` or `404`, a position or a log the server no
+    longer knows, ends the follow with `followLost`'s note, after which **Follow** starts afresh from the newest
+    lines. `rolled` replaces the entries with the new file's, and its note goes once Show Earlier reads before it, on
+    Follow, and once the new file's top leaves the kept entries. The session's view is kept with the log, level and
+    words it's of, so the box never draws an old log's lines for a new one. **Download** is a button: `useDownload`
+    (`download.ts`) first asks `GET /v1/admin/logs` through the guarded client, then sends the shared
+    `launchDownload`'s frame to the log's file, and says under the filters, with `forms/Refusal`, what either refused
+    (of the frame's, what Chromium and WebKit tell the page; Firefox tells it nothing), while a `401` or a
+    `403 admins-only`, from the check or in the frame, is the app's own Signed Out or no-access page. The box
+    (`LogLines`) is a named region that's a Tab stop, not a live region: at its end it keeps to its end, and further
+    up the first entry in view keeps its place, so new lines never move the reader or take the focus.
+  - **The Audit Trail** (`AuditList.tsx`, `AuditFilters.tsx`, `ActivityPanel.tsx`, `queries.ts`, `text.ts`): one list,
+    the screen's and both Activity tabs', through `useCursorList`, 100 rows a time, with the browser's `zone`; every
+    cell plain text, an administration row's changes after its detail, and a row's details in a region under the list,
+    with **Open Document in Healdan** or **Open Folder in Healdan**, as no link is inside a row. A row with no `who`
+    says "Not recorded" in its Who cell. **Export CSV** is a button through `useDownload`: `auditCheck` asks
+    `GET /v1/admin/audit` with the same filters and `limit=1`, then the frame goes to `/api/v1/admin/audit/export`
+    with the filters and `zone`, never `limit` or `cursor` (`auditExportHref`). **Refresh** (`useAuditRefresh`) reads
+    the list again, held while it reads. Every change the app sends that succeeds makes the audit lists stale
+    (`guardApi`'s `onChange`, which `main.tsx` gives `auditListsStale`), so a list on screen, or the next shown, has
+    the change. An empty list still looking says how far back it has read, from the last page's `readBackTo` ("Nothing
+    found back to …"), and a list with rows says it beside **Show More** ("Read back to …"); a visually hidden status
+    says how a run of Show More ended. A person or a matter the address names by id is read through its page's query,
+    and shown as "Person 7" when it can't be, and an address with a doc # and words keeps the doc # alone. An Activity
+    tab is the list with `{ matterId }` or `{ userId }` fixed, Kind ticks of its own (a matter's Document, Folder and
+    Administration), **From Date** and **To Date** (`DaysFilter`, which the screen shares, and which says when To Date
+    is before From Date), **Refresh**, no export, and **Open in the Audit Trail**. A matter's Activity tab leaves the
+    Workspace tab mounted, so moving to it raises no Leave question, and a person's page is **Overview** and
+    **Activity**, the Overview kept mounted once opened, so a change to their groups survives a visit to Activity.
+  - **Background Jobs** (`jobQueries.ts`, `jobText.ts`, `ScheduleDialog.tsx`, `useKeptFocus.ts`): a plain table of
+    about fourteen rows with their buttons, in two groups, a failed run's error in a row of its own under its job's.
+    `useJobs` asks again every 30 seconds while a job runs and the page is visible, once `SOON_MS` (2 seconds) after a
+    Run Now or a Stop is answered, and at each return to the window. Run Now and Stop are separate buttons, so a poll
+    that turns one into the other never leaves the wrong one under the focus, and `useKeptFocus` puts the focus, when
+    the button that had it goes, on the button that says it follows it (`data-follows`: Stop after Run Now), else on
+    the job's name, and back on a row's button after a dialog opened from it closes. A row's refusal stays only while
+    the job is as it was when the button was pressed: a `409` or `404` makes the list stale and waits for its read
+    (`jobsStale`) before the refusal shows, so the row shows the job as the refusal found it. The schedule dialog
+    takes a whole number of seconds, minutes or hours, checked as the server checks it in seconds, or a cron
+    expression, which only the server checks beyond its being typed.
+  - **Their words and fixtures** are in sections of their own of the catalogue (`strings/en-US.ts`, the strings and the
+    plurals) and of `test/fakeApi.ts`, one for Errors and the Server Log, one for the Audit Trail and the Activity
+    tabs, and one for Background Jobs, each under a comment naming it, with each screen's routes in a function of its
+    own (`errorRoutes`, `logRoutes`, `auditRoutes`, `jobRoutes`) that its tests spread, never in `defaultRoutes()`, so
+    screens built side by side merge without a conflict.
+- **The last good answer stays.** The Users and Groups lists, a person's page, a group's page and the panels on them,
+  and the Monitoring screens and the Activity tabs, keep their last answer while a new read fails, with
+  `people/StaleNote.tsx`, "Couldn't refresh this, so it shows what was read last." and **Try Again**, in place of the
+  error that would take the page, and any dialog open on it, away; only a read that has never answered shows
+  `ErrorPanel`. A `404` on a new read still shows the page's Not Found. The older screens don't do this yet.
 - **A group's id has a sign.** LogicalDOC's own groups have negative ids, `publisher`'s `-10000`, so the Admin app reads
   a group's id from an address with `groupIdFrom` (`addresses.ts`), which takes a minus sign, for a group's page, the
   Groups list's rows and the Users list's `group` parameter, and `groupHref` writes one as one segment. The shell's
@@ -573,17 +659,21 @@ view.
 `actions/` holds what a person does to a document, and every place that offers it goes through it.
 
 - **`launch.ts`** is the one place the page goes to an address. `launch` clicks a transient `<a>`, so a `healdan:`
-  link goes to the helper without leaving the page. `launchDownload` sends a hidden `<iframe>` to a file's address:
-  a plain navigation the web session carries, which the answer's own `Content-Disposition` makes a download and
-  names. No script reads the bytes, and no blob is made. jsdom can't navigate, so `test/setup.ts` replaces both with
-  mocks for every test, and a test that cares imports them and reads their calls.
-  - **A download is never a link with the `download` attribute.** WebKit, Safari's included, sends such a link's
-    request with the session's cookie but with no `Sec-Fetch-Site`, `Sec-Fetch-Mode` or `Sec-Fetch-Dest` header, so
-    the web session's route refuses it (`401`, see [Two Ways In](../api/#two-ways-in)) and Safari saves the refusal
-    under the file's name.
-    Chromium and Firefox send the headers. Without the attribute a link's navigation carries them in every browser,
-    but a refusal's page would then take the app's place, so the navigation is a hidden frame's
-    (`Sec-Fetch-Dest: iframe`), which `AppServlet`'s policy allows (`frame-src 'self'`).
+  link goes to the helper without leaving the page. `launchDownload`, which both apps share from `@healdan/shell`
+  (`packages/shell/src/download.ts`) and `launch.ts` re-exports, sends a hidden `<iframe>` to a file's address: a
+  plain navigation the web session carries, which the answer's own `Content-Disposition` makes a download and names.
+  No script reads the bytes, and no blob is made. A `401` in the frame goes to its `onSignedOut`, and any other
+  refusal to its `onRefused` when the app gives one, or else to a toast. jsdom can't navigate, so `test/setup.ts`
+  replaces both with mocks for every test, and a test that cares imports them and reads their calls.
+  - **A download is never a link with the `download` attribute, in either app.** WebKit, Safari's included, sends such
+    a link's request with the session's cookie but with no `Sec-Fetch-Site`, `Sec-Fetch-Mode` or `Sec-Fetch-Dest`
+    header, so the web session's route refuses it (`401`, see [Two Ways In](../api/#two-ways-in)) and Safari saves the
+    refusal under the file's name. Chromium and Firefox send the headers. Without the attribute a link's navigation
+    carries them in every browser, but a refusal's page would then take the app's place, so the navigation is a hidden
+    frame's (`Sec-Fetch-Dest: iframe`), which `AppServlet`'s and `AdminAppServlet`'s policies allow
+    (`frame-src 'self'`). The Admin app's two downloads, the Server Log's **Download** and the Audit Trail's **Export
+    CSV**, are buttons that go through `download.ts`' `useDownload` (see Monitoring, under [Forms, Lists and
+    Refusals](#forms-lists-and-refusals)).
   - **A frame is a download's own,** so two started together don't stop each other. It's removed after an hour
     (`FRAME_KEPT`): a download that has begun doesn't need it, in Chromium, WebKit or Firefox, but taking it away
     stops one the server hasn't begun to answer, and says nothing, and a cloud file that isn't in the read cache is

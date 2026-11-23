@@ -33,7 +33,8 @@ Holding Space down doesn't open and close Quick Look over and over.
 
 **Open as Reading Pane** in Quick Look's bar docks the preview in the right region, where the details usually are.
 
-- **It stays while you click or arrow down the list,** previewing each document you select, until you close it with
+- **It stays while you click or arrow down the list,** previewing each document you select once it has stayed
+  selected for a moment, so arrowing past a row neither loads it nor records it as read, until you close it with
   **Close Preview**. Closing it brings the details back.
 - **The funnel still opens Filters in its place.** The reading pane comes back when you next click a row, or close
   Filters.

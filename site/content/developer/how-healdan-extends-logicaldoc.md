@@ -268,6 +268,20 @@ see [Building from Source](../building-from-source/#running-the-war-outside-dock
     digits (`{id: [0-9]+}`), and a group's may carry a minus (`{id: -?[0-9]+}`), as LogicalDOC's `publisher` group is
     `-10000`. `PeopleView` holds the contract's records, and its `CreatedUser` and `TemporaryPassword` leave the
     password out of their `toString()`.
+  - **The Monitoring routes** are four classes, all `MONITORING`, each at its own exact root: `AdminErrorsResource`
+    (`/v1/admin/errors`: the list, a fault, and its resolve and reopen, over `ErrorStore` and `ErrorReview`),
+    `AdminLogsResource` (`/v1/admin/logs`: the logs, a log's lines and its download, over `LogFiles`),
+    `AdminAuditResource` (`/v1/admin/audit`: a page and the export, over `AuditFeed` and `AuditCsv`) and
+    `AdminJobsResource` (`/v1/admin/jobs`, over `Jobs` and `JobControl`), over `healdan-core`'s services (see the
+    Admin app's records, below), which check their caller and record what they change themselves, so the routes record
+    nothing. `MonitoringView`, `AuditView` and `BackgroundJobView` hold the contract's records, and cut a user name
+    and password written in a URL from a fault's message and stack and from a job's error (`UrlCredentials`, below). A
+    malformed parameter (a window, an area, an `unresolved` other than `true` or `false`, a position, a cursor, a
+    zone, a day not of the years 0001 to 9999, or not written as `2026-11-22`) is `400`, before a path's `404`; a
+    schedule's fields are `422`; and what a job doesn't allow now is `409 refused`, with `JobControl`'s sentence. A
+    log's download and the export stream through `StreamingOutput`, both `no-store`: the log's files are checked, and
+    the export's filters worked out and its first page read (`AuditCsv.open`), before the first byte, so a failure
+    there is a problem, not a file cut short, and a `HEAD` of either reads no file and no row.
 - **`healdan-storage`** keeps documents' files on [storage backends](../../admin/storage-backends/), and is a plugin
   of its own that requires `healdan-core`. Its code is under `com.logicaldoc.healdan.storage`, where `healdan-core`'s
   Spring scan finds its beans.
@@ -399,10 +413,11 @@ see [Building from Source](../building-from-source/#running-the-war-outside-dock
 
     A check that fails, as when the database doesn't answer, lets nobody in and tells nobody they've lost access:
     every path is the same `503`, `no-store`, with a line of plain text to try again, and the return path is kept.
-    Hashed files are `private, max-age=31536000, immutable`, so no proxy keeps them for someone else, and the page
-    and every refusal are `no-store`, set explicitly, as LogicalDOC's `CacheControlFilter` would otherwise keep a
-    refused `.js` for ten minutes. Its policy is the User app's without PDF.js's worker and the
-    email's frame: `worker-src 'none'; frame-src 'none'`. Its answers set their status, never send an error, so
+    Hashed files are `private, max-age=31536000, immutable`, so no proxy keeps them for someone else, and the page and
+    every refusal are `no-store`, set explicitly, as LogicalDOC's `CacheControlFilter` would otherwise keep a refused
+    `.js` for ten minutes. Its policy is the User app's without PDF.js's worker, `worker-src 'none'`; its
+    `frame-src 'self'` is for the downloads' hidden frame (see The Web App's [Working with a
+    Document](../the-web-app/#working-with-a-document)). Its answers set their status, never send an error, so
     Tomcat's error page never replaces them.
   - **Where a sign-in lands.** LogicalDOC's `login.jsp` sends the password form, as `j_successurl`, to the HTTP
     session's `RequestedUrl`, which it writes unescaped into a script. Three pieces of `healdan-core`'s `web` package
@@ -475,8 +490,9 @@ see [Building from Source](../building-from-source/#running-the-war-outside-dock
     `HibernateFolderDAO.restore`; `TrashRemoval` writes removals, with who and when. A member is taken only while its
     own row says the state the member does.
   - **`TrashDestroyer`**, started by `TrashStartup` (a `HealdanStartListener`, on a daemon thread of its own, at 02:47
-    server time, never in the first 10 minutes after a start), destroys the members removed more than `trash.removedDays`
-    before. Its design is in the folders and Trash spec, §5.4, and the Ruling it cites:
+    server time, its nightly run never in the first 10 minutes after a start, and at once on an administrator's Run
+    Now, which may come then), destroys the members removed more than `trash.removedDays` before. Its design is in the
+    folders and Trash spec, §5.4, and the Ruling it cites:
     - Each document is destroyed through `DocumentManager.destroyDocument` in a transaction of its own, with the
       member's state written first, so that nothing but the commit follows the store's hold of its files, and a
       failure undoes only that document's destroy, its files going back in their places. A failure leaves that
@@ -796,15 +812,20 @@ see [Building from Source](../building-from-source/#running-the-war-outside-dock
     stack) and its next run, in memory only, so it starts again with the server, and reporting never throws, so it
     can't change what a job does. The previews and the email index report from each round of their workers
     (`runOnce`), `healdan-storage`'s mover from its sweep and its `runOnce()`, and the Trash destroyer and the
-    storage retests, purge, alert and nightly check from their schedulers, so a direct call to one of those last, as
-    a test makes, reports nothing.
+    storage retests, purge, alert and nightly check from their schedulers and from Run Now (see Job control, below),
+    so a direct call to one of those last, as a test makes, reports nothing.
   - **`Jobs`** lists Healdan's eight jobs in a fixed order (`preview`, `email-index`, `trash-destroyer`,
     `storage-mover`, `storage-retest`, `storage-purge`, `storage-alert`, `storage-nightly-check`; the storage ones only
     where `healdan-storage` is, and switched off on an `FSStore` server, where none runs: `HealdanJob.enabled()`, which
     `healdan-storage`'s `StorageJob` answers from `StoreTracking.active()`), then LogicalDOC's six scheduled tasks from
     `TaskManager`: the Indexer, Index Optimizer, Tags Processor, Digest Processor, Statistics Collector and Paths
     Calculator. A task's last start is its schedule's previous fire time, its last end that plus its last duration once
-    it isn't running, and its next run the schedule's next fire time, so a task shows no last end while it runs.
+    it isn't running, so a task shows no last end while it runs, and its next run the first time after its last start
+    that the trigger Quartz holds for it fires, so a schedule saved since the start counts (with no trigger, its
+    scheduling's own next fire time). A task's view carries its schedule (`JobSchedule`: `simple`, every so many
+    seconds, or `cron`, with its expression); Healdan's jobs keep their own, and have none here. One of Healdan's can
+    run now while it's switched on and isn't running, if it's a job that does (`HealdanJob.canRunNow()`), and a task
+    while it's enabled and idle and the server's run level has scheduled tasks on.
     LogicalDOC keeps a task's last error with no getter, so its error is the latest one the captured errors have from
     the task's logger since its last start: any error a task logs while it runs fails it, not only one that ends the
     run, and `Task.run`'s own "The task is stopped" and "The task gets interrupted" don't count. The email index is
@@ -836,19 +857,195 @@ see [Building from Source](../building-from-source/#running-the-war-outside-dock
     the last answer while it's younger than twice that. A request waits for a source only when it has no answer that
     young, at most 5 seconds for all of them, after which the source is still being worked out. A read still running
     after its minute is stuck: it's logged once, and a request with no answer young enough gets a failure at once
-    rather than wait for it; one still running after ten is given up on, logged, and read again. `readAt` is when the
+    rather than wait for it; one still running after ten is given up on, logged, and read again. The errors' source
+    and outgoing email's are also told of each fault marked resolved or unresolved (`ErrorStore.reviews()`, a count
+    each change adds to once it commits): the next read after it forgets what they keep, as `forget()` does, and works
+    them out afresh, so the Errors screen's ask straight after a resolve gets the new count. The jobs' source is told
+    the same way of each job action that changed something and each run that ends otherwise than the one before
+    (`Jobs.changes()`, below). `readAt` is when the
     oldest answer a request is given was read. A source that fails, is stuck,
     or is still being worked out, puts its codes in `unchecked` and gives its tiles `problem`, a fixed line, with
     `attention` for status, and the rest are whole; the failure is logged at warn with its class only, its stack at
     debug. Each item's and tile's link is the screen that fixes it, from `DashboardService.Screen`, a table of the
     Admin app's addresses that is the Classic Interface's, `/frontend.jsp`, until each screen ships. Phase 2 gave
-    Clients, Matters and Workspace Templates theirs, Phase 3 Stores and Backends, and Phase 4 Users, `/admin/users`,
-    which no item or tile links to yet (`DashboardScreensTest`):
+    Clients, Matters and Workspace Templates theirs, Phase 3 Stores and Backends, Phase 4 Users, `/admin/users`,
+    which no item or tile links to yet, and Phase 5 Errors (`/admin/errors`), Server Log (`/admin/server-log`),
+    Audit Trail (`/admin/audit`) and Background Jobs (`/admin/jobs`) (`DashboardScreensTest`):
     `files-stuck` links to Stores, or to Backends when only files with no Store are stuck (the item's own screen, in
     `Found`), and `backend-unreachable`, `disk-low`, the Storage Backends tile and the Disk tile to Backends; where
     storage backends are off, `disk-low` and the Disk tile link to the Classic Interface, as Backends has nothing
-    there. Tests
+    there. `errors` links to Errors with Unresolved Only set (`UNRESOLVED_ERRORS`, `/admin/errors?unresolved=true`);
+    `previews-given-up`, `job-failed`, `job-overdue`, and the Previews and Background
+    Jobs tiles to Background Jobs; and the Server, Database and Memory tiles to Server Log. Tests
     call `read()` after `forget()`, which drops what's kept.
+  - **Reading a document is recorded** (`DocumentViews`, `com.logicaldoc.healdan.admin`; Admin app spec §8.8), as
+    LogicalDOC's `event.viewed` in the document's history, for the Audit Trail. `healdan-api`'s `/preview` calls
+    `viewed` once it has opened the file's stream, as it's about to answer `200`, and `MessageResource` as it serves an
+    email's body or an attachment shown in place (`inline=true`), on the email; so a `202`, a refusal, a `404`, a
+    `HEAD` and a `503` record nothing, and an email's body, its pictures and its attachments shown in place are one
+    view of it. A view is recorded once per person and document in 30 minutes (`WINDOW`): a map in memory, in the order
+    views were claimed, drops what's older than that as each is claimed, and holds 20,000 at most (`MAX_REMEMBERED`),
+    past which the oldest go, which can only record a view again sooner; a restart forgets it, as Healdan runs one
+    node. The claim comes before the write, so two reads at once write one row. The row is built as a download's is
+    (`DocumentResource.recordDownload`), the session's id and the address it signed in from included, and written in a
+    transaction of its own (`PROPAGATION_REQUIRES_NEW`), so no caller's transaction holds it; a view of an older file
+    takes that file version, and the version and file name of the version that made it. A write that fails is logged
+    at warn with the document's id and the exception's class alone (its stack at debug), takes its claim back, so the
+    next read tries again, and never throws: the read goes on, whatever fails, an `Error` such as a missing class
+    included, but for the virtual machine's own (`VirtualMachineError`), which goes on up.
+  - **A user name and password written in a URL are cut from what's shown** (`UrlCredentials.cut`, in
+    `com.logicaldoc.healdan.admin`). In every URL written plainly, a scheme then `://`, the user part of the authority
+    goes, with its password or without, so `scheme://user:secret@host/path` reads `scheme://host/path`, and so does a
+    URL that follows another's host directly, as in a list of hosts joined by commas. The authority ends at the first
+    `/`, `?`, `#`, whitespace, quote or angle bracket, and the user part at the last `@` before that, so three things
+    aren't recognised, and the contract's Monitoring tag says so: a password that itself holds one of those; a URL
+    escaped as JSON or percent-encoded; and a URL cut short by a length limit before its `@`. An `@` in a path or query,
+    and an email address outside a URL, stay. It's one pass over the text, with no regular expression. The
+    Errors routes cut a fault's message and stack with it, the Server Log each line, Background Jobs a job's error, and
+    `ErrorReview` the name it records. A log's download is the files as they are.
+  - **Marking a fault resolved** is `ErrorReview` (`admin.errors`): `resolve(id, actor)` and `reopen(id, actor)`
+    refuse anyone but an administrator first, then change the fault and record it in one transaction, `error.resolved`
+    or `error.reopened`, in the `MONITORING` area, aimed at `error` by the fault's id and named by its latest message,
+    cut as above and to fit. `ErrorStore.resolve` changes only a fault that isn't resolved, and `reopen` only one that
+    is, so of two resolves at once only one changes the row and is recorded, and a change that would change nothing is
+    answered as it is. `ErrorStore.reviews()` counts each change once it commits, which the Dashboard's sources
+    compare (above). A fault's details name the documents its message names (`ErrorStore.findDocuments`, the caller's
+    tenant's, deleted ones too, each with its doc # and file name, or neither for an id no such document has) and the
+    log its logger writes to (`LogFiles.logOf`, below), for **Show in Server Log**. The list (`ErrorPage`) adds
+    `errors`, the times the faults the filters keep were seen in the window, beside the page; the windows count whole
+    UTC hours of `hd_error_hour`, so the last hour's counts are the hour now and the one before.
+  - **The Server Log** is `LogFiles` (`admin.logs`), over LogicalDOC's `LogConfigurator`, read at each call. A log is
+    a file appender of `log.xml`, named by its appender's name, but for the HTML copies (`_WEB`) and a name with a
+    slash, a backslash or an apostrophe, or of dots alone. `list` gives `DMS`, **Main Log**, whenever the configuration
+    has it, then each other log whose files hold anything, by label, ignoring case: a task's by `Jobs.label`, any other
+    by its name. A name a request sends is only compared with those names, so nothing it sends is joined to a path, and
+    the Admin app's address carries it as a search parameter, `?log=DMS`, never a path segment, which
+    `AdminAppServlet` could take for a file by its extension. `list`, `read` and `zip` refuse anyone but an
+    administrator first.
+    - **A log is its current file and the files it rolled over to,** `<file>.1` up to its `DefaultRolloverStrategy`'s
+      `max` (log4j's 7 when it names none, and 100 at most), read as one, oldest first, by the strategy's `fileIndex`:
+      with `min` the highest number is the oldest, and otherwise the lowest. `LogChain` opens them once for a read,
+      each up to the size it had then, and knows each by its identity, the first 16 bytes of the SHA-256 of its first
+      line (4 KiB of it at most), which stays as the file is renamed; the current file has none until its first line
+      is whole.
+    - **A position** (`LogPosition`) is an identity and an offset, as base64url without padding, opaque to a client.
+      `parse` takes only the one spelling `text()` writes, at most 80 characters, and a read finds the position's file
+      among the log's by its identity, never by a name. An `after` whose file isn't the current one any more reads the
+      current file from its start, `rolled`; a `before` whose file has gone answers nothing, at the log's start.
+    - **`LogReader`** reads 64 KiB at a time and keeps at most 40,000 bytes of a line, decoded as UTF-8, a URL's user
+      name and password cut, then 10,000 characters of each message and continuation line. A line starts an entry when
+      it starts with its time as every shipped pattern writes it (`ENTRY`, read in the server's time zone); the rest
+      is read as the main log's pattern writes it, a level, a source and the message (`FULL`), or as a level and the
+      message, or the message alone after `- `, as a few of the shipped logs write them, the level and source null
+      where the line gives none. The lines after it are its continuation, and a line that starts no entry at the start
+      of what was read, or of a file, is an entry of its own, as log4j writes each event whole to one file. A read
+      stops at 200 entries, 5 MiB looked through or 50,000 lines looked at. Going back, it stops at an entry's start,
+      so an entry's lines come together, and goes on into the next older file. Going forward, it reads the current
+      file up to its size, leaves a last line not yet ended, and, stopped by its budget inside an entry, gives none of
+      that entry and answers its start as `after`, but for the first entry it read, which it gives as far as it got,
+      so that a read always moves on. A file that shrinks while it's read ends the read where it now ends.
+    - **The download.** `zip` opens each file to check it can be read and closes it again, and `LogZip.writeTo` opens
+      them as it writes the zip, so nothing is held open between the request and the body, and a `HEAD` opens nothing:
+      the current file first, then the newest of the others, each up to its size then, under its own name. A file that
+      can't be read is an `UncheckedIOException`, a `500` before the answer starts.
+    - **`logOf(logger)`** is the log a logger's lines go to: from the logger `log.xml` configures that is it or the
+      nearest package of it, up through those that pass their lines on to their parents, the first listed log of the
+      first that doesn't, or the root's, `DMS`. It never throws: a configuration that can't be read logs one warning and
+      answers none.
+  - **The Audit Trail** is `AuditFeed` (`admin.audit`), one feed, newest first, over five sources: `ld_history`
+    (Document), `ld_folder_history` (Folder), `ld_user_history` (Sign-In for a sign-in, a sign-out, a session that
+    timed out and a failed sign-in, User for the rest), `hd_admin_event` and `hd_storage_event` (Administration).
+    `page`, `forEach` and `prepare` refuse anyone but an administrator first, and read the actor's tenant only, every
+    value bound. `prepare` works out once what the filters name (the doc #'s documents, the matter's folders, each
+    table's id range for the days), so an export's refusal or failure comes before its first byte.
+    - **The filters.** A person (`userId`) is the rows they did and those about them: the history rows with their id,
+      and the administration rows by them or aimed at `user` and their id. A matter is its own folder and every folder
+      in it, live or in the Trash, walked by parent, never by `ld_path`: those folders' document and folder rows, and
+      the administration rows aimed at the matter or at a folder or search folder in it; no account or storage rows.
+      A doc # is its documents' rows in `ld_history` alone. A `userId` that names no account of the tenant, 0 included,
+      keeps no row. `q` is a `like`, with `%` and `_` taken as they are, on a file name, a folder's path, a target's
+      name (a storage row's backend name is its target's), an address, and the person as the row kept them: in
+      LogicalDOC's history the login and the name at the time (`ld_userlogin`, `ld_username`), and in Healdan's
+      records the username. Never the person's name now; and an account row's person only where its user id names an
+      account of the tenant, so what was typed at a failed sign-in for no account is never compared.
+    - **The twins.** A recovery key shown or entered through the Admin app is in both `hd_storage_event` and
+      `hd_admin_event`, so a storage row with an administration row of the same action, backend and person written
+      within 10 seconds after it is left out: the storage record gives only the Classic Interface Storage tab's.
+    - **The cursor** (`AuditCursor`) holds each source's place, the id below which its rows are still to come, as
+      base64url of `d<n>.f<n>.u<n>.a<n>.s<n>`, parsed only in the spelling `text()` writes. Rows written meanwhile take
+      higher ids, so they never repeat one on a later page: they're on a fresh first page. An id is given at the
+      insert, not the commit, so a row whose transaction commits after a page has passed its id isn't on a later page
+      of that cursor, nor in an export under way, only on a fresh first page. The sources are
+      merged by date in Java, ties in the sources' order, and a row is given only once every source that could still
+      hold a newer one has been read that far, so the order holds across short reads.
+    - **Reading.** None of the tables has an index on its date, and Healdan adds none to LogicalDOC's, so each source
+      is read newest first by its key. With a filter no index serves (the words, the dates, one of the two account
+      kinds alone, a matter's document rows, a person's folder rows, and every storage read, for its twins), a page
+      looks through at most `SCAN_PER_SOURCE`, 100,000, of a source's rows by its key, as much as one request can
+      afford (about 0.9 µs a row on the test database: 91 ms for 100,000), and may come back short, even empty, with
+      a cursor. A filter an index serves (a person on `ld_history`, `ld_user_history` and `hd_admin_event`, a matter
+      on `ld_folder_history` and `hd_admin_event`) is read in two steps: that window first, which finds the rows of
+      anyone or anything active; then, only while the page isn't full and the window didn't reach the source's end,
+      the rows below it through the index (`belowSql`: the ids an inner select finds by the indexed columns alone,
+      then those rows with every filter), so a page costs the window and the value's own rows, wherever they lie. A
+      doc # reads through its index alone. Every statement keeps its bound under a generic plan as well as a custom
+      one, as pgjdbc prepares a statement on the server once a connection has run it five times: the inner select's
+      bounds on the key are written `id + 0`, so no index serves them and it reads the value's own index whatever the
+      plan. Each page says how far back it has read (`AuditPage.readBackTo`): the newest of each source's next row not
+      given and each open source's window end, so every row the filters keep that's newer has been given and the next
+      page's rows are no newer; null exactly when the cursor is.
+    - **Dates** become an id range for each table by a binary search on the key, each probe the row with the greatest
+      id at or below a point, widened by an hour each side (`DATE_SLACK`), and the rows are still filtered by their own
+      dates, so the answer is a full scan's while no row's date is more than an hour out of step with its id's order.
+    - **Words** (`AuditWords`): each row carries its stored event and its words in US English (`what`), from one
+      table, an event with no entry showing itself, each true whoever did it ("Account disabled", "Asked a job to
+      run"). `who` is the person's name now (`PersonNames`, read for a page in one query), or the person as the row
+      kept them; `detail` is one line the server makes (a document's doc #, file name and version, a folder's path, a
+      sign-in's client, a target's name); and an administration row's changed fields come apart, as `changes`, a
+      secret as `Change.secret()`. A User row, an account's history but its sign-ins, names who made the change: `who`
+      is the row's author (`ld_author`), named as any person is, read for a page by username in one query, or null
+      where the row has none, and `detail` is the account as the administration record names a person, as
+      `Sam Okafor (sokafor)`, then, for the label events (`LABELLED`: an account created, changed, disabled, enabled
+      or deleted, a password changed, an API key made, a sign-in as another account, a change of who can sign in as
+      it, a legal notice confirmed), `: ` and LogicalDOC's note, cut to 300 characters; for any other, the account
+      alone. A failed sign-in for a username no account has has `who` null and the detail `Unknown username`
+      (`UNKNOWN_USERNAME`), so what was typed is never answered or exported.
+    - **The export** (`AuditCsv`) is UTF-8 with a byte order mark and CR LF, with the columns Time (UTC, ISO 8601, to
+      the millisecond), Who, Kind, What, Detail, From and Changes. `AuditCsv.open(prepared, max)` reads the first page,
+      a page of 1,000 rows, before the answer starts, so one that can't be read is a `500` problem; `Export.writeTo`
+      then writes the byte order mark and the column names and flushes at once, then each page's rows as it's read,
+      to 100,000 (`MAX_ROWS`), then a last line that says it stopped. Before each later page it asks whether its reader
+      is still an administrator (`Prepared.readerIsAdmin`), and ends with `NOT_ADMIN`'s line ("Stopped before the end:
+      only an administrator can export the Audit Trail.") if not, logged at info; a later page that can't be read ends
+      it with `UNREADABLE`'s ("Stopped before the end: the server couldn't read the rest. Export again."), logged once
+      at error by class. Every cell, the last lines included, once composed, is guarded (a `'` before a leading `=`,
+      `+`, `-`, `@`, tab or CR) and then quoted.
+  - **Job control** is `JobControl` (`admin.jobs`): Run Now, Stop, Enable, Disable and a task's schedule. Each refuses
+    anyone but an administrator first, then answers null for a job `Jobs` doesn't list (the route's `404`), then
+    refuses what the job doesn't allow now with a sentence of its own (`ALREADY_RUNNING`, `SCHEDULED_TASKS_OFF`,
+    `NO_SCHEDULE` and the rest), and answers the job as `Jobs.one` reads it after.
+    - **LogicalDOC's tasks.** Run Now, while one is enabled and idle and scheduled tasks are on, runs the task as its
+      schedule does, on a daemon thread of its own, `healdan-run-now-<task>`, refused while the thread it last started
+      is alive, so two at once make one run. Stop, while it runs, is `Task.interrupt()` under the task's own monitor,
+      refused once asked. Enable, Disable and the schedule go through the task's `TaskScheduling`, saved as the
+      Classic Interface saves it, and take turns on one lock. A schedule is `simple`, every 1 to 31,536,000 seconds, or
+      `cron`, an expression Quartz takes that comes round again, its fields checked first (`FieldRefusal`, `422`),
+      whatever the job; the task's delay and maximum duration stay. A save that fails puts the scheduling and its
+      settings back as they were in memory, so the same change asked again is made.
+    - **Healdan's jobs.** Run Now alone, for those whose `canRunNow()` is true, the Trash destroyer and the storage
+      mover, retests, purge and nightly check, while they're switched on and not running (`HealdanJob.runNow()`). Each
+      but the mover runs through a `JobRuns`, which takes the job's runs one at a time: a run asked for now starts on a
+      daemon thread, `healdan-run-now-<job>`, only while none goes on, and reports to `JobStatus` as a scheduled run
+      does, the job's next scheduled run left as it was; a scheduled run that comes due meanwhile waits for it to end,
+      then runs. The mover's Run Now wakes its coordinator, whose passes report as they always do, and is refused before
+      the coordinator has started. Previews, the email index and the storage alert run only by themselves.
+    - **Recorded** with `recordAfter`, as saving a task's scheduling writes `context.properties` and reschedules it,
+      which isn't one transaction: in the `MONITORING` area, aimed at `job` with no id and named by the job's name,
+      `job.run-requested`, `job.stop-requested`, `job.enabled`, `job.disabled` and `job.schedule-changed` (one change,
+      `schedule`, before and after, as `every 1800 seconds` or `cron 0 0 3 * * ?`). Run Now and Stop are recorded once
+      taken; Enable, Disable and the schedule only when they change something. Each action recorded, and the end of a
+      task's run it started, moves `Jobs.changes()` on (`JobStatus.changed()`); a Healdan job's report whose result or
+      error differs from the one before moves it too, and the Dashboard's jobs source reads afresh after it moves.
 - **One-time setup steps** in `com.logicaldoc.healdan.seed` create what Healdan needs inside LogicalDOC, such as
   the Everyone group and the Healdan profile. Each records that it ran in `hd_setting`, and never runs again, so a
   new default ships as a new step.

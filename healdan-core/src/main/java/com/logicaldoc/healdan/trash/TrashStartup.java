@@ -15,6 +15,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,6 +24,7 @@ import org.springframework.stereotype.Component;
 
 import com.logicaldoc.healdan.HealdanStartListener;
 import com.logicaldoc.healdan.admin.jobs.HealdanJob;
+import com.logicaldoc.healdan.admin.jobs.JobRuns;
 import com.logicaldoc.healdan.admin.jobs.JobStatus;
 
 import jakarta.annotation.PreDestroy;
@@ -37,6 +39,12 @@ import jakarta.annotation.PreDestroy;
  * as the {@value #JOB} job (Admin app spec section 9.5), with the next night as
  * its next run; one that fails gives its exception's class alone, as it is
  * logged.
+ * <p>
+ * An administrator's Run Now (Admin app ruling P5-R16) runs it at once, on a
+ * thread of its own, and reports as a night's run does, with the night it is
+ * scheduled for left as its next run. The two never run side by side
+ * ({@link JobRuns}): Run Now is refused while a run goes on, and a night's run
+ * that comes due during one asked for now waits for it to end, then runs.
  */
 @Component
 public class TrashStartup implements HealdanStartListener, HealdanJob {
@@ -53,6 +61,9 @@ public class TrashStartup implements HealdanStartListener, HealdanJob {
 	static final Duration AFTER_START = Duration.ofMinutes(10);
 
 	private final TrashDestroyer destroyer;
+
+	/** Its runs, the nights' and those asked for now, one at a time */
+	private final JobRuns runs = new JobRuns(JOB);
 
 	private volatile ScheduledExecutorService scheduler;
 
@@ -79,6 +90,21 @@ public class TrashStartup implements HealdanStartListener, HealdanJob {
 	}
 
 	@Override
+	public boolean canRunNow() {
+		return true;
+	}
+
+	/**
+	 * Runs the job now, on a thread of its own, unless a run goes on: it
+	 * reports as a night's run does, with the night it is scheduled for as its
+	 * next run, as it was
+	 */
+	@Override
+	public boolean runNow() {
+		return runs.now(() -> runNightly(() -> JobStatus.get().nextRun(JOB)));
+	}
+
+	@Override
 	public synchronized void started() {
 		if (scheduler != null)
 			return;
@@ -100,7 +126,7 @@ public class TrashStartup implements HealdanStartListener, HealdanJob {
 			running.schedule(() -> {
 				ZonedDateTime next = nightlyAfter(at.plusSeconds(1));
 				try {
-					runNightly(next);
+					scheduledRun(next);
 				} finally {
 					scheduleNightly(running, next);
 				}
@@ -111,27 +137,46 @@ public class TrashStartup implements HealdanStartListener, HealdanJob {
 	}
 
 	/**
+	 * A night's run, once a run asked for now that goes on has ended
+	 *
+	 * @param next the night it runs next
+	 * @return whether it ran: false when the scheduler stopped while it waited
+	 */
+	boolean scheduledRun(ZonedDateTime next) {
+		return runs.scheduled(() -> runNightly(next));
+	}
+
+	/**
 	 * Runs the job once, whatever it fails with but a
 	 * {@link VirtualMachineError}, and reports the run to {@link JobStatus}
 	 *
 	 * @param next the night it runs next
 	 */
 	void runNightly(ZonedDateTime next) {
+		runNightly(next::toInstant);
+	}
+
+	/**
+	 * Runs the job once, as {@link #runNightly(ZonedDateTime)} does
+	 *
+	 * @param next when it runs next, asked once the run has ended
+	 */
+	private void runNightly(Supplier<Instant> next) {
 		JobStatus status = JobStatus.get();
 		status.started(JOB);
 		try {
 			destroyer.runOnce(Instant.now());
 		} catch (VirtualMachineError e) {
-			status.failed(JOB, e.getClass().getSimpleName(), next.toInstant());
+			status.failed(JOB, e.getClass().getSimpleName(), next.get());
 			throw e;
 		} catch (Throwable e) {
 			// An Error such as a class missing from a plugin's zip must not end the schedule either
 			log.error("The Trash's nightly job failed: {}", e.getClass().getSimpleName(), e);
 			// Its class alone, as logged: a message can name a folder or a file
-			status.failed(JOB, e.getClass().getSimpleName(), next.toInstant());
+			status.failed(JOB, e.getClass().getSimpleName(), next.get());
 			return;
 		}
-		status.finished(JOB, next.toInstant());
+		status.finished(JOB, next.get());
 	}
 
 	/**
@@ -160,10 +205,12 @@ public class TrashStartup implements HealdanStartListener, HealdanJob {
 	}
 
 	/**
-	 * Stops the scheduled work.
+	 * Stops the scheduled work, and interrupts a run asked for now, as the
+	 * scheduler's own is.
 	 */
 	@PreDestroy
 	public void stop() {
+		runs.stop();
 		ScheduledExecutorService running;
 		synchronized (this) {
 			running = scheduler;
