@@ -24,7 +24,6 @@ import com.logicaldoc.core.document.DocumentManager;
 import com.logicaldoc.core.document.IndexingStatus;
 import com.logicaldoc.core.parser.ParsingException;
 import com.logicaldoc.core.security.Session;
-import com.logicaldoc.core.security.TenantDAO;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.healdan.HealdanRuleException;
 import com.logicaldoc.healdan.admin.AdminArea;
@@ -139,7 +138,7 @@ public class IndexReview {
 	/**
 	 * Try Again: indexes a document that couldn't be indexed, now, on the caller's thread, through CE's own
 	 * {@code DocumentManager.index}, and writes the event CE's Indexer writes ({@link IndexEventRows}),
-	 * {@code event.indexed} or {@code event.indexed.error} with the error's message, as the actor, with the session
+	 * {@code event.indexed} or {@code event.indexed.error} with the error's message, as the actor, with the session's id
 	 * when there is one, and, like CE, sets the document to Skip after its error where {@code index.skiponerror} says
 	 * so; the outcome is answered either way (ruling P6-R24). A file whose storage can't be reached is neither (ruling P6-R23): nothing is
 	 * written, counted or recorded, and the outage is thrown, which the API answers {@code 503}.
@@ -161,12 +160,11 @@ public class IndexReview {
 		requireAdmin(actor);
 		FailedDocument failed = requireFailed(docId, actor);
 
+		String sessionId = session != null ? session.getSid() : null;
 		Tried tried;
 		try {
 			indexing.index(docId);
-			Document document = document(docId);
-			if (document != null)
-				IndexEventRows.indexed(document, actor, session);
+			IndexEventRows.indexed(docId, actor, IndexingStatus.TO_INDEX, sessionId);
 			tried = new Tried(INDEXED, null);
 		} catch (ParsingException e) {
 			StorageUnreachableException outage = StorageUnreachableException.in(e);
@@ -175,11 +173,10 @@ public class IndexReview {
 			// The document's own failure, the index's included, which CE wraps so. Its message can name the file, so
 			// it isn't logged
 			log.debug("Document {} couldn't be indexed again: {}", docId, e.getClass().getName());
-			Document document = document(docId);
-			if (document != null) {
-				IndexEventRows.failed(document, e.getMessage(), actor, session);
-				skipOnError(document);
-			}
+			IndexEventRows.failed(docId, actor, e.getMessage(), sessionId);
+			Document document = DocumentDAO.get().findById(docId);
+			if (document != null)
+				IndexSettings.skipOnError(document);
 			FailedDocument now = counts.failure(docId, actor.getTenantId());
 			tried = new Tried(FAILED, now != null ? now.reason() : e.getMessage());
 		}
@@ -187,20 +184,6 @@ public class IndexReview {
 		events.recordAfter(new AdminEvent(AdminArea.SEARCH_INDEX, RETRIED, TARGET, docId, name(failed),
 				Map.of("outcome", new Change(null, tried.outcome()))), actor);
 		return tried;
-	}
-
-	/** @return the document as it is now; null if it's gone meanwhile */
-	private static Document document(long docId) throws PersistenceException {
-		return DocumentDAO.get().findById(docId);
-	}
-
-	/** Sets the document to Skip once it couldn't be indexed, where the tenant's {@code index.skiponerror} says so */
-	private static void skipOnError(Document document) throws PersistenceException {
-		if (Context.get().getConfig().getTenantBoolean(
-				Context.get(TenantDAO.class).getTenantName(document.getTenantId()), "index.skiponerror", false)) {
-			document.setIndexingStatus(IndexingStatus.SKIP);
-			DocumentDAO.get().store(document);
-		}
 	}
 
 	/**

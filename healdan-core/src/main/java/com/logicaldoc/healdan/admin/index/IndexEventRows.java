@@ -8,15 +8,17 @@ import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentDAO;
 import com.logicaldoc.core.document.DocumentEvent;
 import com.logicaldoc.core.document.DocumentHistory;
-import com.logicaldoc.core.security.Session;
+import com.logicaldoc.core.document.DocumentHistoryDAO;
+import com.logicaldoc.core.document.IndexingStatus;
+import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.core.security.user.User;
 
 /**
- * The index's events in a document's history, written as CE's {@code DocumentManager.index} writes them when it's
- * given one (Admin app rulings P6-R5 and P6-R24): {@code event.indexed}, and {@code event.indexed.error} with the
- * reason as its comment. Healdan's callers give CE's index none, so that a failure that isn't the document's own,
- * such as storage that can't be reached, writes nothing, and write the row here once they know which it is. An
- * indexed event keeps no comment: CE's is the start of the document's text.
+ * The history rows of a document indexed, or that couldn't be, written by Healdan when it indexes a document through
+ * {@code DocumentManager.index} with no history of its own (Admin app rulings P6-R5 and P6-R24): {@code event.indexed},
+ * and {@code event.indexed.error} with the failure's message as its comment, the rows {@code IndexCounts} reads.
+ * Each is written as {@code DocumentManager.recordIndexingError} writes one, with the document's folder's path, in the
+ * caller's transaction, if one is open. A document that no longer exists gets none.
  */
 public final class IndexEventRows {
 
@@ -24,40 +26,55 @@ public final class IndexEventRows {
 	}
 
 	/**
-	 * Writes that the document was indexed.
+	 * Writes a document's {@code event.indexed} row.
 	 *
-	 * @param document the document, as it is now
-	 * @param actor who it was done for
-	 * @param session their session; null for none
-	 * @throws PersistenceException if the row can't be written
+	 * @param docId the document
+	 * @param actor who indexed it, the row's user
+	 * @param before its indexing status before, which the row keeps as its reason, as CE's own row does; null for
+	 *        none
+	 * @param sessionId the session it was indexed in, null for none
+	 * @throws PersistenceException error at data layer
 	 */
-	public static void indexed(Document document, User actor, Session session) throws PersistenceException {
-		write(document, DocumentEvent.INDEXED, null, actor, session);
+	public static void indexed(long docId, User actor, IndexingStatus before, String sessionId)
+			throws PersistenceException {
+		DocumentHistory history = history(docId, actor, sessionId);
+		if (history == null)
+			return;
+		history.setEvent(DocumentEvent.INDEXED);
+		if (before != null)
+			history.setReason(Integer.toString(before.ordinal()));
+		DocumentHistoryDAO.get().store(history);
 	}
 
 	/**
-	 * Writes that the document couldn't be indexed.
+	 * Writes a document's {@code event.indexed.error} row.
 	 *
-	 * @param document the document, as it is now
-	 * @param reason why, as the failure says; null for nothing
-	 * @param actor who it was done for
-	 * @param session their session; null for none
-	 * @throws PersistenceException if the row can't be written
+	 * @param docId the document
+	 * @param actor who tried to index it, the row's user
+	 * @param reason why it couldn't be indexed, the row's comment, which Couldn't Be Indexed shows
+	 * @param sessionId the session it was tried in, null for none
+	 * @throws PersistenceException error at data layer
 	 */
-	public static void failed(Document document, String reason, User actor, Session session)
-			throws PersistenceException {
-		write(document, DocumentEvent.INDEXED_ERROR, reason, actor, session);
+	public static void failed(long docId, User actor, String reason, String sessionId) throws PersistenceException {
+		DocumentHistory history = history(docId, actor, sessionId);
+		if (history == null)
+			return;
+		history.setEvent(DocumentEvent.INDEXED_ERROR);
+		history.setComment(reason);
+		DocumentHistoryDAO.get().store(history);
 	}
 
-	private static void write(Document document, DocumentEvent event, String comment, User actor, Session session)
-			throws PersistenceException {
+	/** @return a row of the document by the actor, null if the document no longer exists */
+	private static DocumentHistory history(long docId, User actor, String sessionId) throws PersistenceException {
+		Document document = DocumentDAO.get().findById(docId);
+		if (document == null)
+			return null;
 		DocumentHistory history = new DocumentHistory();
-		history.setUser(actor);
-		if (session != null)
-			history.setSession(session);
-		history.setEvent(event);
-		history.setComment(comment);
 		history.setDocument(document);
-		DocumentDAO.get().saveDocumentHistory(document, history);
+		history.setUser(actor);
+		history.setTenantId(document.getTenantId());
+		history.setSessionId(sessionId);
+		history.setPath(FolderDAO.get().computePathExtended(document.getFolder().getId()));
+		return history;
 	}
 }
