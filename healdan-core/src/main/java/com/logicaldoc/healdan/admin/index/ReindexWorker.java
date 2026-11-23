@@ -6,6 +6,7 @@ package com.logicaldoc.healdan.admin.index;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -173,6 +174,13 @@ public class ReindexWorker implements HealdanStartListener, HealdanJob {
 
 	/** How many threads a batch takes, 0 for LogicalDOC's Indexer's; tests set it and put it back */
 	volatile int threads;
+
+	/**
+	 * Runs in a batch's save once its failures have been checked against newer indexes, before they're saved; tests
+	 * set it, to index a document at that moment, and put it back
+	 */
+	volatile Runnable afterIndexChecks = () -> {
+	};
 
 	/** The search index, which the worker empties and asks whether it answers; tests set it and put it back */
 	volatile IndexFaults.Index index = IndexFaults.REAL;
@@ -592,6 +600,7 @@ public class ReindexWorker implements HealdanStartListener, HealdanJob {
 			// finding 4)
 			List<Outcome> own = tried.stream()
 					.filter(o -> !IndexEventRows.indexedSince(jdbc, o.docId(), o.began(), o.indexedThen())).toList();
+			afterIndexChecks.run();
 			try {
 				for (Outcome outcome : recorded)
 					if (outcome.result() == Result.INDEXED || own.contains(outcome))
@@ -600,17 +609,21 @@ public class ReindexWorker implements HealdanStartListener, HealdanJob {
 				throw new IllegalStateException("A reindex's history rows couldn't be written", e);
 			}
 			// Waits to be indexed again as it was tried, by its text or its properties, its old entry kept, so it
-			// joins Couldn't Be Indexed; or set to Skip
-			Map<IndexingStatus, List<Long>> waiting = new EnumMap<>(IndexingStatus.class);
+			// joins Couldn't Be Indexed; or set to Skip. One that wasn't in the index as its try began is left as it is
+			// once it's INDEXED, so an index LogicalDOC's Indexer commits after the check above isn't undone
+			Map<Marking, List<Long>> waiting = new HashMap<>();
 			for (Outcome outcome : own)
-				waiting.computeIfAbsent(skipOnError ? IndexingStatus.SKIP : outcome.as(), as -> new ArrayList<>())
-						.add(outcome.docId());
+				waiting.computeIfAbsent(new Marking(skipOnError ? IndexingStatus.SKIP : outcome.as(),
+						!outcome.indexedThen()), as -> new ArrayList<>()).add(outcome.docId());
 			// Left out by the file-pattern rules: set to Skip, as CE's own save of it would
 			if (!leftOut.isEmpty())
-				waiting.computeIfAbsent(IndexingStatus.SKIP, as -> new ArrayList<>()).addAll(leftOut);
-			waiting.forEach((as, docIds) -> {
-				jdbc.update("update ld_document set ld_indexed = ? where ld_id = any(?) and ld_indexed <> ?",
-						ReindexJobs.bind(as.ordinal(), docIds.toArray(Long[]::new), IndexingStatus.SKIP.ordinal()));
+				waiting.computeIfAbsent(new Marking(IndexingStatus.SKIP, false), as -> new ArrayList<>())
+						.addAll(leftOut);
+			waiting.forEach((marking, docIds) -> {
+				jdbc.update("update ld_document set ld_indexed = ? where ld_id = any(?) and ld_indexed <> ?"
+						+ " and ld_indexed <> ?", ReindexJobs.bind(marking.as().ordinal(), docIds.toArray(Long[]::new),
+								IndexingStatus.SKIP.ordinal(), marking.unlessIndexed() ? IndexingStatus.INDEXED.ordinal()
+										: IndexingStatus.SKIP.ordinal()));
 				CacheEvictor.get().evictDocumentsAfterCompletion(docIds);
 			});
 			jobs.saveBatch(job.id(), indexed + tried.size() - own.size(), own.size(), skipped, unreachable.size(),
@@ -634,6 +647,12 @@ public class ReindexWorker implements HealdanStartListener, HealdanJob {
 			end(job, State.CANCELLED);
 		else if (ids.size() < size)
 			end(job, State.DONE);
+	}
+
+	/**
+	 * How a batch's save sets documents' status: to what, and whether only while it isn't {@code INDEXED}
+	 */
+	private record Marking(IndexingStatus as, boolean unlessIndexed) {
 	}
 
 	/**

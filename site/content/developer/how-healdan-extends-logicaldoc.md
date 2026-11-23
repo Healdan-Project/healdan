@@ -840,8 +840,9 @@ see [Building from Source](../building-from-source/#running-the-war-outside-dock
     on the request's thread, with no history, so LogicalDOC writes no row and applies none of its settings:
     `DocumentManager.parseDocument` reads the text first, so a storage outage is always one even with
     `index.ignorecontenterror` on, whose trapping would otherwise index the file with no text, and the text read goes to
-    `DocumentManager.index(id, text, null)`, which reads the file again only when the text is empty, as for an empty
-    file or a damaged one the setting lets by. It then writes the row itself through `IndexEventRows` and, with
+    `DocumentManager.index(id, text, null)`; an empty text, as for a scanned PDF with no text layer, or a damaged file
+    the setting lets by, goes as a single space (`NO_TEXT`), as LogicalDOC's index reads the file again whenever it's
+    given no text, so the file is read, and converted where it's converted to PDF first, only once. It then writes the row itself through `IndexEventRows` and, with
     `index.skiponerror` on, sets a document that failed again to Skip, as LogicalDOC's Indexer would. A failure with a
     `StorageUnreachableException` among its causes writes, counts and records nothing, and goes up as the route's
     `503`; an index fault while the index doesn't answer a write check (`IndexFaults.answers`) does the same as `409
@@ -896,7 +897,8 @@ see [Building from Source](../building-from-source/#running-the-war-outside-dock
     own failure writes its error row, as the reindex's starter, and marks it to wait as it was tried, `TO_INDEX` or
     `TO_INDEX_METADATA`, so it joins Couldn't Be Indexed and LogicalDOC's Indexer tries it again, or Skip where
     `index.skiponerror` is on; unless `IndexEventRows.indexedSince` finds it indexed since its try began, by Try Again
-    or the Indexer, when it counts as done and nothing of its failure is saved. A failure that's a collision with
+    or the Indexer, when it counts as done and nothing of its failure is saved; and the save sets a document that
+    wasn't `INDEXED` as its try began only while it still isn't, so an index committed after that check is kept. A failure that's a collision with
     another write (a stale row or an optimistic lock failure among its causes) is tried once more after the batch's
     threads are done. A batch's rows, counts and position are saved together once it ends. A batch in which a document
     failed because the index can't be written (an `IndexException` or a `SolrException` among its causes) is the

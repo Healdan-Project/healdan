@@ -570,7 +570,8 @@ start them; `DashboardServiceTest` calls `forget()`, which drops what the Dashbo
   (`testTryAgainWithIgnoreContentErrorOnAFileWhoseStorageCantBeReached`), and a failure not written over an index made
   meanwhile (`testTryAgainDoesntUndoANewerIndex`). `IndexEventRowsTest` checks both rows. `IndexFilesFail` (in the
   tests' package) wraps the store `DocumentManager` reads files through, so named documents' files fail with a
-  `StorageUnreachableException` or an `IOException` inside LogicalDOC's own parse, and `TenantSetting` sets one of the
+  `StorageUnreachableException` or an `IOException` inside LogicalDOC's own parse, or are read as empty files
+  (`servedEmpty`), counting each document's reads (`reads`), and `TenantSetting` sets one of the
   default tenant's settings, such as `index.excludes`, in memory until closed. `IndexTestHooks`, in `healdan-core`'s test-jar, makes Try Again's index fail as LogicalDOC's does
   (`failIndexing(cause)`, wrapped in a `ParsingException`), the search index not answer Try Again's check
   (`indexDown()`), and the Search Index's next read count afresh (`forgetCounts()`), and puts the first two back
@@ -599,11 +600,15 @@ start them; `DashboardServiceTest` calls `forget()`, which drops what the Dashbo
   (`testIgnoreContentErrorKeepsTheEntryOfAFileWhoseStorageCantBeReached`), an index fault after a document indexed
   stalling while the index doesn't answer (`testAnIndexFaultAfterADocumentDoneIsTheOutageWhileTheIndexDoesntAnswer`),
   and a failure not saved over an index made after its try began, by a row or by the status
-  (`testAFailureIsntSavedOverANewerIndex`). `ReindexTestHooks`, in `healdan-core`'s test-jar, sets the
+  (`testAFailureIsntSavedOverANewerIndex`), or committed between that check and the save
+  (`testAFailureIsntSavedOverAnIndexMadeAsItsSaved`, through the `afterIndexChecks` seam). `DocumentIndexingTest`
+  checks that a document's file is read once: its text, a file with no text, a damaged one with
+  `index.ignorecontenterror` on (its errors logged once) and without it, one whose storage can't be reached, and none
+  for a metadata-only document. `ReindexTestHooks`, in `healdan-core`'s test-jar, sets the
   worker's seams: how it indexes (`real()`, `unwritable()`, `indexWith`, `fail(id, reason)`, `indexUnwritable()`), the
   search index it reaches (`indexDown()`, which doesn't answer, and `dropLeavesEntries()`), its batch (`batch(n)`) and
-  its threads (`threads(n)`, one making a test's order fixed), and `reset()` puts them back, `IndexFilesFail`'s store
-  too. `AdminReindexResourceTest`,
+  its threads (`threads(n)`, one making a test's order fixed), what happens in a batch's save before its failures are saved
+  (`afterIndexChecks`), and `reset()` puts them back, `IndexFilesFail`'s store too. `AdminReindexResourceTest`,
   in `healdan-api`, checks a preview's count as the started reindex's total, each kind, targets that aren't live, an
   empty set refused, the fields' `422`s and the body's `400`s, the refusals' order, the list, a reindex and its cancel,
   and administrators on the web session only.

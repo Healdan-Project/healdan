@@ -1123,4 +1123,25 @@ public class ReindexWorkerTest extends AbstractReindexTestCase {
 		}
 		assertTrue(hit(x1), hit(x1).contains("the words of x1.txt"));
 	}
+
+	// LogicalDOC's Indexer committing a document indexed between the check for a newer index and the save of its
+	// failure doesn't have it set back to wait (the review of the fix for #312's finding 4)
+	@Test
+	public void testAFailureIsntSavedOverAnIndexMadeAsItsSaved() throws Exception {
+		Document x1 = document(pleadings, "x1.txt");
+		status(x1, IndexingStatus.TO_INDEX);
+		ReindexTestHooks.indexWith(id -> {
+			throw new ParsingException("Timed out");
+		});
+		ReindexTestHooks.afterIndexChecks(() -> jdbc.update("update ld_document set ld_indexed = ? where ld_id = ?",
+				IndexingStatus.INDEXED.ordinal(), x1.getId()));
+		ReindexJob job = service.start(ReindexScope.documents(List.of(number(x1))), admin);
+
+		try (LogCapture log = LogCapture.of(ReindexWorker.class)) {
+			assertTrue(worker.runOnce());
+		}
+
+		assertEquals(State.DONE, job(job).state());
+		assertEquals(IndexingStatus.INDEXED.ordinal(), indexed(x1));
+	}
 }

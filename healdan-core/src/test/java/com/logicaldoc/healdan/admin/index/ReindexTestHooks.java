@@ -121,6 +121,16 @@ public final class ReindexTestHooks {
 	}
 
 	/**
+	 * Runs this in each batch's save once its failures have been checked against newer indexes, before they're saved,
+	 * until {@link #reset}.
+	 *
+	 * @param meanwhile what happens at that moment
+	 */
+	public static void afterIndexChecks(Runnable meanwhile) {
+		worker().afterIndexChecks = meanwhile;
+	}
+
+	/**
 	 * A batch takes so many documents, until {@link #reset}.
 	 *
 	 * @param size how many
@@ -147,6 +157,8 @@ public final class ReindexTestHooks {
 		worker.batch = ReindexWorker.BATCH;
 		worker.threads = 0;
 		worker.index = IndexFaults.REAL;
+		worker.afterIndexChecks = () -> {
+		};
 		try {
 			IndexFilesFail.reset();
 		} catch (Exception e) {

@@ -3,6 +3,9 @@
 
 package com.logicaldoc.healdan.admin.index;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentDAO;
@@ -19,11 +22,20 @@ import com.logicaldoc.healdan.util.StorageUnreachableException;
  * empty text, and would replace the document's entry with an empty one while its storage is away.
  * <p>
  * A document set to be indexed by its properties alone ({@code TO_INDEX_METADATA}) is given to CE's index as it is,
- * which reads no file. Otherwise the text read is given to it, and one that comes back empty, an empty file's or a
- * damaged file's that the setting lets by, leaves CE's index to read the file again as it does, so it ends as CE ends
- * it. A failure to read the file but the outage is thrown as CE's index throws it, unless the setting lets it by.
+ * which reads no file. Otherwise the text read is given to it, so the file is read once: CE's index reads it again
+ * whenever it's given no text, which for a file with none (a scanned PDF with no text layer, or any file CE's
+ * catch-all reader converts to PDF first) would read and convert it twice. A text that comes back empty, and a damaged
+ * file's that the setting lets by, is given as {@value #NO_TEXT}, a body with no word in it, which CE's index takes
+ * as it is: the entry has no text, as CE's own would, and CE writes no history row, as it's given none. A failure to
+ * read the file but the outage is thrown as CE's index throws it, unless the setting lets it by, when it's logged at
+ * debug by the document's id, as CE's own warning names the file.
  */
 final class DocumentIndexing {
+
+	/** The body a document with no text is indexed with: not empty, so CE's index doesn't read its file again */
+	static final String NO_TEXT = " ";
+
+	private static final Logger log = LoggerFactory.getLogger(DocumentIndexing.class);
 
 	private DocumentIndexing() {
 	}
@@ -48,9 +60,11 @@ final class DocumentIndexing {
 		} catch (ParsingException e) {
 			if (StorageUnreachableException.in(e) != null || !IndexSettings.ignoreContentError(document.getTenantId()))
 				throw e;
-			// CE's index reads it again, and indexes it without its text, as the setting says
-			content = null;
+			// Indexed without its text, as the setting says
+			log.debug("Document {} is indexed without its text, which couldn't be read: {}", docId,
+					e.getClass().getName());
+			content = "";
 		}
-		manager.index(docId, content, null);
+		manager.index(docId, content == null || content.isEmpty() ? NO_TEXT : content, null);
 	}
 }
