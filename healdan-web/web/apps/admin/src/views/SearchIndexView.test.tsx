@@ -153,6 +153,16 @@ describe('Run Indexer Now', () => {
     await expectNoAxeViolations(view.container)
   })
 
+  it('gives the focus to the heading when a later read greys it out under the focus, though the browser keeps the focus on it (WebKit)', async () => {
+    const { fake } = await openSearchIndex()
+    const run = screen.getByRole('button', { name: 'Run Indexer Now' })
+    run.focus()
+    fake.setIndex(searchIndexOf({ indexer: { job: jobOf({ running: true, canRun: false }), runRefusal: 'This job is running already.' } }))
+    await act(async () => void window.dispatchEvent(new Event('focus')))
+    await waitFor(() => expect(run.hasAttribute('disabled')).toBe(true))
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('heading', { level: 1, name: 'Search Index' })))
+  })
+
   it("is greyed out from the start, with the server's reason, while the Indexer can't run", async () => {
     const { api } = await openSearchIndex({ index: searchIndexOf({ indexer: { job: jobOf({ enabled: false, canRun: false }), runRefusal: 'This job is disabled.' } }) })
     const run = screen.getByRole('button', { name: 'Run Indexer Now' })
