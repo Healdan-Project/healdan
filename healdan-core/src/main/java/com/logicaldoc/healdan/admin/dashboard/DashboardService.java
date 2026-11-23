@@ -140,8 +140,9 @@ public class DashboardService {
 	 * The screens the Dashboard links to (spec section 8.1): the Admin app's address once a screen has shipped, and
 	 * the Classic Interface until then. Each phase that ships a screen changes its row; Phase 2 shipped Clients, Matters
 	 * and Workspace Templates, Phase 3 Stores and Backends, Phase 4 Users, and Phase 5 Errors, the Server Log, the
-	 * Audit Trail and Background Jobs (ruling P5-R19), and Phase 6 the Search Index (ruling P6-R15). The unresolved errors' item opens Errors with Unresolved Only
-	 * set, as the Errors screen's address takes it, since it counts those alone (ruling P5-R37).
+	 * Audit Trail and Background Jobs (ruling P5-R19), and Phase 6 the Search Index (ruling P6-R15). The unresolved
+	 * errors' item opens Errors with Unresolved Only set, as the Errors screen's address takes it, since it counts
+	 * those alone (ruling P5-R37).
 	 */
 	enum Screen {
 		DASHBOARD("/admin/"),

@@ -18,8 +18,6 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 import com.logicaldoc.core.PersistenceException;
-import com.logicaldoc.core.document.Document;
-import com.logicaldoc.core.document.DocumentDAO;
 import com.logicaldoc.core.document.DocumentManager;
 import com.logicaldoc.core.document.IndexingStatus;
 import com.logicaldoc.core.parser.ParsingException;
@@ -37,12 +35,12 @@ import com.logicaldoc.util.spring.Context;
 
 /**
  * Try Again and Skip, for a document that couldn't be indexed (Admin app spec section 8.9; ruling P6-R11). Try Again
- * indexes the document now, on the caller's thread, through CE's own {@code DocumentManager.index}, with its
- * {@code event.indexed} or {@code event.indexed.error} row as the actor's; Skip sets the document to Skip, so CE's
- * Indexer leaves it. Each takes only a live document of the actor's tenant that couldn't be indexed, each moves
- * {@link IndexCounts#changes()} on, and each is recorded straight after it (area {@code SEARCH_INDEX}, aimed at the
- * document by its id, named by its doc # and file name): {@value #RETRIED}, with the outcome, and {@value #SKIPPED}.
- * Administrators only.
+ * indexes the document now, on the caller's thread, through CE's own {@code DocumentManager.index}, given no event of
+ * its own, and then writes the {@code event.indexed} or {@code event.indexed.error} row itself, as the actor's
+ * ({@link IndexEventRows}, ruling P6-R24); Skip sets the document to Skip, so CE's Indexer leaves it. Each takes
+ * only a live document of the actor's tenant that couldn't be indexed, each moves {@link IndexCounts#changes()} on,
+ * and each is recorded straight after it (area {@code SEARCH_INDEX}, aimed at the document by its id, named by its
+ * doc # and file name): {@value #RETRIED}, with the outcome, and {@value #SKIPPED}. Administrators only.
  */
 @Component
 public class IndexReview {
@@ -138,10 +136,12 @@ public class IndexReview {
 	/**
 	 * Try Again: indexes a document that couldn't be indexed, now, on the caller's thread, through CE's own
 	 * {@code DocumentManager.index}, and writes the event CE's Indexer writes ({@link IndexEventRows}),
-	 * {@code event.indexed} or {@code event.indexed.error} with the error's message, as the actor, with the session's id
+	 * {@code event.indexed} or {@code event.indexed.error} with the error's message, as the actor, with the session
 	 * when there is one, and, like CE, sets the document to Skip after its error where {@code index.skiponerror} says
-	 * so; the outcome is answered either way (ruling P6-R24). A file whose storage can't be reached is neither (ruling P6-R23): nothing is
-	 * written, counted or recorded, and the outage is thrown, which the API answers {@code 503}.
+	 * so; the outcome is answered either way (ruling P6-R24). Once the index has been asked, the counts move on and
+	 * the change is recorded even if writing the row then fails. A file whose storage can't be reached is neither
+	 * (ruling P6-R23): nothing is written, counted or recorded, and the outage is thrown, which the API answers
+	 * {@code 503}.
 	 * <p>
 	 * CE's index reads the file inside itself, and when it's given an event it writes the error's row before it
 	 * throws, so it's given none, and the row is written here once the failure is known to be the document's own.
@@ -161,28 +161,37 @@ public class IndexReview {
 		FailedDocument failed = requireFailed(docId, actor);
 
 		String sessionId = session != null ? session.getSid() : null;
-		Tried tried;
+		Tried tried = null;
 		try {
-			indexing.index(docId);
-			IndexEventRows.indexed(docId, actor, IndexingStatus.TO_INDEX, sessionId);
+			try {
+				indexing.index(docId);
+			} catch (ParsingException e) {
+				StorageUnreachableException outage = StorageUnreachableException.in(e);
+				if (outage != null)
+					throw new UncheckedIOException(outage);
+				// The document's own failure, the index's included, which CE wraps so. Its message can name the file,
+				// so it isn't logged
+				log.debug("Document {} couldn't be indexed again: {}", docId, e.getClass().getName());
+				tried = new Tried(FAILED, e.getMessage());
+				IndexEventRows.failed(docId, actor, e.getMessage(), sessionId);
+				// As CE's index does after the error's event, where the tenant says so
+				if (IndexSettings.skipOnError(actor.getTenantId()) && counts.skip(docId, actor.getTenantId()))
+					evictor.evictDocuments(List.of(docId));
+				FailedDocument now = counts.failure(docId, actor.getTenantId());
+				if (now != null)
+					tried = new Tried(FAILED, now.reason());
+				return tried;
+			}
 			tried = new Tried(INDEXED, null);
-		} catch (ParsingException e) {
-			StorageUnreachableException outage = StorageUnreachableException.in(e);
-			if (outage != null)
-				throw new UncheckedIOException(outage);
-			// The document's own failure, the index's included, which CE wraps so. Its message can name the file, so
-			// it isn't logged
-			log.debug("Document {} couldn't be indexed again: {}", docId, e.getClass().getName());
-			IndexEventRows.failed(docId, actor, e.getMessage(), sessionId);
-			Document document = DocumentDAO.get().findById(docId);
-			if (document != null)
-				IndexSettings.skipOnError(document);
-			FailedDocument now = counts.failure(docId, actor.getTenantId());
-			tried = new Tried(FAILED, now != null ? now.reason() : e.getMessage());
+			IndexEventRows.indexed(docId, actor, IndexingStatus.TO_INDEX, sessionId);
+		} finally {
+			// Once the index has been asked, the document's state may have changed, even if writing its row failed
+			if (tried != null) {
+				counts.moved();
+				events.recordAfter(new AdminEvent(AdminArea.SEARCH_INDEX, RETRIED, TARGET, docId, name(failed),
+						Map.of("outcome", new Change(null, tried.outcome()))), actor);
+			}
 		}
-		counts.moved();
-		events.recordAfter(new AdminEvent(AdminArea.SEARCH_INDEX, RETRIED, TARGET, docId, name(failed),
-				Map.of("outcome", new Change(null, tried.outcome()))), actor);
 		return tried;
 	}
 

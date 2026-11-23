@@ -11,6 +11,8 @@ import com.logicaldoc.core.document.DocumentHistory;
 import com.logicaldoc.core.document.DocumentHistoryDAO;
 import com.logicaldoc.core.document.IndexingStatus;
 import com.logicaldoc.core.folder.FolderDAO;
+import com.logicaldoc.core.security.Session;
+import com.logicaldoc.core.security.SessionManager;
 import com.logicaldoc.core.security.user.User;
 
 /**
@@ -18,7 +20,9 @@ import com.logicaldoc.core.security.user.User;
  * {@code DocumentManager.index} with no history of its own (Admin app rulings P6-R5 and P6-R24): {@code event.indexed},
  * and {@code event.indexed.error} with the failure's message as its comment, the rows {@code IndexCounts} reads.
  * Each is written as {@code DocumentManager.recordIndexingError} writes one, with the document's folder's path, in the
- * caller's transaction, if one is open. A document that no longer exists gets none.
+ * caller's transaction, if one is open, and, for a session this node has open, what the session gives, as CE's
+ * {@code History.setSession} does: its client's address and device and its key's label. A document that no longer
+ * exists gets none.
  */
 public final class IndexEventRows {
 
@@ -71,6 +75,10 @@ public final class IndexEventRows {
 			return null;
 		DocumentHistory history = new DocumentHistory();
 		history.setDocument(document);
+		// What the session gives, its client's address and device and its key's label, as CE's own rows have them
+		Session session = sessionId != null ? SessionManager.get().get(sessionId) : null;
+		if (session != null)
+			history.setSession(session);
 		history.setUser(actor);
 		history.setTenantId(document.getTenantId());
 		history.setSessionId(sessionId);

@@ -4,9 +4,6 @@
 package com.logicaldoc.healdan.admin.index;
 
 import com.logicaldoc.core.PersistenceException;
-import com.logicaldoc.core.document.Document;
-import com.logicaldoc.core.document.DocumentDAO;
-import com.logicaldoc.core.document.IndexingStatus;
 import com.logicaldoc.core.security.TenantDAO;
 import com.logicaldoc.util.spring.Context;
 
@@ -22,17 +19,13 @@ final class IndexSettings {
 	}
 
 	/**
-	 * Sets a document that couldn't be indexed to Skip, where the tenant's {@value #SKIP_ON_ERROR} says so, as CE's
-	 * index does after the error's event.
-	 *
-	 * @param document the document
-	 * @throws PersistenceException if it can't be stored
+	 * @param tenantId a tenant
+	 * @return whether the tenant's {@value #SKIP_ON_ERROR} sets a document that couldn't be indexed to Skip, as CE's
+	 *         index does after the error's event
+	 * @throws PersistenceException if the tenant's name can't be read
 	 */
-	static void skipOnError(Document document) throws PersistenceException {
-		if (Context.get().getConfig().getTenantBoolean(
-				Context.get(TenantDAO.class).getTenantName(document.getTenantId()), SKIP_ON_ERROR, false)) {
-			document.setIndexingStatus(IndexingStatus.SKIP);
-			DocumentDAO.get().store(document);
-		}
+	static boolean skipOnError(long tenantId) throws PersistenceException {
+		return Context.get().getConfig().getTenantBoolean(Context.get(TenantDAO.class).getTenantName(tenantId),
+				SKIP_ON_ERROR, false);
 	}
 }

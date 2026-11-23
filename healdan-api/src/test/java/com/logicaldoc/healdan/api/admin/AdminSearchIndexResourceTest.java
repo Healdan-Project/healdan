@@ -272,11 +272,15 @@ public class AdminSearchIndexResourceTest extends ApiTestCase {
 		assertEquals("indexed", retry.json().path("outcome").textValue());
 		assertTrue(retry.json().path("reason").isNull());
 		// Its event is the caller's, in the web session
-		java.util.Map<String, Object> event = jdbc().queryForMap("select ld_userid, ld_sessionid from ld_history"
-				+ " where ld_docid = ? and ld_event = ? order by ld_id desc limit 1", notes.getId(),
+		java.util.Map<String, Object> event = jdbc().queryForMap("select ld_userid, ld_sessionid, ld_ip"
+				+ " from ld_history where ld_docid = ? and ld_event = ? order by ld_id desc limit 1", notes.getId(),
 				DocumentEvent.INDEXED.toKey());
 		assertEquals(boss.getId(), ((Number) event.get("ld_userid")).longValue());
 		assertNotNull(event.get("ld_sessionid"));
+		// What the session gives, as CE's own rows have it, which the Audit Trail's From shows
+		assertEquals(jdbc().queryForObject("select ld_ip from ld_user_history where ld_userid = ? and ld_event = ?"
+				+ " order by ld_id desc limit 1", String.class, boss.getId(), "event.user.login"), event.get("ld_ip"));
+		assertNotNull(event.get("ld_ip"));
 
 		ApiResponse skip = post(INDEX + "/failed/" + docNumber(skipped) + "/skip").webSession(web).send();
 		assertEquals(skip.toString(), 204, skip.status());

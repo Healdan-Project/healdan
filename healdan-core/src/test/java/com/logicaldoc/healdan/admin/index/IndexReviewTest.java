@@ -46,12 +46,13 @@ import com.logicaldoc.healdan.util.StorageUnreachableException;
 import com.logicaldoc.healdan.matter.Matter;
 import com.logicaldoc.healdan.support.AdminRecord;
 import com.logicaldoc.healdan.support.HealdanFixtures;
+import com.logicaldoc.util.config.ContextProperties;
 import com.logicaldoc.util.spring.Context;
 
 /**
- * Try Again and Skip (Admin app spec section 8.9; ruling P6-R11): administrators only, a live document that couldn't
- * be indexed only, Try Again through CE's own index, which writes its event as the actor, each moving the counts'
- * changes on and recorded after it.
+ * Try Again and Skip (Admin app spec section 8.9; rulings P6-R11, P6-R23 and P6-R24): administrators only, a live
+ * document that couldn't be indexed only, Try Again through CE's own index, its event written as the actor's, each
+ * moving the counts' changes on and recorded after it.
  */
 public class IndexReviewTest extends AbstractHealdanTestCase {
 
@@ -135,7 +136,7 @@ public class IndexReviewTest extends AbstractHealdanTestCase {
 		assertEquals(IndexingStatus.INDEXED.ordinal(), indexed(document));
 		assertNull(IndexCounts.get().failure(document.getId(), Tenant.DEFAULT_ID));
 		assertNotNull(SearchEngine.get().getHit(document.getId()));
-		// CE's own event, as the actor
+		// Its event, written once CE's index has indexed it, as the actor
 		Map<String, Object> event = jdbc.queryForMap("select ld_userid, ld_username from ld_history"
 				+ " where ld_docid = ? and ld_event = ? order by ld_id desc limit 1", document.getId(),
 				DocumentEvent.INDEXED.toKey());
@@ -198,6 +199,41 @@ public class IndexReviewTest extends AbstractHealdanTestCase {
 		assertEquals("Timed out", IndexCounts.get().failure(document.getId(), Tenant.DEFAULT_ID).reason());
 		assertEquals(changes, IndexCounts.get().changes());
 		assertEquals(List.of(), AdminRecord.eventsSince(recorded));
+	}
+
+	// Where the tenant is set to stop trying a document once it can't be indexed, Try Again's failure sets it to Skip,
+	// as CE's own index does
+	@Test
+	public void testTryAgainThatFailsWithSkipOnErrorSetsItToSkip() throws Exception {
+		Document document = failed("broken.pdf");
+		// Read into the second-level cache first
+		assertEquals(IndexingStatus.TO_INDEX, DocumentDAO.get().findById(document.getId()).getIndexed());
+		String key = Tenant.DEFAULT_NAME + ".index.skiponerror";
+		ContextProperties config = Context.get().getConfig();
+		String before = config.getProperty(key);
+		config.setProperty(key, "true");
+		review.indexing = docId -> {
+			throw new ParsingException("The PDF can't be parsed");
+		};
+		try {
+			IndexReview.Tried tried = review.retry(document.getId(), boss, null);
+
+			assertEquals(IndexReview.FAILED, tried.outcome());
+			assertEquals("The PDF can't be parsed", tried.reason());
+			assertEquals(IndexingStatus.SKIP.ordinal(), indexed(document));
+			assertEquals(IndexingStatus.SKIP, DocumentDAO.get().findById(document.getId()).getIndexed());
+			assertNull(IndexCounts.get().failure(document.getId(), Tenant.DEFAULT_ID));
+			assertEquals(new IndexCounts.Counts(0, 0, 0), IndexCounts.get().counts());
+			// Its error's row is written all the same
+			assertEquals("The PDF can't be parsed", jdbc.queryForObject("select ld_comment from ld_history"
+					+ " where ld_docid = ? and ld_event = ? order by ld_id desc limit 1", String.class,
+					document.getId(), DocumentEvent.INDEXED_ERROR.toKey()));
+		} finally {
+			if (before == null)
+				config.remove(key);
+			else
+				config.setProperty(key, before);
+		}
 	}
 
 	@Test
