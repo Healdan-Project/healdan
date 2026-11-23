@@ -56,7 +56,7 @@ describe('Needs Attention', () => {
     // Each row's link is the server's: the Classic Interface until its screen ships, said as such
     const links = items.map((item) => within(item).getByRole('link'))
     expect(links.map((link) => link.getAttribute('href'))).toEqual(['/frontend.jsp', '/admin/search-index', '/frontend.jsp'])
-    expect(links.map((link) => link.textContent)).toEqual(['Classic Interface', 'Open', 'Classic Interface'])
+    expect(links.map((link) => link.textContent)).toEqual(['Classic Interface', 'Search Index', 'Classic Interface'])
     // And the link says what it's for, from its row
     expect(links[0]!.getAttribute('aria-describedby')).toBe(marked(items[0]!, 'message').id)
   })
