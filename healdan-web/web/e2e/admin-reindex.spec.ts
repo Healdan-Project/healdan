@@ -13,7 +13,7 @@ import { ADMIN_PASSWORD, ADMIN_USERNAME, escape, escaped, signIn, tabTo } from '
 // offers Reindex, whose question names it with its count; the toast's View Progress opens the Search Index in a new tab,
 // and the reindex ends. A matter's page and the Workspace Editor's folder each open the dialog on what they're for, which
 // is cancelled. The Audit Trail has `reindex.started` for the folder, by admin. It changes nothing global: it never ticks
-// Empty the index first, reindexes Everything or a Store, presses Run Indexer Now (the Indexer's 5 seconds are the smoke
+// Empty the Index First, reindexes Everything or a Store, presses Run Indexer Now (the Indexer's 5 seconds are the smoke
 // test's step 9's) or tries again or skips a document, and its reindexes cover only its own documents, whose entries stay
 // in the index while they're replaced. Its API calls go through the admin's web session in the page, as the apps' do: a
 // device token's sign-in from a client LogicalDOC hasn't seen sends the account a new-device email, which a stack with no
@@ -204,6 +204,23 @@ test("reindexes the run's folder from the Search Index's Reindex dialog, by the 
   // The count is the run's documents, the folder inside included
   const button = dialog.getByRole('button', { name: `Reindex ${FILED} Documents` })
   await expect(button).toBeEnabled()
+  // Enter in the filter picks, and never starts the reindex: only the button does
+  await expect(filter).toBeFocused()
+  const sent: string[] = []
+  const noted = (request: { method(): string; url(): string }) => {
+    if (request.method() === 'POST' && new URL(request.url()).pathname === '/api/v1/admin/reindex') sent.push(request.url())
+  }
+  page.on('request', noted)
+  try {
+    await page.keyboard.press('Enter')
+    // Two frames on, a submit would have sent its request, which the page's protocol reports before this answer
+    await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))))
+    await expect(button).not.toHaveAttribute('data-pending', 'true')
+    await expect(dialog).toBeVisible()
+  } finally {
+    page.off('request', noted)
+  }
+  expect(sent, 'Enter in the filter started nothing').toEqual([])
   await tabTo(page, button)
   const job = await startedBy(page, () => page.keyboard.press('Enter'))
   await expect(dialog).toBeHidden()
@@ -269,9 +286,15 @@ test("reindexes the folder inside it from a right-click in the User app, whose t
   }
 })
 
-test("a matter's page and the Workspace Editor's folder open the Reindex dialog on what they're for", async () => {
+test("a matter's page and the Workspace Editor's folder open the Reindex dialog on what they're for, and Back and Cancel close it where it was opened", async () => {
+  test.setTimeout(120_000)
   const pane = page.getByRole('navigation', { name: 'Navigation' })
   const dialog = page.getByRole('dialog', { name: 'Reindex' })
+  const heading = main(page).getByRole('heading', { level: 1, name: 'Search Index' })
+  const matterHeading = main(page).getByRole('heading', { level: 1, name: '1.1 Smoke Matter' })
+  // The matter's own Reindex, beside its name, not the Workspace's for its chosen folder
+  const matterReindex = main(page).getByRole('link', { name: 'Reindex', exact: true }).and(page.locator('[href*="reindex=matter"]'))
+  const opener = main(page).getByRole('button', { name: 'Reindex…' })
   // It opens and cancels only: no reindex is started here
   const starts: string[] = []
   const noted = (request: { method(): string; url(): string }) => {
@@ -279,31 +302,67 @@ test("a matter's page and the Workspace Editor's folder open the Reindex dialog 
   }
   page.on('request', noted)
   try {
-    await pane.getByRole('link', { name: 'Matters' }).click()
-    await main(page).getByRole('grid', { name: 'Matters' }).getByRole('row', { name: /^1\.1 Smoke Matter/ }).click()
-    await expect(main(page).getByRole('heading', { level: 1, name: '1.1 Smoke Matter' })).toBeVisible()
-    // The matter's own, beside its name, not the Workspace's for its chosen folder
-    await main(page).getByRole('link', { name: 'Reindex', exact: true }).and(page.locator('[href*="reindex=matter"]')).click()
-    await expect(page).toHaveURL(/\/admin\/search-index\?reindex=matter&id=\d+$/)
-    await expect(dialog.getByRole('radio', { name: 'Matter' })).toBeChecked()
-    await expect(dialog.getByRole('option', { name: /^1\.1 – Smoke Matter/, selected: true })).toBeVisible()
-    await expect(dialog.getByRole('button', { name: /^Reindex [\d,]+ Documents?$/ })).toBeEnabled()
-    await dialog.getByRole('button', { name: 'Cancel' }).click()
-    await expect(dialog).toBeHidden()
-    await expect(page).toHaveURL(/\/admin\/search-index$/)
+    await test.step("the matter's page: its Reindex opens the dialog on the matter; Cancel closes it in place, the focus on the page's heading", async () => {
+      await pane.getByRole('link', { name: 'Matters' }).click()
+      await main(page).getByRole('grid', { name: 'Matters' }).getByRole('row', { name: /^1\.1 Smoke Matter/ }).click()
+      await expect(matterHeading).toBeVisible()
+      await matterReindex.click()
+      await expect(page).toHaveURL(/\/admin\/search-index\?reindex=matter&id=\d+$/)
+      await expect(dialog.getByRole('radio', { name: 'Matter' })).toBeChecked()
+      await expect(dialog.getByRole('option', { name: /^1\.1 – Smoke Matter/, selected: true })).toBeVisible()
+      await expect(dialog.getByRole('button', { name: /^Reindex [\d,]+ Documents?$/ })).toBeEnabled()
+      await dialog.getByRole('button', { name: 'Cancel' }).click()
+      await expect(dialog).toBeHidden()
+      await expect(page).toHaveURL(/\/admin\/search-index$/)
+      // Nothing on this page opened it, so the heading takes the focus
+      await expect(heading).toBeFocused()
+      // The dialog's address was replaced, so Back goes to the matter's page, not to the dialog again
+      await page.goBack()
+      await expect(matterHeading).toBeVisible()
+      await expect(dialog).toHaveCount(0)
+    })
 
-    await page.goBack()
-    await expect(main(page).getByRole('heading', { level: 1, name: '1.1 Smoke Matter' })).toBeVisible()
-    await main(page).getByRole('tab', { name: 'Workspace' }).click()
-    await main(page).getByRole('treegrid').getByRole('row', { name: /^Documents(, Own Permissions)?$/ }).click()
-    await main(page).getByRole('region', { name: 'Chosen Folder' }).getByRole('link', { name: 'Reindex', exact: true }).click()
-    await expect(page).toHaveURL(/\/admin\/search-index\?reindex=folder&id=\d+&matter=\d+$/)
-    await expect(dialog.getByRole('radio', { name: 'Folder' })).toBeChecked()
-    await expect(dialog.getByText('Matter: 1.1 – Smoke Matter')).toBeVisible()
-    await expect(dialog.getByRole('option', { name: /^Documents/, selected: true })).toBeVisible()
-    await expect(dialog.getByRole('button', { name: /^Reindex [\d,]+ Documents?$/ })).toBeEnabled()
-    await page.keyboard.press('Escape')
-    await expect(dialog).toBeHidden()
+    await test.step("Back from the dialog the matter's page opened goes back to the matter's page", async () => {
+      await matterReindex.click()
+      await expect(dialog.getByRole('option', { name: /^1\.1 – Smoke Matter/, selected: true })).toBeVisible()
+      await page.goBack()
+      await expect(dialog).toHaveCount(0)
+      await expect(matterHeading).toBeVisible()
+    })
+
+    await test.step("the Workspace Editor: a folder's Reindex opens the dialog on the folder; Esc closes it in place, the focus on the heading", async () => {
+      await main(page).getByRole('tab', { name: 'Workspace' }).click()
+      await main(page).getByRole('treegrid').getByRole('row', { name: /^Documents(, Own Permissions)?$/ }).click()
+      await main(page).getByRole('region', { name: 'Chosen Folder' }).getByRole('link', { name: 'Reindex', exact: true }).click()
+      await expect(page).toHaveURL(/\/admin\/search-index\?reindex=folder&id=\d+&matter=\d+$/)
+      await expect(dialog.getByRole('radio', { name: 'Folder' })).toBeChecked()
+      await expect(dialog.getByText('Matter: 1.1 – Smoke Matter')).toBeVisible()
+      await expect(dialog.getByRole('option', { name: /^Documents/, selected: true })).toBeVisible()
+      await expect(dialog.getByRole('button', { name: /^Reindex [\d,]+ Documents?$/ })).toBeEnabled()
+      await page.keyboard.press('Escape')
+      await expect(dialog).toBeHidden()
+      await expect(page).toHaveURL(/\/admin\/search-index$/)
+      await expect(heading).toBeFocused()
+    })
+
+    await test.step('Reindex… on the Search Index: Cancel steps back, the focus back on Reindex…, and so does Back', async () => {
+      await opener.click()
+      await expect(page).toHaveURL(/\/admin\/search-index\?reindex=matter$/)
+      await dialog.getByRole('button', { name: 'Cancel' }).click()
+      await expect(dialog).toBeHidden()
+      await expect(page).toHaveURL(/\/admin\/search-index$/)
+      await expect(opener).toBeFocused()
+      await opener.click()
+      await expect(dialog).toBeVisible()
+      await page.goBack()
+      await expect(dialog).toHaveCount(0)
+      await expect(page).toHaveURL(/\/admin\/search-index$/)
+      await expect(opener).toBeFocused()
+      // Each closing stepped back, so no Search Index with the dialog's address is left behind it: Back goes on to the
+      // Workspace Editor's matter
+      await page.goBack()
+      await expect(matterHeading).toBeVisible()
+    })
   } finally {
     page.off('request', noted)
   }

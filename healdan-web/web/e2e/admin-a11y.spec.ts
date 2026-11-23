@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { expect, test, type BrowserContext, type Page, type Request, type Route } from '@playwright/test'
+import { expect, test, type BrowserContext, type Locator, type Page, type Request, type Route } from '@playwright/test'
 import { expectNoViolations } from './axe'
-import { ADMIN_PASSWORD, ADMIN_USERNAME, expectListUnder, signIn } from './helpers'
+import { ADMIN_PASSWORD, ADMIN_USERNAME, expectListUnder, signIn, tabTo } from './helpers'
 
 // An axe pass on Healdan Admin's Dashboard (admin spec 8.1 and 17.1), with its frame's find, Help and person menus, on
 // Phase 2's screens (8.2 to 8.5: Clients, Matters, a matter's Overview and Workspace, and Workspace Templates), on
@@ -563,11 +563,13 @@ for (const scheme of ['light', 'dark'] as const) {
             done: 200,
             failed: 3,
             skipped: 9,
+            unreachable: 4,
             leftOut: 0,
             created: new Date(now.getTime() - 300_000).toISOString(),
             started: new Date(now.getTime() - 290_000).toISOString(),
             ended: null,
             stalledSince: null,
+            failingSince: null,
             estimateSecondsLeft: 360,
           }
           const active = (route: Route) => route.fulfill({ json: { items: [job], offset: 0, limit: Number(new URL(route.request().url()).searchParams.get('limit') ?? 200), total: 1 } })
@@ -579,12 +581,13 @@ for (const scheme of ['light', 'dark'] as const) {
             await expect(heading).toBeVisible()
             const card = main().getByRole('region', { name: `Reindexing ${job.name}` })
             await expect(card).toBeVisible()
-            // The bar is named, says how far in words, and is described by the line under it
+            // The bar is named, says how far in words, and is described by the line under it, which says how many were on
+            // storage that couldn't be reached
             const bar = card.getByRole('progressbar', { name: 'Documents' })
             await expect(bar).toHaveAttribute('aria-valuenow', '212')
             await expect(bar).toHaveAttribute('aria-valuemax', '412')
             await expect(bar).toHaveAttribute('aria-valuetext', '212 of 412')
-            await expect(bar).toHaveAccessibleDescription(/^212 of 412 documents · about 6 minutes left · search keeps working while it runs$/)
+            await expect(bar).toHaveAccessibleDescription("212 of 412 documents · 4 on storage that couldn't be reached · about 6 minutes left · search keeps working while it runs")
             await check("a reindex's card, running")
             const cancel = card.getByRole('button', { name: `Cancel Reindexing ${job.name}` })
             await cancel.click()
@@ -607,7 +610,9 @@ for (const scheme of ['light', 'dark'] as const) {
           const dialog = page.getByRole('dialog', { name: 'Reindex' })
           const choice = (name: string) => dialog.getByRole('radiogroup', { name: 'What to Reindex' }).getByRole('radio', { name })
           await expect(choice('Matter')).toBeChecked()
-          await expect(dialog.getByRole('listbox', { name: 'Recent Matters' }).getByRole('option').first()).toBeVisible()
+          // With admin's Recent Matters, if they have any: a fresh stack's admin may have opened none
+          await expect(dialog.getByRole('textbox', { name: 'Matter' })).toBeVisible()
+          await expect(dialog.getByText('Loading…')).toHaveCount(0)
           await check('the Reindex dialog, Matter')
           await dialog.getByRole('textbox', { name: 'Matter' }).fill('Smoke Matter')
           await dialog.getByRole('option', { name: /^1\.1 – Smoke Matter/ }).click()
@@ -633,7 +638,8 @@ for (const scheme of ['light', 'dark'] as const) {
           // Everything, its count and its tick box, left unticked
           await choice('Everything').click()
           await expect(dialog.getByRole('status').filter({ hasText: /^All / })).toBeVisible()
-          await expect(dialog.getByRole('checkbox', { name: 'Empty the index first' })).not.toBeChecked()
+          await expect(dialog.getByRole('checkbox', { name: 'Empty the Index First' })).not.toBeChecked()
+          await expect(dialog.getByRole('button', { name: 'Reindex Everything', exact: true })).toBeEnabled()
           await check('the Reindex dialog, Everything')
 
           await dialog.getByRole('button', { name: 'Cancel' }).click()
@@ -695,6 +701,50 @@ for (const scheme of ['light', 'dark'] as const) {
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), `${screen} at 768 pixels`).toBe(true)
         await check(`the ${screen} list at 768 pixels`)
       }
+
+      // The Search Index's Waiting and History tables, each in a box of its own that scrolls sideways when it's narrower
+      // than its table: a region named for its table and a Tab stop then, which the arrow keys scroll, and neither when it
+      // isn't. At 768 pixels, then at 480, where any of them with rows is narrower than its table. The last of the loop's
+      // screens was the Search Index. A tab with no rows has no table.
+      const sideways = async (tabName: string, table: string, from: (tab: Locator) => Locator) => {
+        const tab = main().getByRole('tab', { name: new RegExp(`^${tabName}( \\([\\d,]+\\))?$`) })
+        await tab.click()
+        await expect(main().getByText('Loading…')).toHaveCount(0)
+        const drawn = main().getByRole('table', { name: table })
+        if ((await drawn.count()) === 0) return `${table}: no rows`
+        const box = drawn.locator('xpath=..')
+        const overflows = await box.evaluate((element) => element.scrollWidth > element.clientWidth)
+        if (!overflows) {
+          await expect(box).not.toHaveAttribute('tabindex')
+          await expect(box).not.toHaveAttribute('role')
+          return `${table}: fits`
+        }
+        const region = main().getByRole('region', { name: `${table} (Scrolls Sideways)` })
+        await expect(region).toHaveAttribute('tabindex', '0')
+        await expect(region.getByRole('table', { name: table })).toBeVisible()
+        // Reached by Tab from what comes before it, and scrolled by the arrow keys
+        await tabTo(page, region, { from: from(tab) })
+        expect(await region.evaluate((element) => element.scrollLeft)).toBe(0)
+        await expect(async () => {
+          await page.keyboard.press('ArrowRight')
+          expect(await region.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0)
+        }).toPass({ timeout: 10_000 })
+        await check(`the ${table} table scrolling sideways at ${page.viewportSize()?.width} pixels`)
+        return `${table}: scrolls sideways`
+      }
+      for (const width of [768, 480]) {
+        await page.setViewportSize({ width, height: 1024 })
+        const seen = [
+          await sideways('Waiting', 'Waiting', (tab) => tab),
+          await sideways('History', 'Reindexes', () => main().getByRole('heading', { level: 2, name: 'Reindexes' })),
+          await sideways('History', 'Index Events', () => main().getByRole('heading', { level: 2, name: 'Index Events' })),
+        ]
+        test.info().annotations.push({ type: `sideways at ${width} pixels`, description: seen.join('; ') })
+        console.log(`sideways at ${width} pixels (${scheme}): ${seen.join('; ')}`)
+      }
+      await page.setViewportSize({ width: 768, height: 1024 })
+      await main().getByRole('tab', { name: /^Couldn't Be Indexed/ }).click()
+
       await navigation.click()
       await page.getByRole('navigation', { name: 'Navigation' }).getByRole('link', { name: 'Dashboard' }).click()
       await expect(main().getByRole('heading', { level: 1, name: 'Dashboard' })).toBeVisible()
