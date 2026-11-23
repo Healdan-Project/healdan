@@ -342,13 +342,9 @@ public class JobControl {
 	 */
 	private void start(Task task) throws HealdanRuleException {
 		synchronized (started) {
-			Thread earlier = started.get(task.getName());
-			if ((earlier != null && earlier.isAlive()) || task.getStatus() != Task.STATUS_IDLE)
-				throw new HealdanRuleException(ALREADY_RUNNING);
-			if (!Jobs.scheduledTasksOn())
-				throw new HealdanRuleException(SCHEDULED_TASKS_OFF);
-			if (!task.getScheduling().isEnabled())
-				throw new HealdanRuleException(DISABLED);
+			String refusal = refusal(task);
+			if (refusal != null)
+				throw new HealdanRuleException(refusal);
 			// Its end, too, is a change the Dashboard's jobs follow
 			Thread thread = new Thread(() -> {
 				try {
@@ -365,12 +361,55 @@ public class JobControl {
 
 	/** Starts a run of one of Healdan's jobs, as it allows */
 	private static void runNow(HealdanJob job, JobView view) throws HealdanRuleException {
-		if (job == null || !job.enabled())
-			throw new HealdanRuleException(SWITCHED_OFF);
-		if (!job.canRunNow())
-			throw new HealdanRuleException(RUNS_BY_ITSELF);
-		if (view.running() || !job.runNow())
+		String refusal = refusal(job, view);
+		if (refusal != null)
+			throw new HealdanRuleException(refusal);
+		if (!job.runNow())
 			throw new HealdanRuleException(ALREADY_RUNNING);
+	}
+
+	/**
+	 * What {@link #run} would refuse the job with now, without running it (Admin app ruling P6-R14): the Search
+	 * Index's Run Indexer Now says it beside its greyed-out button. It checks no actor: its caller does.
+	 *
+	 * @param name the job's name
+	 * @return the sentence {@link #run} would throw, in its own order; null when it would run it, and for a name no
+	 *         job has. One of Healdan's jobs that would start no run all the same, as one already started elsewhere,
+	 *         is found only by running it
+	 */
+	public String runRefusal(String name) {
+		JobView view = jobs.one(name);
+		if (view == null)
+			return null;
+		Task task = view.logicalDocTask() ? jobs.task(name) : null;
+		if (task != null)
+			synchronized (started) {
+				return refusal(task);
+			}
+		return refusal(jobs.healdanJob(name), view);
+	}
+
+	/** @return what Run Now refuses one of CE's tasks with now, null if nothing; holding {@link #started} */
+	private String refusal(Task task) {
+		Thread earlier = started.get(task.getName());
+		if ((earlier != null && earlier.isAlive()) || task.getStatus() != Task.STATUS_IDLE)
+			return ALREADY_RUNNING;
+		if (!Jobs.scheduledTasksOn())
+			return SCHEDULED_TASKS_OFF;
+		if (!task.getScheduling().isEnabled())
+			return DISABLED;
+		return null;
+	}
+
+	/** @return what Run Now refuses one of Healdan's jobs with, before asking it to run; null if nothing */
+	private static String refusal(HealdanJob job, JobView view) {
+		if (job == null || !job.enabled())
+			return SWITCHED_OFF;
+		if (!job.canRunNow())
+			return RUNS_BY_ITSELF;
+		if (view.running())
+			return ALREADY_RUNNING;
+		return null;
 	}
 
 	/** Enables or disables a task, saved, and records it; one in that state already is answered as it is */

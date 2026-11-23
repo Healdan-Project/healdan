@@ -4,6 +4,8 @@
 package com.logicaldoc.healdan.admin.index;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertNull;
 
 import java.time.Instant;
@@ -222,5 +224,80 @@ public class IndexCountsTest extends AbstractHealdanTestCase {
 		assertEquals(1, IndexCounts.get().failedIn(1002, 1));
 		assertEquals(0, IndexCounts.get().failedIn(1002, 2));
 		assertEquals(3, IndexCounts.get().counts().failed());
+	}
+	// The waiting, a page at a time by id: what the Indexer takes, but the failed, with their matters
+	@Test
+	public void testTheWaitingDocuments() throws Exception {
+		Document content = document("content.txt", IndexingStatus.TO_INDEX);
+		Document failed = document("failed.txt", IndexingStatus.TO_INDEX);
+		event(failed, DocumentEvent.INDEXED_ERROR, "Timed out", base);
+		Document properties = document("properties.txt", IndexingStatus.TO_INDEX_METADATA);
+		// Failed, then indexed, then changed: it waits again
+		Document again = document("again.txt", IndexingStatus.TO_INDEX);
+		event(again, DocumentEvent.INDEXED_ERROR, "Timed out", base);
+		event(again, DocumentEvent.INDEXED, null, base.plusSeconds(60));
+		document("indexed.txt", IndexingStatus.INDEXED);
+		document("skipped.txt", IndexingStatus.SKIP);
+		Document archived = document("archived.txt", IndexingStatus.TO_INDEX);
+		jdbc.update("update ld_document set ld_status = ? where ld_id = ?", DocumentStatus.ARCHIVED.ordinal(),
+				archived.getId());
+		Document deleted = document("deleted.txt", IndexingStatus.TO_INDEX);
+		jdbc.update("update ld_document set ld_deleted = 1 where ld_id = ?", deleted.getId());
+		Document unstamped = document("unstamped.txt", IndexingStatus.TO_INDEX);
+		jdbc.update("delete from ld_document_ext where ld_docid = ? and ld_name in ('client', 'matter')",
+				unstamped.getId());
+		fx.legacyShortcut(content, folder);
+
+		List<WaitingDocument> waiting = IndexCounts.get().waiting(0, 10);
+
+		assertEquals(List.of(content.getId(), properties.getId(), again.getId(), unstamped.getId()),
+				waiting.stream().map(WaitingDocument::id).toList());
+		assertEquals(IndexCounts.get().counts().waiting(), waiting.size());
+		WaitingDocument first = waiting.get(0);
+		assertEquals(content.getCustomId(), first.docNumber());
+		assertEquals("content.txt", first.name());
+		assertEquals(new FailedDocument.Matter(matter.getId(), "1001.1", "Charter Dispute"), first.matter());
+		assertEquals(jdbc.queryForObject("select ld_lastmodified from ld_document where ld_id = ?",
+				java.sql.Timestamp.class, content.getId()).toInstant(), first.lastChanged());
+		assertNull(waiting.get(3).matter());
+
+		// Paged
+		assertEquals(List.of(properties.getId(), again.getId()),
+				IndexCounts.get().waiting(1, 2).stream().map(WaitingDocument::id).toList());
+		assertEquals(List.of(), IndexCounts.get().waiting(4, 10));
+		assertEquals(List.of(), IndexCounts.get().waiting(0, 0));
+	}
+
+	// One document's failure, as the list gives it; and Skip, which takes only a document that failed
+	@Test
+	public void testOneDocumentsFailureAndItsSkip() throws Exception {
+		Document failed = document("failed.txt", IndexingStatus.TO_INDEX);
+		event(failed, DocumentEvent.INDEXED_ERROR, "Encrypted", base);
+		Document waiting = document("waiting.txt", IndexingStatus.TO_INDEX);
+		IndexCounts counts = IndexCounts.get();
+
+		assertEquals(counts.failed(0, 1).get(0), counts.failure(failed.getId(), Tenant.DEFAULT_ID));
+		assertNull(counts.failure(waiting.getId(), Tenant.DEFAULT_ID));
+		// Another tenant's id: none
+		assertNull(counts.failure(failed.getId(), Tenant.DEFAULT_ID + 1000));
+		assertNull(counts.failure(Long.MAX_VALUE, Tenant.DEFAULT_ID));
+
+		assertFalse(counts.skip(waiting.getId(), Tenant.DEFAULT_ID));
+		assertFalse(counts.skip(failed.getId(), Tenant.DEFAULT_ID + 1000));
+		assertTrue(counts.skip(failed.getId(), Tenant.DEFAULT_ID));
+		assertEquals(IndexingStatus.SKIP.ordinal(), (int) jdbc.queryForObject(
+				"select ld_indexed from ld_document where ld_id = ?", Integer.class, failed.getId()));
+		assertEquals(IndexingStatus.TO_INDEX.ordinal(), (int) jdbc.queryForObject(
+				"select ld_indexed from ld_document where ld_id = ?", Integer.class, waiting.getId()));
+		assertFalse(counts.skip(failed.getId(), Tenant.DEFAULT_ID));
+		assertEquals(new IndexCounts.Counts(0, 1, 0), counts.counts());
+	}
+
+	@Test
+	public void testMovedMovesTheChangesOn() {
+		IndexCounts counts = IndexCounts.get();
+		long before = counts.changes();
+		counts.moved();
+		assertEquals(before + 1, counts.changes());
 	}
 }

@@ -3,9 +3,12 @@
 
 package com.logicaldoc.healdan.admin.index;
 
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -48,6 +51,9 @@ import com.logicaldoc.util.spring.Context;
  * the document): the latest time first, an event with no time before any with one, and rows written at the same
  * moment, as MariaDB's whole seconds give, by the order they were written in, their ids. {@link #counts()} works the
  * three out in one pass over the documents, and looks for the latest event only of those that wait to be indexed.
+ * <p>
+ * {@link #changes()} moves on when an administrator's action changes them in a way a person waits to see (Try Again,
+ * Skip, a reindex job's end), which the Dashboard's index source follows, so its next read is fresh (ruling P6-R15).
  */
 @Component
 public class IndexCounts {
@@ -77,6 +83,10 @@ public class IndexCounts {
 			       sum(%s) as failed
 			  from ld_document d
 			 where %s""".formatted(NOT_ARCHIVED, FAILED, LIVE);
+
+	/** The waiting, as {@link #counts()} counts them: what the Indexer takes, but the failed */
+	private static final String WAITING = "d.ld_indexed in (:waiting) and %s and (%s) = 0".formatted(NOT_ARCHIVED,
+			FAILED);
 
 	private final NamedParameterJdbcTemplate jdbc;
 
@@ -195,34 +205,132 @@ public class IndexCounts {
 		MapSqlParameterSource params = params().addValue("clientname", HealdanConstants.ATTR_CLIENT)
 				.addValue("mattername", HealdanConstants.ATTR_MATTER).addValue("offset", Math.max(0, offset))
 				.addValue("limit", limit);
-		List<Row> rows = jdbc.query(sql, params, (rs, i) -> {
-			Timestamp when = rs.getTimestamp("ld_date");
-			return new Row(rs.getLong("ld_id"), rs.getString("ld_customid"), rs.getString("ld_filename"),
-					rs.getString("ld_comment"), when != null ? when.toInstant() : null,
-					number(rs.getString("client")), number(rs.getString("matter")));
-		});
+		List<Row> rows = jdbc.query(sql, params, IndexCounts::row);
 
-		Map<String, FailedDocument.Matter> matters = matters(rows);
+		Map<String, FailedDocument.Matter> matters = matters(rows.stream().map(Row::stamp).toList());
 		List<FailedDocument> failed = new ArrayList<>();
 		for (Row row : rows)
-			failed.add(new FailedDocument(row.id(), row.docNumber(), row.name(),
-					row.client() != null && row.matter() != null
-							? matters.get(MatterDisplay.number(row.client(), row.matter()))
-							: null,
-					row.reason(), row.when()));
+			failed.add(new FailedDocument(row.id(), row.docNumber(), row.name(), row.stamp().in(matters), row.reason(),
+					row.when()));
 		return failed;
 	}
 
 	/**
-	 * @return the live matters the rows' stamps name, by their numbers ({@code 1001.1})
+	 * The documents waiting to be indexed, as {@link #counts()} counts them: what CE's Indexer takes but those that
+	 * failed, by id, the oldest first.
+	 *
+	 * @param offset how many to skip
+	 * @param limit the most to return
+	 * @return the documents, each with the matter stamped on it
+	 * @throws PersistenceException error at data layer, reading the matters
 	 */
-	private static Map<String, FailedDocument.Matter> matters(List<Row> rows) throws PersistenceException {
+	public List<WaitingDocument> waiting(int offset, int limit) throws PersistenceException {
+		if (limit <= 0)
+			return List.of();
+		String sql = """
+				select d.ld_id, d.ld_customid, d.ld_filename, d.ld_lastmodified,
+				       c.ld_stringvalue as client, m.ld_stringvalue as matter
+				  from ld_document d
+				  left join ld_document_ext c on c.ld_docid = d.ld_id and c.ld_name = :clientname
+				  left join ld_document_ext m on m.ld_docid = d.ld_id and m.ld_name = :mattername
+				 where %s and %s
+				 order by d.ld_id""".formatted(LIVE, WAITING) + ListingSql.PAGE;
+		MapSqlParameterSource params = params().addValue("clientname", HealdanConstants.ATTR_CLIENT)
+				.addValue("mattername", HealdanConstants.ATTR_MATTER).addValue("offset", Math.max(0, offset))
+				.addValue("limit", limit);
+		record Waiting(long id, String docNumber, String name, Instant lastChanged, Stamp stamp) {
+		}
+		List<Waiting> rows = jdbc.query(sql, params,
+				(rs, i) -> new Waiting(rs.getLong("ld_id"), rs.getString("ld_customid"), rs.getString("ld_filename"),
+						rs.getTimestamp("ld_lastmodified").toInstant(),
+						new Stamp(number(rs.getString("client")), number(rs.getString("matter")))));
+
+		Map<String, FailedDocument.Matter> matters = matters(rows.stream().map(Waiting::stamp).toList());
+		List<WaitingDocument> waiting = new ArrayList<>();
+		for (Waiting row : rows)
+			waiting.add(new WaitingDocument(row.id(), row.docNumber(), row.name(), row.stamp().in(matters),
+					row.lastChanged()));
+		return waiting;
+	}
+
+	/**
+	 * @param docId a document's id
+	 * @param tenantId its tenant
+	 * @return the document as {@link #failed} lists it, when it's a live document of the tenant that couldn't be
+	 *         indexed; null otherwise
+	 * @throws PersistenceException error at data layer, reading its matter
+	 */
+	public FailedDocument failure(long docId, long tenantId) throws PersistenceException {
+		String sql = """
+				select d.ld_id, d.ld_customid, d.ld_filename, h.ld_comment, h.ld_date,
+				       c.ld_stringvalue as client, m.ld_stringvalue as matter
+				  from ld_document d
+				  join ld_history h on h.ld_id = %s and h.ld_event = :error
+				  left join ld_document_ext c on c.ld_docid = d.ld_id and c.ld_name = :clientname
+				  left join ld_document_ext m on m.ld_docid = d.ld_id and m.ld_name = :mattername
+				 where d.ld_id = :id and d.ld_tenantid = :tenant and %s and d.ld_indexed = :toindex
+				   and %s""".formatted(latest("ld_id"), LIVE, NOT_ARCHIVED);
+		MapSqlParameterSource params = params().addValue("clientname", HealdanConstants.ATTR_CLIENT)
+				.addValue("mattername", HealdanConstants.ATTR_MATTER).addValue("id", docId)
+				.addValue("tenant", tenantId);
+		List<Row> rows = jdbc.query(sql, params, IndexCounts::row);
+		if (rows.isEmpty())
+			return null;
+		Row row = rows.get(0);
+		return new FailedDocument(row.id(), row.docNumber(), row.name(),
+				row.stamp().in(matters(List.of(row.stamp()))), row.reason(), row.when());
+	}
+
+	/**
+	 * Sets a document that couldn't be indexed to Skip, so CE's Indexer leaves it, in one statement that finds it
+	 * failed as it changes it.
+	 *
+	 * @param docId the document's id
+	 * @param tenantId its tenant
+	 * @return whether it was a live document of the tenant that couldn't be indexed, and is now set to Skip
+	 */
+	boolean skip(long docId, long tenantId) {
+		String sql = """
+				update ld_document d set ld_indexed = :skip
+				 where d.ld_id = :id and d.ld_tenantid = :tenant and %s and (%s) = 1""".formatted(LIVE, FAILED);
+		return jdbc.update(sql, params().addValue("skip", IndexingStatus.SKIP.ordinal()).addValue("id", docId)
+				.addValue("tenant", tenantId)) > 0;
+	}
+
+	private static Row row(ResultSet rs, int i) throws SQLException {
+		Timestamp when = rs.getTimestamp("ld_date");
+		return new Row(rs.getLong("ld_id"), rs.getString("ld_customid"), rs.getString("ld_filename"),
+				rs.getString("ld_comment"), when != null ? when.toInstant() : null,
+				new Stamp(number(rs.getString("client")), number(rs.getString("matter"))));
+	}
+
+	/**
+	 * A document's client and matter numbers as stamped on it, each null when it has none or it isn't a number.
+	 *
+	 * @param client the client's number
+	 * @param matter the matter's number
+	 */
+	record Stamp(Long client, Long matter) {
+
+		/**
+		 * @param matters the live matters, by their numbers, as {@link IndexCounts#matters} gives them
+		 * @return the live matter the stamps name; null if they name none
+		 */
+		FailedDocument.Matter in(Map<String, FailedDocument.Matter> matters) {
+			return client != null && matter != null ? matters.get(MatterDisplay.number(client, matter)) : null;
+		}
+	}
+
+	/**
+	 * @return the live matters the stamps name, by their numbers ({@code 1001.1})
+	 */
+	static Map<String, FailedDocument.Matter> matters(Collection<Stamp> stamps) throws PersistenceException {
 		Set<Long> clientNumbers = new HashSet<>();
 		Set<Long> matterNumbers = new HashSet<>();
-		for (Row row : rows)
-			if (row.client() != null && row.matter() != null) {
-				clientNumbers.add(row.client());
-				matterNumbers.add(row.matter());
+		for (Stamp stamp : stamps)
+			if (stamp.client() != null && stamp.matter() != null) {
+				clientNumbers.add(stamp.client());
+				matterNumbers.add(stamp.matter());
 			}
 		Map<String, FailedDocument.Matter> matters = new HashMap<>();
 		if (clientNumbers.isEmpty())
@@ -241,7 +349,7 @@ public class IndexCounts {
 	/**
 	 * @return a stamped number, read trimmed; null if there's none or it isn't a number
 	 */
-	private static Long number(String stamp) {
+	static Long number(String stamp) {
 		if (stamp == null)
 			return null;
 		try {
@@ -261,6 +369,6 @@ public class IndexCounts {
 	}
 
 	/** A failed document as the query reads it, with its stamped numbers */
-	private record Row(long id, String docNumber, String name, String reason, Instant when, Long client, Long matter) {
+	private record Row(long id, String docNumber, String name, String reason, Instant when, Stamp stamp) {
 	}
 }

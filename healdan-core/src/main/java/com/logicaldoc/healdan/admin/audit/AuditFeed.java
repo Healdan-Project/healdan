@@ -889,7 +889,7 @@ public class AuditFeed {
 			List<AuditRow> rows = new ArrayList<>(raws.size());
 			for (Raw raw : raws) {
 				Person person = raw.userId() != null ? people.get(raw.userId()) : null;
-				String who = person != null ? person.name() : blankToNull(raw.username());
+				String who = PersonNames.who(person != null ? person.name() : null, raw.username());
 				String event = Objects.requireNonNullElse(raw.event(), "");
 				String id = raw.source().letter + raw.id();
 				rows.add(switch (raw.source()) {

@@ -35,6 +35,17 @@ public final class JobsTestHooks {
 	}
 
 	/**
+	 * Lists CE's tasks with this one in place of CE's of the same name, such as a {@link HeldTask} for the Indexer.
+	 *
+	 * @param task the task
+	 */
+	public static void instead(Task task) {
+		TaskManager manager = Context.get(TaskManager.class);
+		Context.get(Jobs.class).tasks = () -> manager.getTasks().stream()
+				.map(each -> each.getName().equals(task.getName()) ? task : each).toList();
+	}
+
+	/**
 	 * Lists CE's tasks alone again.
 	 */
 	public static void reset() {

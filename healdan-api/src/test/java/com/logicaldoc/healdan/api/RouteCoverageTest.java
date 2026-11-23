@@ -42,19 +42,11 @@ public class RouteCoverageTest extends AbstractHealdanTestCase {
 	/**
 	 * Routes the admin file describes ahead of their implementation, so the Admin app can be built against them, as
 	 * Phase 3's Stores and Storage routes, Phase 4's People routes and Phase 5's Monitoring routes were (Admin app
-	 * rulings P3-R2, P4-R2 and P5-R1): Phase 6's Search Index and Reindex routes (ruling P6-R1). Each must be
+	 * rulings P3-R2, P4-R2, P5-R1 and P6-R1): none now. Each must be
 	 * described and not implemented ({@link #testRoutesDescribedAheadAreNotImplementedYet}), and leaves the list once
 	 * it's implemented.
 	 */
-	static final Set<String> DESCRIBED_AHEAD = Set.of(
-			// The Search Index
-			"GET /v1/admin/search-index",
-			"GET /v1/admin/search-index/failed",
-			"GET /v1/admin/search-index/waiting",
-			"GET /v1/admin/search-index/history",
-			"POST /v1/admin/search-index/run",
-			"POST /v1/admin/search-index/failed/{docNumber}/retry",
-			"POST /v1/admin/search-index/failed/{docNumber}/skip");
+	static final Set<String> DESCRIBED_AHEAD = Set.of();
 
 	@Test
 	public void testEveryRouteIsDescribed() {

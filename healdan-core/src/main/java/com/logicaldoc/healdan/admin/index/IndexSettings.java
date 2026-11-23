@@ -1,0 +1,31 @@
+// SPDX-FileCopyrightText: 2026 The Healdan Project
+// SPDX-License-Identifier: LGPL-3.0-only
+
+package com.logicaldoc.healdan.admin.index;
+
+import com.logicaldoc.core.PersistenceException;
+import com.logicaldoc.core.security.TenantDAO;
+import com.logicaldoc.util.spring.Context;
+
+/**
+ * CE's settings for indexing that Try Again follows as CE's own index does.
+ */
+final class IndexSettings {
+
+	/** CE's tenant setting: a document that couldn't be indexed is set to Skip */
+	static final String SKIP_ON_ERROR = "index.skiponerror";
+
+	private IndexSettings() {
+	}
+
+	/**
+	 * @param tenantId a tenant
+	 * @return whether the tenant's {@value #SKIP_ON_ERROR} sets a document that couldn't be indexed to Skip, as CE's
+	 *         index does after the error's event
+	 * @throws PersistenceException if the tenant's name can't be read
+	 */
+	static boolean skipOnError(long tenantId) throws PersistenceException {
+		return Context.get().getConfig().getTenantBoolean(Context.get(TenantDAO.class).getTenantName(tenantId),
+				SKIP_ON_ERROR, false);
+	}
+}
