@@ -6,6 +6,7 @@ import type { adminComponents } from '@healdan/api'
 import { ErrorPanel } from '@healdan/shell'
 import { Button, formatDateTime, formatCount } from '@healdan/ui'
 import { useFocusWhenGone } from '../focus'
+import { SidewaysBox } from '../lists/SidewaysBox'
 import { StaleNote } from '../people/StaleNote'
 import { t } from '../strings'
 import { useIndexEvents, useReindexHistory } from './queries'
@@ -31,7 +32,7 @@ function Reindexes({ poll }: { poll: boolean }) {
   else {
     body = (
       <>
-        <div className={styles.tableBox}>
+        <SidewaysBox name={t('admin.searchIndex.sideways', { name: t('admin.searchIndex.history.reindexes') })} className={styles.tableBox}>
           <table className={styles.table} aria-labelledby={headingId}>
             <thead>
               <tr>
@@ -58,7 +59,7 @@ function Reindexes({ poll }: { poll: boolean }) {
               ))}
             </tbody>
           </table>
-        </div>
+        </SidewaysBox>
         <ShowMore listing={listing} fallback={heading} />
       </>
     )
@@ -98,7 +99,7 @@ function Events({ poll }: { poll: boolean }) {
     body = <p className={styles.muted}>{none}</p>
   } else {
     body = (
-      <div className={styles.tableBox}>
+      <SidewaysBox name={t('admin.searchIndex.sideways', { name: t('admin.searchIndex.history.events') })} className={styles.tableBox}>
         <table className={styles.table} aria-labelledby={headingId}>
           <thead>
             <tr>
@@ -127,7 +128,7 @@ function Events({ poll }: { poll: boolean }) {
             ))}
           </tbody>
         </table>
-      </div>
+      </SidewaysBox>
     )
   }
 

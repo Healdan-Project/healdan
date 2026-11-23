@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from '@tanstack/react-router'
+import { useNavigate, useRouter } from '@tanstack/react-router'
 import { useEffect, useId, useRef, useState } from 'react'
 import type { adminComponents } from '@healdan/api'
 import { ErrorPanel, useApi } from '@healdan/shell'
@@ -13,7 +13,7 @@ import { Problems } from '../forms/Problems'
 import { Refusal } from '../forms/Refusal'
 import { FailedList } from '../index/FailedList'
 import { IndexHistory } from '../index/IndexHistory'
-import { indexChanged, indexerAnswered, indexKeys, isOutOfDate, runIndexer, useActiveReindexes, useReindexEnds, useSearchIndex } from '../index/queries'
+import { indexChanged, indexerAnswered, indexerEnded, indexerRunning, indexKeys, isOutOfDate, runIndexer, useActiveReindexes, useReindexEnds, useSearchIndex } from '../index/queries'
 import { ReindexDialog } from '../index/ReindexDialog'
 import { ReindexJobs } from '../index/ReindexJobCard'
 import { WaitingList } from '../index/WaitingList'
@@ -82,20 +82,28 @@ function Figures({ index }: { index: A['SearchIndex'] }) {
  * with the server's reason while it can't run (P6-R12); Reindex…, which opens the Reindex dialog by the address (P6-R18);
  * the reindexes waiting or running, and those that ended while the page was open, above the tabs; and the tabs, Couldn't Be
  * Indexed, Waiting and History, the one open in the address. While a reindex waits or runs, the reindexes are asked for
- * every 5 seconds and the counts and the open tab every 30, while the page is visible; otherwise at each return to the
- * window (P6-R19). A reindex's end, Try Again, Skip and Run Indexer Now ask for the counts, the tabs and the Dashboard
- * again at once. Each part keeps its last answer while a new read fails, with a note (P4-R15).
+ * every 5 seconds and the counts and the open tab every 30, while the page is visible; while the Indexer runs, the
+ * heading every 5, and once 2 seconds after Run Indexer Now; otherwise at each return to the window (P6-R19, amended). A
+ * reindex's end, the Indexer's, Try Again, Skip and Run Indexer Now ask for the counts, the tabs and the Dashboard again
+ * at once. Each part keeps its last answer while a new read fails, with a note (P4-R15).
  */
 export function SearchIndexView({ search }: { search: SearchIndexSearch }) {
   const api = useApi()
   const queryClient = useQueryClient()
   const navigate = useNavigate({ from: routes.searchIndex })
+  const router = useRouter()
+  // Whether the open dialog was opened by this page's Reindex…, a step of its own, so closing it steps back rather than
+  // leave a second Search Index behind; one an address opened (a link, Back, Forward) closes in place. It's forgotten once
+  // the dialog has closed, by any way.
+  const openedHere = useRef(false)
   const refusalId = useId()
   const heading = useRef<HTMLHeadingElement>(null)
   const active = useActiveReindexes()
   const running = (active.data?.length ?? 0) > 0
   const ends = useReindexEnds(active.data)
-  const index = useSearchIndex(running)
+  // When Run Indexer Now was last answered, so the heading asks again soon after (P6-R19, amended)
+  const [askedAt, setAskedAt] = useState<number>()
+  const index = useSearchIndex(running, askedAt)
   const [busy, setBusy] = useState(false)
   // Run Indexer Now's refusal, and the Indexer as the heading had it then: it's said only while the Indexer is as it was
   const [refused, setRefused] = useState<{ failure: unknown; against: string }>()
@@ -106,6 +114,7 @@ export function SearchIndexView({ search }: { search: SearchIndexSearch }) {
     setRefused(undefined)
     try {
       await indexerAnswered(queryClient, await runIndexer(api))
+      setAskedAt(Date.now())
       toast(t('admin.searchIndex.runAsked'))
     } catch (error) {
       // Refused as the Indexer has changed since: the heading is read again first, and the refusal said against it
@@ -120,6 +129,14 @@ export function SearchIndexView({ search }: { search: SearchIndexSearch }) {
   }
 
   const data = index.data
+  // The Indexer's run ending, as the heading shows it, changes what waits and what couldn't be indexed: the tabs and the
+  // Dashboard are asked again at once
+  const indexerRuns = indexerRunning(data)
+  const ranBefore = useRef(indexerRuns)
+  useEffect(() => {
+    if (ranBefore.current && !indexerRuns) indexerEnded(queryClient)
+    ranBefore.current = indexerRuns
+  }, [indexerRuns, queryClient])
   // Run Indexer Now follows the server's reason, which can say it's running a moment before the job shows it
   const refusal = data?.indexer.runRefusal ?? null
   // A refusal goes once a new read shows the Indexer changed since, and while the reason greys the button out it says it
@@ -136,6 +153,22 @@ export function SearchIndexView({ search }: { search: SearchIndexSearch }) {
   }, [busy, refusal])
   useFocusWhenGone(refusal !== null && !busy, heading)
 
+  // The dialog closing gives the focus back to what opened it, Reindex…; one a link opened, from a matter's page or the
+  // Workspace Editor, had nothing on this page to give it back to, so the focus goes to the page's heading: once React
+  // Aria has given it back where it could, a frame later, and only if it's on nothing
+  const dialogOpen = search.reindex !== undefined
+  const wasOpen = useRef(dialogOpen)
+  useEffect(() => {
+    const closed = wasOpen.current && !dialogOpen
+    wasOpen.current = dialogOpen
+    if (!closed) return
+    openedHere.current = false
+    const frame = requestAnimationFrame(() => {
+      if (focusLost()) heading.current?.focus()
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [dialogOpen])
+
   return (
     <div className={styles.view}>
       <div className={styles.head}>
@@ -149,7 +182,13 @@ export function SearchIndexView({ search }: { search: SearchIndexSearch }) {
               {t('admin.searchIndex.run')}
             </span>
           </Button>
-          <Button variant="default" onPress={() => void navigate({ to: routes.searchIndex, search: (prev) => ({ ...prev, reindex: 'matter' }) })}>
+          <Button
+            variant="default"
+            onPress={() => {
+              openedHere.current = true
+              void navigate({ to: routes.searchIndex, search: (prev) => ({ ...prev, reindex: 'matter' }) })
+            }}
+          >
             <span className={styles.withIcon}>
               <Icon name="refresh" />
               {t('admin.searchIndex.reindex')}
@@ -175,7 +214,8 @@ export function SearchIndexView({ search }: { search: SearchIndexSearch }) {
       )}
       <ReindexJobs ends={ends} fallback={heading} />
       {/* The Reindex dialog, open while the address says (P6-R18): Back closes it, and so do Cancel, Esc and a start, which
-          take its parameters out of the address in place, the reindex started showing among the cards */}
+          step back when Reindex… opened it, and otherwise take its parameters out of the address in place, the reindex
+          started showing among the cards */}
       {search.reindex !== undefined && (
         <ReindexDialog
           // By what the address chose, so another address's choice opens afresh
@@ -183,7 +223,12 @@ export function SearchIndexView({ search }: { search: SearchIndexSearch }) {
           kind={search.reindex}
           id={search.id}
           matter={search.matter}
-          onClose={() => void navigate({ to: routes.searchIndex, search: (prev) => ({ ...prev, reindex: undefined, id: undefined, matter: undefined }), replace: true })}
+          onClose={() => {
+            if (openedHere.current) {
+              openedHere.current = false
+              router.history.back()
+            } else void navigate({ to: routes.searchIndex, search: (prev) => ({ ...prev, reindex: undefined, id: undefined, matter: undefined }), replace: true })
+          }}
         />
       )}
       <Tabs

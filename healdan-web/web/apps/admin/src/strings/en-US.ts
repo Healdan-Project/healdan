@@ -1441,8 +1441,11 @@ export const adminEnUS = {
   'admin.searchIndex.job.startedBy': 'Started by {name}, {when}',
   'admin.searchIndex.job.documents': 'Documents',
   'admin.searchIndex.job.lessThanAMinute': 'less than a minute left',
+  'admin.searchIndex.sideways': '{name} (Scrolls Sideways)',
+  'admin.searchIndex.outcome.skippedOf': '{skipped} ({unreachable})',
   'admin.searchIndex.job.searchWorks': 'search keeps working while it runs',
   'admin.searchIndex.job.stalled': "waiting for the index, which can't be written to since {when}: it tries again shortly",
+  'admin.searchIndex.job.failing': "making no progress since {when}, as the server can't go on with it: it tries again every 30 seconds, and Background Jobs says why",
   'admin.searchIndex.job.stopping': 'stopping once the documents it has started on are done',
   'admin.searchIndex.job.turn': 'Waiting its turn, as one reindex runs at a time: {documents}.',
   'admin.searchIndex.job.doneOutcome': '{outcome}.',
@@ -1496,13 +1499,14 @@ export const adminEnUS = {
   'admin.reindex.notCounted': 'Not counted yet',
   'admin.reindex.noStores': 'There are no Stores yet.',
   // Everything's tick box, unticked, and its warning
-  'admin.reindex.emptyFirst': 'Empty the index first',
-  'admin.reindex.emptyFirstWarning': 'Empty the index first is for a damaged index. Search then misses documents until the run ends.',
+  'admin.reindex.emptyFirst': 'Empty the Index First',
+  'admin.reindex.emptyFirstWarning': 'Empty the Index First is for a damaged index. Search then misses documents until the run ends.',
   'admin.reindex.estimate.short': 'Under a minute for {documents}. Search keeps working meanwhile.',
   'admin.reindex.everything.short': "All {documents}, in under a minute. Search keeps finding them while they're replaced.",
   // The button, until the preview gives its count, and for Everything
   'admin.reindex.start': 'Reindex',
   'admin.reindex.startEverything': 'Reindex Everything',
+  'admin.reindex.startEmptied': 'Empty the Index and Reindex Everything',
   // Its openers: on a matter's page, and on a folder of a matter's Workspace
   'admin.matter.reindex': 'Reindex',
   'admin.workspace.reindex': 'Reindex',
@@ -1630,6 +1634,7 @@ export const adminPlurals = {
     other: "All {documents}, in about {n} hours. Search keeps finding them while they're replaced.",
   },
   // What the preview leaves out of a folder, matter, Store or everything
+  'admin.reindex.moreDocNumbers': { one: '… and {n} more', other: '… and {n} more' },
   'admin.reindex.leftOut': {
     one: "{n} more is left out: a shortcut, or a document set to Skip, archived or being changed.",
     other: '{n} more are left out: shortcuts, and documents set to Skip, archived or being changed.',
@@ -1652,6 +1657,7 @@ export const adminPlurals = {
   'admin.searchIndex.outcome.reindexed': { one: '{n} reindexed', other: '{n} reindexed' },
   'admin.searchIndex.outcome.failed': { one: "{n} couldn't be indexed", other: "{n} couldn't be indexed" },
   'admin.searchIndex.outcome.skipped': { one: '{n} skipped', other: '{n} skipped' },
+  'admin.searchIndex.outcome.unreachable': { one: "{n} on storage that couldn't be reached", other: "{n} on storage that couldn't be reached" },
 } as const satisfies Record<`admin.${string}`, PluralForms>
 
 export type AdminStringKey = keyof typeof adminEnUS

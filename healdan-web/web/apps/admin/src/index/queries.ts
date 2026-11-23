@@ -7,7 +7,7 @@ import { ApiError, apiPath, type Api, type adminComponents } from '@healdan/api'
 import { ASK_ON_RETURN, useApi } from '@healdan/shell'
 import { useCursorList, type CursorListing } from '../lists/useCursorList'
 import { usePagedList, type PagedListing } from '../lists/usePagedList'
-import { jobKeys } from '../monitoring/jobQueries'
+import { jobKeys, SOON_MS } from '../monitoring/jobQueries'
 import { adminKey, adminKeys, POLL_MS } from '../queries'
 
 type A = adminComponents['schemas']
@@ -44,17 +44,49 @@ export function hasEnded(job: A['ReindexJob']): boolean {
   return job.state === 'done' || job.state === 'cancelled'
 }
 
+/** How often the heading is asked for again while the Indexer runs, and the page is visible (P6-R19, amended) */
+export const INDEXER_POLL_MS = 5_000
+
+/**
+ * Whether the heading says the Indexer runs: its job running, or, just after a Run Now, its reason saying so while the job
+ * still could run, until the run shows (the contract's `runRefusal`). An Indexer that can't run for another reason, as
+ * one disabled, isn't running.
+ */
+export function indexerRunning(index: A['SearchIndex'] | undefined): boolean {
+  if (index === undefined) return false
+  const { job, runRefusal } = index.indexer
+  return job.running || (runRefusal !== null && job.canRun)
+}
+
 /**
  * The Search Index's heading (spec 8.9, P6-R14): the counts, the index's entries and size, its health and the Indexer.
- * `poll`, while a reindex waits or runs, asks again every 30 seconds while the page is visible (P6-R19); each return to the
- * window asks again however fresh it is.
+ * While the page is visible (P6-R19, amended), it asks again every 5 seconds while the Indexer runs, else every 30 while
+ * `poll` says a reindex waits or runs. `askedAt`, when Run Indexer Now was last answered, has it ask again SOON_MS later,
+ * as the answer may not show the run yet, until a read sent after that answer has ended, as Background Jobs does after a
+ * Run Now. Each return to the window asks again however fresh it is.
  */
-export function useSearchIndex(poll: boolean) {
+export function useSearchIndex(poll: boolean, askedAt?: number) {
   const api = useApi()
+  // The `askedAt` the last read that ended was sent under
+  const answeredFor = useRef<number | undefined>(undefined)
   return useQuery({
     queryKey: indexKeys.searchIndex,
-    queryFn: ({ signal }) => api.get<A['SearchIndex']>('/v1/admin/search-index', undefined, { signal }),
-    refetchInterval: poll ? POLL_MS : false,
+    queryFn: async ({ signal }) => {
+      const sentFor = askedAt
+      try {
+        const index = await api.get<A['SearchIndex']>('/v1/admin/search-index', undefined, { signal })
+        if (!signal.aborted) answeredFor.current = sentFor
+        return index
+      } catch (error) {
+        if (!signal.aborted) answeredFor.current = sentFor
+        throw error
+      }
+    },
+    refetchInterval: (query) => {
+      if (askedAt !== undefined && answeredFor.current !== askedAt) return SOON_MS
+      if (indexerRunning(query.state.data)) return INDEXER_POLL_MS
+      return poll ? POLL_MS : false
+    },
     refetchIntervalInBackground: false,
     meta: ASK_ON_RETURN,
   })
@@ -166,7 +198,8 @@ export async function indexerAnswered(queryClient: QueryClient, indexer: A['Inde
 /**
  * After a reindex was started (the Reindex dialog's) or cancelled: the reindex as the server answered, in the list of those
  * waiting or running (added, put in place of what it had, or taken out once it has ended), then every reindex list asked
- * again. A read on its way is cancelled first, so an older answer can't overwrite it.
+ * again, and Background Jobs' list and the Dashboard, which show the reindex job. A read on its way is cancelled first, so
+ * an older answer can't overwrite it.
  */
 export async function reindexChanged(queryClient: QueryClient, job: A['ReindexJob']): Promise<void> {
   await queryClient.cancelQueries({ queryKey: indexKeys.active, exact: true })
@@ -175,6 +208,19 @@ export async function reindexChanged(queryClient: QueryClient, job: A['ReindexJo
     return inTurn(hasEnded(job) ? others : [...others, job])
   })
   void queryClient.invalidateQueries({ queryKey: indexKeys.reindex })
+  // Background Jobs lists the reindex job, and the Dashboard's Background Jobs tile follows it
+  void queryClient.invalidateQueries({ queryKey: jobKeys.jobs, exact: true })
+  void queryClient.invalidateQueries({ queryKey: adminKeys.dashboard })
+}
+
+/**
+ * After the heading shows the Indexer's run has ended: the tabs' lists and the Dashboard asked again at once, as the run
+ * changed what waits and what couldn't be indexed. The heading itself, just read, isn't. Nothing is waited for.
+ */
+export function indexerEnded(queryClient: QueryClient): void {
+  const heading = indexKeys.searchIndex
+  void queryClient.invalidateQueries({ queryKey: heading, predicate: (query) => query.queryKey.length > heading.length })
+  void queryClient.invalidateQueries({ queryKey: adminKeys.dashboard })
 }
 
 export interface ReindexEnds {

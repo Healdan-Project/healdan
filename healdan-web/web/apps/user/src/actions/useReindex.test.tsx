@@ -36,11 +36,13 @@ function job(over: Partial<A['ReindexJob']> = {}): A['ReindexJob'] {
     done: 0,
     failed: 0,
     skipped: 0,
+    unreachable: 0,
     leftOut: 0,
     created: '2026-11-23T10:00:00Z',
     started: null,
     ended: null,
     stalledSince: null,
+    failingSince: null,
     estimateSecondsLeft: 2,
     ...over,
   }

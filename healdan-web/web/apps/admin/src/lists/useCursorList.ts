@@ -97,6 +97,11 @@ export function useCursorList<P extends CursorPath>(
 ): CursorListing<CursorItem<P>, AdminAnswer<P> & CursorPage<CursorItem<P>>> {
   const api = useApi()
   const queryKey = adminKey(path, query)
+  // Where the run of pages that Show More (or the first page) started is, for these filters: the pages after it were
+  // followed by the list itself. Other filters start at their first page.
+  const question = hashKey(queryKey)
+  const [run, setRun] = useState({ question, start: 0 })
+  const start = run.question === question ? run.start : 0
   const asked = useInfiniteQuery({
     queryKey,
     queryFn: ({ pageParam, signal }) =>
@@ -107,18 +112,13 @@ export function useCursorList<P extends CursorPath>(
     // Asked again whenever it's shown, however fresh (P5-R34); a return to the window keeps the 30-second rule a list of
     // several pages has, as each re-read reads every page loaded
     refetchOnMount: 'always',
-    // `poll`: every page loaded asked again every POLL_MS while the page is visible, as the Search Index's History is while a
-    // reindex runs
-    refetchInterval: options.poll ? POLL_MS : false,
+    // `poll`: asked again every POLL_MS while the page is visible, as the Search Index's History is while a reindex runs,
+    // only until Show More is pressed: a re-read reads every page loaded, each a bounded scan on the server, so a list read
+    // further back is asked again only on a return to the window, as a list is without `poll`
+    refetchInterval: options.poll && start === 0 ? POLL_MS : false,
     refetchIntervalInBackground: false,
     meta: ASK_ON_RETURN,
   })
-
-  // Where the run of pages that Show More (or the first page) started is, for these filters: the pages after it were
-  // followed by the list itself. Other filters start at their first page.
-  const question = hashKey(queryKey)
-  const [run, setRun] = useState({ question, start: 0 })
-  const start = run.question === question ? run.start : 0
 
   const pages = asked.data?.pages
   const last = pages?.at(-1)

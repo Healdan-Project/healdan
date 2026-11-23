@@ -21,10 +21,30 @@ type A = adminComponents['schemas']
 /** The table's columns: Doc #, Title, Matter, Reason, When and the row's buttons */
 const COLUMNS = 6
 
-/** What a row says under it: how Try Again went, or what was refused of a button pressed in it */
+/**
+ * What a row says under it: how Try Again went, or what was refused of a button pressed in it, with the row as it was when
+ * the button was pressed (`against`, rowState's)
+ */
 interface Said {
   outcome?: A['IndexRetry']
   failure?: unknown
+  against: string
+}
+
+/** A row's reason and when, which a later run of the Indexer changes */
+function rowState(failure: A['IndexFailure']): string {
+  return JSON.stringify([failure.when, failure.reason])
+}
+
+/**
+ * Whether what a row says still holds: while the row is as it was when the button was pressed, and, for Try Again's
+ * "still couldn't be indexed", while the row gives the reason it answered with. Once a later run of the Indexer gives the
+ * row another reason or time, the line goes.
+ */
+function stillSaid(said: Said | undefined, failure: A['IndexFailure']): Said | undefined {
+  if (said === undefined) return undefined
+  if (rowState(failure) === said.against) return said
+  return said.outcome?.outcome === 'failed' && said.outcome.reason === failure.reason ? said : undefined
 }
 
 /**
@@ -44,7 +64,8 @@ interface RowProps {
   skip: (failure: A['IndexFailure']) => void
 }
 
-function FailedRow({ failure, said, busy, retry, skip }: RowProps) {
+function FailedRow({ failure, said: kept, busy, retry, skip }: RowProps) {
+  const said = stillSaid(kept, failure)
   const nameId = useId()
   const whyId = useId()
   const { document } = failure
@@ -118,15 +139,24 @@ export function FailedList({ poll }: { poll: boolean }) {
   const [skipping, setSkipping] = useState<A['IndexFailure']>()
   useKeptFocus(table, about, { attribute: 'doc', toNextRow: true })
 
-  const say = (failure: A['IndexFailure'], next: Said | undefined) => setSaid((all) => ({ ...all, [failure.document.id]: next ?? {} }))
+  const say = (failure: A['IndexFailure'], next: Omit<Said, 'against'> | undefined) =>
+    setSaid((all) => {
+      const rest = { ...all }
+      if (next === undefined) delete rest[failure.document.id]
+      else rest[failure.document.id] = { ...next, against: rowState(failure) }
+      return rest
+    })
 
   /**
    * A refusal said in the row; one that says it's out of date has the counts and the Dashboard read again, never the list,
-   * which would take the row, and the refusal with it, away at once
+   * which would take the row, and the refusal with it, away at once. One that came with no answer from the server, as when
+   * a slow file outlasts a proxy's wait, has everything read again, as the server may have gone on and indexed it: the row
+   * goes if it has, and keeps its line if not.
    */
   function refused(failure: A['IndexFailure'], error: unknown) {
     say(failure, { failure: error })
-    if (isOutOfDate(error)) countsStale(queryClient)
+    if (!(error instanceof ApiError)) indexChanged(queryClient)
+    else if (isOutOfDate(error)) countsStale(queryClient)
   }
 
   async function retry(failure: A['IndexFailure']) {

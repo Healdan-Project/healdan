@@ -31,5 +31,8 @@ describe("The Search Index's words", () => {
     expect(outcomeWords(searchIndexJob({ done: 1234, failed: 0, skipped: 0 }))).toBe('1,234 reindexed')
     expect(outcomeWords(searchIndexJob({ done: 0, failed: 1, skipped: 1 }))).toBe("0 reindexed, 1 couldn't be indexed, 1 skipped")
     expect(stateWords(searchIndexJob({ cancelling: true }))).toBe('Stopping')
+    // How many of the skipped were on storage that couldn't be reached, only when there are any (P6-R23)
+    expect(outcomeWords(searchIndexJob({ done: 400, failed: 0, skipped: 12, unreachable: 9 }))).toBe("400 reindexed, 12 skipped (9 on storage that couldn't be reached)")
+    expect(outcomeWords(searchIndexJob({ done: 400, failed: 0, skipped: 12, unreachable: 0 }))).toBe('400 reindexed, 12 skipped')
   })
 })

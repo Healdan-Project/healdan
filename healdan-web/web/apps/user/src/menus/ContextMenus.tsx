@@ -81,7 +81,9 @@ export function FolderMenuItems({ folder, renameIn }: { folder: S['FolderView'];
   const organising = useOrganising()
   const favorite = useFavorite({ folderId: folder.id })
   const place = placeOf(folder)
-  const reindex = useReindex(folder.kind === 'searchFolder' ? undefined : { kind: 'folder', targetId: folder.id })
+  // Only a plain folder is reindexed as a folder: a search folder holds no documents of its own, and a Store or a matter's
+  // own folder has its own menu (folderMenu). The API lists no folder alias or document shortcut, so no row is one.
+  const reindex = useReindex(folder.kind === 'folder' ? { kind: 'folder', targetId: folder.id } : undefined)
   return (
     <>
       <MenuItem id="open" onAction={() => void navigate({ to: '/folders/$id', params: { id: String(folder.id) } })}>
