@@ -178,6 +178,9 @@ public final class AuditWords {
 		words("job.enabled", "Enabled a job");
 		words("job.disabled", "Disabled a job");
 		words("job.schedule-changed", "Changed a job's schedule");
+		// Search Index
+		words("reindex.started", "Started a reindex");
+		words("reindex.cancelled", "Cancelled a reindex");
 
 		// The storage record, from the Classic Interface's Storage tab
 		words(AuditFeed.KEY_SHOWN, "Showed a recovery key");
