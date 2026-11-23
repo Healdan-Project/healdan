@@ -77,18 +77,18 @@ export function FolderMenuItems({ folder, renameIn }: { folder: S['FolderView'];
   const place = placeOf(folder)
   return (
     <>
-      <MenuItem id="open" onAction={() => void navigate({ to: '/folders/$id', params: { id: String(folder.id) } })}>
+      <MenuItem id="open" icon="arrowRight" onAction={() => void navigate({ to: '/folders/$id', params: { id: String(folder.id) } })}>
         {t('details.open')}
       </MenuItem>
       <ActionItem action={newTabAction(folderHref(folder.id))} />
       <MenuSeparator />
       {mayMakeFolderIn(place, me.data?.admin) && (
-        <MenuItem id="newFolder" onAction={() => organising.askNewFolder(place)}>
+        <MenuItem id="newFolder" icon="folderPlus" onAction={() => organising.askNewFolder(place)}>
           {t('newFolder.button')}
         </MenuItem>
       )}
       {/* Greyed out where the server says it can't be renamed: F2 says why */}
-      <MenuItem id="rename" isDisabled={!folder.canRename} onAction={() => organising.startRename(`f${folder.id}`, renameIn)}>
+      <MenuItem id="rename" icon="edit" isDisabled={!folder.canRename} onAction={() => organising.startRename(`f${folder.id}`, renameIn)}>
         {t('rename.menu')}
       </MenuItem>
       <FolderChangeItems folder={folder} />
@@ -107,10 +107,10 @@ export function FolderChangeItems({ folder }: { folder: S['FolderView'] }) {
   const items: OrganisingItems = { documents: [], folders: [movingFolder(folder)] }
   return (
     <>
-      <MenuItem id="move" isDisabled={!folder.canMove} onAction={() => organising.askMove(items)}>
+      <MenuItem id="move" icon="folderSymlink" isDisabled={!folder.canMove} onAction={() => organising.askMove(items)}>
         {t('move.menu')}
       </MenuItem>
-      <MenuItem id="delete" isDisabled={!folder.canDelete} onAction={() => organising.askDelete(items)}>
+      <MenuItem id="delete" icon="trash" isDisabled={!folder.canDelete} onAction={() => organising.askDelete(items)}>
         {t('delete.menu')}
       </MenuItem>
     </>
@@ -126,10 +126,10 @@ export function SelectionMenuItems({ items }: { items: OrganisingItems }) {
   const organising = useOrganising()
   return (
     <>
-      <MenuItem id="move" isDisabled={!anyMovable(items)} onAction={() => organising.askMove(items)}>
+      <MenuItem id="move" icon="folderSymlink" isDisabled={!anyMovable(items)} onAction={() => organising.askMove(items)}>
         {t('move.menu')}
       </MenuItem>
-      <MenuItem id="delete" isDisabled={!anyDeletable(items)} onAction={() => organising.askDelete(items)}>
+      <MenuItem id="delete" icon="trash" isDisabled={!anyDeletable(items)} onAction={() => organising.askDelete(items)}>
         {t('delete.menu')}
       </MenuItem>
     </>
@@ -151,22 +151,22 @@ export function MatterMenuItems({ folderId, matterId }: { folderId: number; matt
   const kept = mine.data?.items.some((matter) => matter.folderId === folderId) === true
   return (
     <>
-      <MenuItem id="open" onAction={() => void navigate({ to: '/folders/$id', params: { id: String(folderId) } })}>
+      <MenuItem id="open" icon="arrowRight" onAction={() => void navigate({ to: '/folders/$id', params: { id: String(folderId) } })}>
         {t('details.open')}
       </MenuItem>
       <ActionItem action={newTabAction(folderHref(folderId))} />
       <MenuSeparator />
       {/* A matter's own folder takes the matter's name: Edit, on the matter's page in the Admin app (folder rename spec 5.2) */}
-      <MenuItem id="rename" isDisabled>
+      <MenuItem id="rename" icon="edit" isDisabled>
         {t('rename.menu')}
       </MenuItem>
-      <MenuItem id="myMatters" isDisabled={!mine.isSuccess} onAction={() => void change(kept ? 'DELETE' : 'PUT', folderId)}>
+      <MenuItem id="myMatters" icon={kept ? 'minus' : 'plus'} isDisabled={!mine.isSuccess} onAction={() => void change(kept ? 'DELETE' : 'PUT', folderId)}>
         {kept ? t('myMatters.remove') : t('myMatters.addMenu')}
       </MenuItem>
       {admin && matterId !== null && (
         <>
           <MenuSeparator />
-          <ActionItem action={{ id: 'manageInAdmin', label: t('menu.manageInAdmin'), isDisabled: false, href: adminMatterHref(matterId) }} />
+          <ActionItem action={{ id: 'manageInAdmin', label: t('menu.manageInAdmin'), icon: 'settings', isDisabled: false, href: adminMatterHref(matterId) }} />
         </>
       )}
     </>
@@ -187,16 +187,16 @@ export function FavoriteMenuItems({ favorite, onRename }: { favorite: S['Favorit
     item.type === 'document' ? void navigate({ to: '/doc/$ref', params: { ref: String(item.docNumber) } }) : void navigate({ to: '/folders/$id', params: { id: String(item.id) } })
   return (
     <>
-      <MenuItem id="open" onAction={open}>
+      <MenuItem id="open" icon="arrowRight" onAction={open}>
         {t('details.open')}
       </MenuItem>
       <ActionItem action={newTabAction(item.type === 'document' ? docHref(item.docNumber) : folderHref(item.id))} />
       <MenuSeparator />
-      <MenuItem id="rename" isDisabled={original.isPending} onAction={onRename}>
+      <MenuItem id="rename" icon="edit" isDisabled={original.isPending} onAction={onRename}>
         {t('favorites.rename')}
       </MenuItem>
       {hasOwnName(favorite) && (
-        <MenuItem id="originalName" isDisabled={original.isPending} onAction={() => void original.put()}>
+        <MenuItem id="originalName" icon="restore" isDisabled={original.isPending} onAction={() => void original.put()}>
           {t('favorites.useOriginalName')}
         </MenuItem>
       )}

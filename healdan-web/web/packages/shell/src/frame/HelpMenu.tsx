@@ -10,10 +10,10 @@ import { Icon, Menu, MenuItem, t } from '@healdan/ui'
 export function HelpMenu({ guide, label = t('help.guide') }: { guide: string; label?: string }) {
   return (
     <Menu label={<Icon name="help" size={18} />} aria-label={t('help.menu')}>
-      <MenuItem id="guide" href={guide} target="_blank" rel="noopener noreferrer">
+      <MenuItem id="guide" icon="book" href={guide} target="_blank" rel="noopener noreferrer">
         {label}
       </MenuItem>
-      <MenuItem id="notices" href="/app/notices.txt" target="_blank" rel="noopener noreferrer">
+      <MenuItem id="notices" icon="document" href="/app/notices.txt" target="_blank" rel="noopener noreferrer">
         {t('help.notices')}
       </MenuItem>
     </Menu>

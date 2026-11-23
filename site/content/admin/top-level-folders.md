@@ -34,7 +34,7 @@ on the left, and the folder you choose in it on the right.
 - **A lock** beside a folder means it has permissions of its own, rather than following another folder's. Pointing at
   the lock says "Own Permissions", and a screen reader reads it after the folder's name.
 - **Choose a folder** with a click, or with the arrow keys and Enter, to show it on the right.
-- **A folder's menu,** on a right-click, Shift+F10 or the menu key, has **New Folder**, **New Search Folder**,
+- **A folder's menu,** on a right-click, Shift+F10 or the menu key, has icons beside **New Folder**, **New Search Folder**,
   **Rename**, **Move To…** and **Delete**, as far as the folder takes them: a search folder holds no folders, and the
   workspace's own folder, at the top, has only the first two. On a folder in the tree, **F2** renames it and the
   Delete key (on a Mac, delete) deletes it.
