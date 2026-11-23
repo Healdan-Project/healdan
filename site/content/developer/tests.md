@@ -1259,22 +1259,23 @@ Tests](#the-web-modules-tests) are Maven's). [The Web App](../the-web-app/) says
     the stack, one set per browser per run.
   - `admin-reindex.spec.ts` reindexes through the Search Index and the User app (Admin app spec §8.9, §13), in four
     tests run one after another. As `admin`, it makes a folder of its own, `Reindex <run>`, in the shared `E2E` folder
-    of matter 1.1, with `Filed <run>` inside it, and files three text documents there whose contents hold a word of
-    the run's own, through the admin's web session in the page (`fetch` from the page, with `X-Healdan-Client: web` on
+    of matter 1.1, with `Filed <run>` inside it, and files three text documents there whose contents hold a word of the
+    run's own, through the admin's web session in the page (`fetch` from the page, with `X-Healdan-Client: web` on
     writes), not a device token: a device token's sign-in from a client LogicalDOC hasn't seen sends the account a
-    new-device email, which a stack with no mail server logs at error. It waits until search finds the three. By the
-    keyboard alone it then reindexes `Reindex <run>` from **Reindex…** (Folder by the arrows, matter 1.1 found, the
-    folder picked, Enter in the filter starting nothing, Tab to **Reindex 3 Documents**), the card ending with
-    `3 reindexed.`, search finding the three after the start and after the end, and **History** listing it; then
-    `Filed <run>` from a right-click in the User app, whose question names it with its count once in the
-    accessibility tree, and whose toast's **View Progress** opens the Search Index in a new tab, the reindex read to
-    its end through the page's session. A matter's page and the Workspace Editor's folder open the dialog on what
-    they're for: **Cancel** and Esc close one a link opened in place, the focus on the heading, and Back goes back to
-    the matter's page; **Cancel** and Back close one **Reindex…** opened by stepping back, the focus on **Reindex…**,
-    and none of it sends a start. Last, the Audit Trail has one **Started a reindex** row for the folder, by `admin`.
-    It never ticks **Empty the Index First**, reindexes Everything or a Store, presses **Run Indexer Now**, as step 9
-    relies on the Indexer's 5 seconds, or tries again or skips a document; its folders and documents stay on the
-    stack, one set per browser per run.
+    new-device email, which a stack with no mail server logs at error. It waits until search finds the three. Coming to
+    the Search Index from the Dashboard by the left pane, it then reindexes `Reindex <run>` from **Reindex…** by the
+    keyboard alone (Tab landing on the checked choice, **Matter**, the left arrow and Space to **Folder**, matter 1.1
+    found, the folder picked, Enter in the filter starting nothing, Tab to **Reindex 3 Documents**); the start steps
+    back over the dialog's address, so Back then goes to the Dashboard, and the card ends with `3 reindexed.`, search
+    finding the three after the start and after the end, and **History** listing it; then `Filed <run>` from a
+    right-click in the User app, whose question names it with its count once in the accessibility tree, and whose
+    toast's **View Progress** opens the Search Index in a new tab, the reindex read to its end through the page's
+    session. A matter's page and the Workspace Editor's folder open the dialog on what they're for: **Cancel** and Esc
+    close one a link opened in place, the focus on the heading, and Back goes back to the matter's page; **Cancel** and
+    Back close one **Reindex…** opened by stepping back, the focus on **Reindex…**, and none of it sends a start. Last,
+    the Audit Trail has one **Started a reindex** row for the folder, by `admin`. It never ticks **Empty the Index
+    First**, reindexes Everything or a Store, presses **Run Indexer Now**, as step 9 relies on the Indexer's 5 seconds,
+    or tries again or skips a document; its folders and documents stay on the stack, one set per browser per run.
   - `admin-a11y.spec.ts` runs axe on the Admin app as `admin`, in the light theme and again in the dark one, as
     `a11y.spec.ts` does: the Dashboard once its ten tiles and Usage's figures are drawn (it waits for Usage's chart,
     so a summary that failed fails it), the find's list for the smoke fixture's client and matter, the Help menu, the
@@ -1293,15 +1294,19 @@ Tests](#the-web-modules-tests) are Maven's). [The Web App](../the-web-app/) says
     question, each cancelled with the focus back on its button, and the **Activity** tabs of matter 1.1, also with a
     **To Date** before its **From Date**, and of the person it made in the theme, with a listener failing it on any
     request that writes;
-    and the Errors and Audit Trail lists at 768 × 1024 too), Phase 6's (the Search Index on each of its tabs; **Run
-    Indexer Now** greyed out under the focus, the focus going to the heading, and a running reindex's card, its progress
+    and the Errors and Audit Trail lists at 768 × 1024 too), Phase 6's (the Search Index on each of its tabs; drawn
+    from answers the test gives the page with `page.route`, as one Playwright sends itself lacks the browser's
+    `Sec-Fetch-Site` and the web session refuses it: **Run Indexer Now** greyed out under the focus, the focus going to
+    the heading, the heading asked again every 5 seconds while the Indexer runs, a running reindex's card, its progress
     bar, named **Documents** with "212 of 412" as its value, and its **Cancel** question, the focus back on the card's
-    **Cancel**, both drawn from answers the test gives the page with `page.route`, as one Playwright sends itself lacks
-    the browser's `Sec-Fetch-Site` and the web session refuses it; the Reindex dialog on each of its five choices,
-    cancelled, **Empty the Index First** unticked; and the User app's Reindex question, cancelled; with a listener that
-    allows no write but the dialog's and the question's previews; and the Search Index at 768 × 1024, with the Waiting
-    and History tables' sideways boxes at 768 and 480 pixels, each a named region and a Tab stop only while narrower
-    than its table, reached by Tab and scrolled by the arrow keys), and last the signed-out screen. Phase 4's dialogs
+    **Cancel**, the card while the worker fails at it, and **Try Again** on a made-up row refused while the index can't
+    be written, its sentence in the row, the row kept and the focus on its button, the request never sent; the Reindex
+    dialog on each of its five choices, cancelled, **Empty the Index First** unticked; and the User app's Reindex
+    question, cancelled; with a listener that allows no write but the dialog's and the question's previews; and at
+    768 × 1024 the Search Index, the Reindex dialog within the window with nothing scrolling sideways, on **Matter** and
+    on **Folder**, and, with rows the test serves, the Waiting and History tables' sideways boxes, fitting at 768 and
+    scrolling at 480 pixels, each a named region and a Tab stop only while narrower than its table, reached by Tab and
+    scrolled by the arrow keys), and last the signed-out screen. Phase 4's dialogs
     are opened on a person and a group it makes in each theme, with names of its own run, so it changes nothing global.
     A check that follows the press of a button that goes pending (**Create User**, **Reset Password**, **Create Group**)
     first waits for React Aria's announcement of the button to go: a node in its live region that names the button by

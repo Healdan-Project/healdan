@@ -466,16 +466,16 @@ What the screens from Phase 2 on share (the spec's section 7.2):
     it; **Reindex…** on the page pushes `reindex=matter`. Cancel, Esc and a start take the dialog's parameters out in
     place (`replace`), but for one the page's own **Reindex…** opened, which closes by stepping back
     (`router.history.back()`), so Back leaves no second Search Index behind; a dialog a link opened gives the focus,
-    once it has closed, to the page's heading. Its choices are `ToggleButtons`; Matter and Folder search with
-    `SearchPicker`, Folder over the matter's tree (`GET /v1/admin/workspaces/{folderId}/tree`) with no count per folder;
-    Documents parses what's typed itself (a doc # with its version, `10388.2`, as the document's) and sends only whole
-    numbers, at most 1,000, drawing the first 1,000 and "… and N more"; its too-many sentence is `reindex.tooMany`, the
-    shared catalogue's, for its own check and the server's `too-many` alike, as the shared `fields.too-many` is general.
-    `useReindexPreview` asks `POST /v1/admin/reindex/preview` once a choice is complete, after a pause in typing, under
-    `['admin', 'reindex-preview', scope]`, outside the reindexes' prefix, so a start's invalidation never asks a preview
-    again; the last answer stays while the next comes, for the same choice only. The button follows the preview's
-    `count` and `refusal`. While the start is on its way the dialog holds, its choices in a disabled fieldset and its
-    search rows disabled.
+    once it has closed, to the page's heading. Its choices are `ToggleButtons`, Tab landing on the checked one; Matter
+    and Folder search with `SearchPicker`, Folder over the matter's tree (`GET /v1/admin/workspaces/{folderId}/tree`)
+    with no count per folder; Documents parses what's typed itself (a doc # with its version, `10388.2`, as the
+    document's) and sends only whole numbers, at most 1,000, drawing the first 1,000 and "… and N more"; its too-many
+    sentence is `reindex.tooMany`, the shared catalogue's, for its own check and the server's `too-many` alike, as the
+    shared `fields.too-many` is general. `useReindexPreview` asks `POST /v1/admin/reindex/preview` once a choice is
+    complete, after a pause in typing, under `['admin', 'reindex-preview', scope]`, outside the reindexes' prefix, so a
+    start's invalidation never asks a preview again; the last answer stays while the next comes, for the same choice
+    only. The button follows the preview's `count` and `refusal`. While the start is on its way the dialog holds, its
+    choices in a disabled fieldset and its search rows disabled.
   - **Their words and fixtures** are the `// Search Index` and `// Reindex dialog` sections of the catalogue and of
     `test/fakeApi.ts`, with `searchIndexRoutes` and `reindexRoutes`. `kindLabel` (`monitoring/text.ts`) gives a kind the
     catalogue lacks as the kind itself, so a new action never breaks the Audit Trail.
@@ -923,7 +923,9 @@ each keyed `t<id>` and selectable; the selection isn't a document, so it isn't i
 `selected` shows `TrashDetails` for one item as a selected document's details are shown. `?view=` is `everyone` or
 `removed` only for an administrator (`useMe`): anyone else is asked for, and shown, Mine whatever the address says, and
 the switch, `@healdan/ui`'s `ToggleButtons` (React Aria's toggle button group, labelled **Show**), is drawn for
-administrators alone. Every column sorts on the server, by its id (`trashSorts` in `actions/trash.ts`): a time
+administrators alone. As a radio group's, its one Tab stop is the pressed button, from either side, and the arrow
+keys reach the others, which are out of the Tab order (React Aria's group would otherwise take the focus on its
+first button). Every column sorts on the server, by its id (`trashSorts` in `actions/trash.ts`): a time
 (Deleted, Removed, Destroyed) newest first at its first click, the others A to Z, and a `?sort=` without `?order=` the
 same first way, as the server's default is. `?sort=` and `?order=` are in the address.
 
