@@ -4,9 +4,10 @@
 import { QueryClientProvider } from '@tanstack/react-query'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { adminComponents } from '@healdan/api'
 import { createQueryClient, createSignedOut, ServicesProvider } from '@healdan/shell'
+import { POLL_MS } from '../queries'
 import { fakeApi, problem, type Routes } from '../test/fakeApi'
 import { FOLLOW_SHORT_PAGES, useCursorList, type CursorQuery } from './useCursorList'
 
@@ -43,7 +44,7 @@ function byCursor(pages: Record<string, A['AuditPage'] | Error | Promise<A['Audi
 const PAGE_SIZE = 3
 
 /** The hook over the fake API, with the filters `query` until a rerender gives others */
-function renderList(routes: Routes, query: AuditQuery = {}) {
+function renderList(routes: Routes, query: AuditQuery = {}, options: { poll?: boolean } = {}) {
   const api = fakeApi(routes)
   const queryClient = createQueryClient({ retry: false })
   const wrapper = ({ children }: { children: ReactNode }) => (
@@ -51,7 +52,7 @@ function renderList(routes: Routes, query: AuditQuery = {}) {
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     </ServicesProvider>
   )
-  const hook = renderHook((props: { query: AuditQuery }) => useCursorList('/v1/admin/audit', props.query, PAGE_SIZE), { wrapper, initialProps: { query } })
+  const hook = renderHook((props: { query: AuditQuery }) => useCursorList('/v1/admin/audit', props.query, PAGE_SIZE, options), { wrapper, initialProps: { query } })
   const ids = () => hook.result.current.items.map((one) => one.id)
   const cursors = () => api.callsTo('GET /v1/admin/audit').map((call) => call.query?.cursor)
   return { api, hook, ids, cursors }
@@ -61,6 +62,28 @@ function renderList(routes: Routes, query: AuditQuery = {}) {
 const settle = () => act(() => new Promise((resolve) => setTimeout(resolve, 20)))
 
 describe('A list paged by cursor', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('asked to poll, asks again on a timer only until Show More is pressed, as each re-read reads every page loaded', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+    const { hook, ids, cursors } = renderList(byCursor({ '': page([1, 2, 3], 'b'), b: page([4, 5, 6], 'c') }), {}, { poll: true })
+    await settle()
+    expect(ids()).toEqual(['d1', 'd2', 'd3'])
+    await act(async () => void vi.advanceTimersByTime(POLL_MS))
+    await settle()
+    expect(cursors()).toEqual([undefined, undefined])
+
+    act(() => hook.result.current.showMore())
+    await settle()
+    expect(ids()).toEqual(['d1', 'd2', 'd3', 'd4', 'd5', 'd6'])
+    const count = cursors().length
+    await act(async () => void vi.advanceTimersByTime(POLL_MS * 3))
+    await settle()
+    expect(cursors()).toHaveLength(count)
+  })
+
   it('asks for the first page with its filters and the page size, then each next page by the cursor the last one gave, until there is none', async () => {
     const { api, hook, ids, cursors } = renderList(byCursor({ '': page([1, 2, 3], 'b'), b: page([4, 5, 6], 'c'), c: page([7], null) }), { kind: ['document'], q: 'reeve' })
     await waitFor(() => expect(ids()).toEqual(['d1', 'd2', 'd3']))

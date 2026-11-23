@@ -24,9 +24,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import javax.sql.DataSource;
 
 import org.apache.solr.common.SolrException;
+import org.hibernate.StaleObjectStateException;
 import org.junit.Test;
 import org.springframework.transaction.PlatformTransactionManager;
 
+import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentDAO;
 import com.logicaldoc.core.document.DocumentEvent;
@@ -37,6 +39,7 @@ import com.logicaldoc.core.parser.ParsingException;
 import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.core.searchengine.Hit;
 import com.logicaldoc.core.searchengine.SearchEngine;
+import com.logicaldoc.core.security.Tenant;
 import com.logicaldoc.healdan.HealdanRuleException;
 import com.logicaldoc.healdan.admin.index.ReindexJob.State;
 import com.logicaldoc.healdan.admin.jobs.JobControl;
@@ -45,6 +48,7 @@ import com.logicaldoc.healdan.admin.jobs.Jobs;
 import com.logicaldoc.healdan.support.HealdanFixtures;
 import com.logicaldoc.healdan.support.LogCapture;
 import com.logicaldoc.healdan.util.StorageUnreachableException;
+import com.logicaldoc.util.config.ContextProperties;
 import com.logicaldoc.util.spring.Context;
 
 /**
@@ -167,8 +171,8 @@ public class ReindexWorkerTest extends AbstractReindexTestCase {
 
 		try (LogCapture log = LogCapture.of(ReindexWorker.class)) {
 			assertTrue(worker.runOnce());
-			// Its id and why, never its file's name
-			assertEquals(List.of("WARN Document " + x2.getId() + " couldn't be reindexed: ParsingException",
+			// Its job, how many and why, never a file's name
+			assertEquals(List.of("WARN Reindex job " + job.id() + " couldn't index 1 of a batch's documents: ParsingException",
 					"INFO Reindex job " + job.id() + " is done: 2 indexed, 1 couldn't be, 0 skipped"), log.lines());
 		}
 
@@ -349,6 +353,7 @@ public class ReindexWorkerTest extends AbstractReindexTestCase {
 		assertEquals(3, done.done());
 		// In the Trash, set to Skip, destroyed, archived, in a running transaction, and in the Trash mid-batch
 		assertEquals(6, done.skipped());
+		assertEquals(0, done.unreachable());
 		assertEquals(0, done.failed());
 		assertAddsUp(done);
 		assertTrue(hit(replaced), hit(replaced).contains("the new words"));
@@ -432,7 +437,7 @@ public class ReindexWorkerTest extends AbstractReindexTestCase {
 
 		try (LogCapture log = LogCapture.of(ReindexWorker.class)) {
 			assertTrue(worker.runOnce());
-			assertEquals(List.of("WARN Document " + x2.getId() + " couldn't be reindexed: ParsingException",
+			assertEquals(List.of("WARN Reindex job " + job.id() + " couldn't index 1 of a batch's documents: ParsingException",
 					"INFO Reindex job " + job.id() + " is done: 1 indexed, 1 couldn't be, 0 skipped"), log.lines());
 		}
 
@@ -456,6 +461,7 @@ public class ReindexWorkerTest extends AbstractReindexTestCase {
 				throw new ParsingException("The file is encrypted");
 			ReindexTestHooks.unwritable().index(id);
 		});
+		ReindexTestHooks.indexDown();
 		ReindexJob job = service.start(ReindexScope.folder(pleadings.getId()), admin);
 
 		try (LogCapture log = LogCapture.of(ReindexWorker.class)) {
@@ -476,10 +482,11 @@ public class ReindexWorkerTest extends AbstractReindexTestCase {
 		}
 
 		// Once the index is back, x2's own failure is counted
+		ReindexTestHooks.reset();
 		ReindexTestHooks.fail(x2.getId(), "The file is encrypted");
 		try (LogCapture log = LogCapture.of(ReindexWorker.class)) {
 			assertTrue(worker.runOnce());
-			assertEquals(List.of("WARN Document " + x2.getId() + " couldn't be reindexed: ParsingException",
+			assertEquals(List.of("WARN Reindex job " + job.id() + " couldn't index 1 of a batch's documents: ParsingException",
 					"INFO Reindex job " + job.id() + " is done: 2 indexed, 1 couldn't be, 0 skipped"), log.lines());
 		}
 		ReindexJob done = job(job);
@@ -495,6 +502,7 @@ public class ReindexWorkerTest extends AbstractReindexTestCase {
 		ReindexTestHooks.indexWith(id -> {
 			throw new ParsingException("Closed", new SolrException(SolrException.ErrorCode.SERVER_ERROR, "Closed"));
 		});
+		ReindexTestHooks.indexDown();
 		ReindexJob job = service.start(ReindexScope.folder(pleadings.getId()), admin);
 
 		try (LogCapture log = LogCapture.of(ReindexWorker.class)) {
@@ -577,7 +585,13 @@ public class ReindexWorkerTest extends AbstractReindexTestCase {
 		});
 		ReindexJob job = service.start(ReindexScope.folder(pleadings.getId()), admin);
 
-		assertTrue(worker.runOnce());
+		try (LogCapture log = LogCapture.of(ReindexWorker.class)) {
+			assertTrue(worker.runOnce());
+			// Said, with how many, apart from the documents skipped as gone (ruling P6-R23)
+			assertEquals(List.of("WARN Reindex job " + job.id() + " skipped 1 of a batch's documents as their storage"
+					+ " couldn't be reached", "INFO Reindex job " + job.id() + " is done: 2 indexed, 0 couldn't be,"
+							+ " 1 skipped, 1 of them as their storage couldn't be reached"), log.lines());
+		}
 
 		// Neither done nor failed: its entry, its state and its history as they were, and nothing waits on it
 		ReindexJob done = job(job);
@@ -585,6 +599,7 @@ public class ReindexWorkerTest extends AbstractReindexTestCase {
 		assertEquals(2, done.done());
 		assertEquals(0, done.failed());
 		assertEquals(1, done.skipped());
+		assertEquals(1, done.unreachable());
 		assertNull(done.stalledSince());
 		assertEquals(IndexingStatus.INDEXED.ordinal(), indexed(x2));
 		assertEquals("old words of x2.txt", hit(x2));
@@ -664,5 +679,245 @@ public class ReindexWorkerTest extends AbstractReindexTestCase {
 		assertEquals(40_000, ReindexWorker.stallWait(4));
 		assertEquals(60_000, ReindexWorker.stallWait(5));
 		assertEquals(60_000, ReindexWorker.stallWait(40));
+	}
+
+	private int emptied(ReindexJob job) {
+		return jdbc.queryForObject("select hd_emptied from hd_reindex_job where hd_id = ?", Integer.class, job.id());
+	}
+
+	// The documents are marked first and committed, so a marking that fails leaves the index as it was, and a cancel
+	// then ends the job with nothing emptied (ruling P6-R25)
+	@Test
+	public void testAMarkingThatFailsLeavesTheIndexAsItWas() throws Exception {
+		Document x1 = indexedDocument("x1.txt");
+		ReindexJob job = service.start(ReindexScope.everything(true), admin);
+		jdbc.execute("""
+				create function healdan_test_refuse() returns trigger language plpgsql as $$
+				begin raise exception 'The documents can''t be marked'; end $$""");
+		jdbc.execute("create trigger healdan_test_refuse before update on ld_document"
+				+ " for each statement execute function healdan_test_refuse()");
+		try (LogCapture log = LogCapture.of(ReindexWorker.class)) {
+			assertEquals(ReindexWorker.FAILURE_WAIT_MS, worker.step());
+			assertEquals(1, log.lines().size());
+			assertTrue(log.lines().get(0),
+					log.lines().get(0).startsWith("WARN The reindex worker failed, and tries again in 30 seconds: "));
+		} finally {
+			jdbc.execute("drop trigger healdan_test_refuse on ld_document");
+			jdbc.execute("drop function healdan_test_refuse()");
+		}
+		assertEquals("old words of x1.txt", hit(x1));
+		assertEquals(IndexingStatus.INDEXED.ordinal(), indexed(x1));
+		assertEquals(0, emptied(job));
+
+		service.cancel(job.id(), admin);
+		assertTrue(worker.runOnce());
+		assertEquals(State.CANCELLED, job(job).state());
+		assertEquals("old words of x1.txt", hit(x1));
+		assertEquals(IndexingStatus.INDEXED.ordinal(), indexed(x1));
+	}
+
+	// LogicalDOC's drop swallows its failures, so the index is counted after it: one that holds entries still is the
+	// index's outage, and the job never says it emptied it (rulings P6-R25 and P6-R5)
+	@Test
+	public void testADropThatLeavesEntriesStalls() throws Exception {
+		Document x1 = indexedDocument("x1.txt");
+		ReindexTestHooks.dropLeavesEntries();
+		ReindexJob job = service.start(ReindexScope.everything(true), admin);
+
+		try (LogCapture log = LogCapture.of(ReindexWorker.class)) {
+			assertTrue(worker.runOnce());
+			assertTrue(worker.runOnce());
+			assertEquals(List.of("WARN The search index couldn't be emptied, so reindex job " + job.id()
+					+ " waits and tries again"), log.lines());
+		}
+		ReindexJob waiting = job(job);
+		assertEquals(State.RUNNING, waiting.state());
+		assertNotNull(waiting.stalledSince());
+		assertEquals(0, waiting.done() + waiting.failed() + waiting.skipped());
+		assertEquals(0, emptied(job));
+		// Marked, and its entry kept, so LogicalDOC's Indexer mends it whatever happens next
+		assertEquals(IndexingStatus.TO_INDEX.ordinal(), indexed(x1));
+		assertEquals("old words of x1.txt", hit(x1));
+
+		// Once the index can be emptied, it is, once, and the job goes on
+		ReindexTestHooks.reset();
+		try (LogCapture log = LogCapture.of(ReindexWorker.class)) {
+			assertTrue(worker.runOnce());
+			// x1 was marked at the first try
+			assertTrue(log.lines().toString(), log.lines().contains("INFO Reindex emptied the search index and marked"
+					+ " 0 documents to index"));
+		}
+		assertEquals(1, emptied(job));
+		runToTheEnd();
+		ReindexJob done = job(job);
+		assertEquals(State.DONE, done.state());
+		assertEquals(1, done.done());
+		assertNull(done.stalledSince());
+		assertTrue(hit(x1), hit(x1).contains("the words of x1.txt"));
+	}
+
+	// The worker's turn fails after the index was emptied and before its first batch is saved: the documents stay
+	// marked for LogicalDOC's Indexer, a cancel ends the job, and the index isn't emptied again
+	@Test
+	public void testAFailureBetweenTheEmptyingAndTheFirstBatch() throws Exception {
+		Document x1 = indexedDocument("x1.txt");
+		ReindexTestHooks.indexWith(id -> {
+			throw new OutOfMemoryError("A huge spreadsheet");
+		});
+		ReindexJob job = service.start(ReindexScope.everything(true), admin);
+
+		try (LogCapture log = LogCapture.of(ReindexWorker.class)) {
+			assertEquals(ReindexWorker.FAILURE_WAIT_MS, worker.step());
+			assertEquals(List.of("INFO Reindex emptied the search index and marked 1 documents to index",
+					"WARN The reindex worker failed, and tries again in 30 seconds: java.lang.OutOfMemoryError"),
+					log.lines());
+		}
+		assertEquals(1, emptied(job));
+		assertNull(hit(x1));
+		assertEquals(IndexingStatus.TO_INDEX.ordinal(), indexed(x1));
+
+		// Filed and indexed meanwhile: the cancel's turn doesn't empty the index again
+		Document later = indexedDocument("later.txt");
+		service.cancel(job.id(), admin);
+		assertEquals(0, worker.step());
+		assertEquals(State.CANCELLED, job(job).state());
+		assertEquals("old words of later.txt", hit(later));
+		assertEquals(IndexingStatus.TO_INDEX.ordinal(), indexed(x1));
+	}
+
+	// The loop survives anything, an Error too: the turn is reported failed, the job says since when, and the next
+	// turn goes on (ruling P6-R27)
+	@Test
+	public void testAnErrorFailsTheTurnAndTheWorkerGoesOn() throws Exception {
+		Jobs jobs = Context.get(Jobs.class);
+		Document x1 = indexedDocument("x1.txt");
+		ReindexTestHooks.indexWith(id -> {
+			throw new StackOverflowError();
+		});
+		ReindexJob job = service.start(ReindexScope.folder(pleadings.getId()), admin);
+
+		Instant since;
+		try (LogCapture log = LogCapture.of(ReindexWorker.class)) {
+			assertEquals(ReindexWorker.FAILURE_WAIT_MS, worker.step());
+			since = job(job).failingSince();
+			assertNotNull(since);
+			assertEquals(JobView.FAILED, jobs.one(ReindexWorker.JOB).result());
+			assertNull(job(job).estimateSecondsLeft());
+			// Again: still failing since the first
+			assertEquals(ReindexWorker.FAILURE_WAIT_MS, worker.step());
+			assertEquals(since, job(job).failingSince());
+			assertEquals(List.of("WARN The reindex worker failed, and tries again in 30 seconds:"
+					+ " java.lang.StackOverflowError", "WARN The reindex worker failed, and tries again in 30 seconds:"
+							+ " java.lang.StackOverflowError"), log.lines());
+		}
+		assertEquals(State.RUNNING, job(job).state());
+		assertEquals(0, position(job));
+
+		ReindexTestHooks.reset();
+		worker.step();
+		ReindexJob done = job(job);
+		assertEquals(State.DONE, done.state());
+		assertEquals(1, done.done());
+		assertNull(done.failingSince());
+		assertTrue(hit(x1), hit(x1).contains("the words of x1.txt"));
+	}
+
+	// An index fault while the index answers is the document's own failure: a one-document reindex ends, rather than
+	// wait for an index that's fine (ruling P6-R26)
+	@Test
+	public void testADocumentTheIndexRefusesWhileItAnswersFails() throws Exception {
+		Document x1 = indexedDocument("x1.txt");
+		ReindexTestHooks.indexWith(id -> {
+			throw new ParsingException("Immense term",
+					new SolrException(SolrException.ErrorCode.BAD_REQUEST, "Immense term in field"));
+		});
+		ReindexJob job = service.start(ReindexScope.documents(List.of(number(x1))), admin);
+
+		try (LogCapture log = LogCapture.of(ReindexWorker.class)) {
+			assertTrue(worker.runOnce());
+			assertEquals(List.of("WARN Reindex job " + job.id() + " couldn't index 1 of a batch's documents:"
+					+ " ParsingException", "INFO Reindex job " + job.id() + " is done: 0 indexed, 1 couldn't be,"
+							+ " 0 skipped"), log.lines());
+		}
+		ReindexJob done = job(job);
+		assertEquals(State.DONE, done.state());
+		assertEquals(1, done.failed());
+		assertNull(done.stalledSince());
+		assertEquals(List.of(admin.getId() + " Immense term"), history(x1, DocumentEvent.INDEXED_ERROR));
+		assertEquals(IndexingStatus.TO_INDEX.ordinal(), indexed(x1));
+	}
+
+	// Where the tenant is set to stop trying a document once it can't be indexed, the job sets it to Skip, as Try
+	// Again does, with the same reason for a failure with no message (ruling P6-R30)
+	@Test
+	public void testADocumentThatFailsWithSkipOnErrorIsSetToSkip() throws Exception {
+		Document x1 = indexedDocument("x1.txt");
+		Document x2 = indexedDocument("x2.txt");
+		ReindexTestHooks.indexWith(id -> {
+			if (id == x2.getId())
+				throw new IllegalStateException();
+			ReindexTestHooks.real().index(id);
+		});
+		String key = Tenant.DEFAULT_NAME + ".index.skiponerror";
+		ContextProperties config = Context.get().getConfig();
+		String before = config.getProperty(key);
+		config.setProperty(key, "true");
+		try {
+			ReindexJob job = service.start(ReindexScope.folder(pleadings.getId()), admin);
+			try (LogCapture log = LogCapture.of(ReindexWorker.class)) {
+				assertTrue(worker.runOnce());
+				assertEquals("WARN Reindex job " + job.id() + " couldn't index 1 of a batch's documents:"
+						+ " IllegalStateException", log.lines().get(0));
+			}
+			assertEquals(1, job(job).failed());
+		} finally {
+			if (before == null)
+				config.remove(key);
+			else
+				config.setProperty(key, before);
+		}
+		assertEquals(IndexingStatus.SKIP.ordinal(), indexed(x2));
+		assertEquals(IndexingStatus.INDEXED.ordinal(), indexed(x1));
+		assertEquals(List.of(admin.getId() + " IllegalStateException"), history(x2, DocumentEvent.INDEXED_ERROR));
+		assertEquals("old words of x2.txt", hit(x2));
+	}
+
+	// A save that meets another write of the document, as LogicalDOC's Indexer taking it at the same moment, is tried
+	// once more at the end of its batch (ruling P6-R31)
+	@Test
+	public void testASaveThatCollidesIsTriedOnceMore() throws Exception {
+		Document x1 = indexedDocument("x1.txt");
+		Document x2 = indexedDocument("x2.txt");
+		Document x3 = indexedDocument("x3.txt");
+		AtomicBoolean collided = new AtomicBoolean();
+		ReindexTestHooks.indexWith(id -> {
+			asked.add(id);
+			if (id == x2.getId() && !collided.getAndSet(true))
+				throw new PersistenceException(new StaleObjectStateException("Document", id));
+			ReindexTestHooks.real().index(id);
+		});
+		ReindexJob job = service.start(ReindexScope.folder(pleadings.getId()), admin);
+
+		assertTrue(worker.runOnce());
+
+		ReindexJob done = job(job);
+		assertEquals(State.DONE, done.state());
+		assertEquals(3, done.done());
+		assertEquals(0, done.failed());
+		assertEquals(2, asked.stream().filter(id -> id == x2.getId()).count());
+		assertEquals(List.of(), history(x2, DocumentEvent.INDEXED_ERROR));
+		for (Document document : List.of(x1, x2, x3))
+			assertEquals(IndexingStatus.INDEXED.ordinal(), indexed(document));
+
+		// Twice is a failure of its own
+		Document x4 = indexedDocument("x4.txt");
+		ReindexTestHooks.indexWith(id -> {
+			throw new PersistenceException(new StaleObjectStateException("Document", id));
+		});
+		ReindexJob again = service.start(ReindexScope.documents(List.of(number(x4))), admin);
+		try (LogCapture log = LogCapture.of(ReindexWorker.class)) {
+			assertTrue(worker.runOnce());
+		}
+		assertEquals(1, job(again).failed());
 	}
 }

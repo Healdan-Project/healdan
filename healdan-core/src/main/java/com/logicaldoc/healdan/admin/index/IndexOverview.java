@@ -8,6 +8,7 @@ import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.util.function.LongSupplier;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
 
@@ -30,13 +31,18 @@ import com.logicaldoc.util.spring.Context;
 
 /**
  * The Search Index's reads (Admin app spec sections 8.9 and 9.6): its header, and the documents that couldn't be
- * indexed and those waiting, a page at a time, each with its total. The counts are read at the request, not taken
- * from the Dashboard's, so they follow Try Again and Skip at once (ruling P6-R14). Administrators only.
+ * indexed and those waiting, a page at a time, each with its total. The counts are its own, not the Dashboard's,
+ * and one answer of {@link IndexCounts#counts()} is kept for up to {@value #COUNTS_KEPT_MS} ms, which the header and
+ * both lists' totals share, dropped at once when {@link IndexCounts#changes()} moves on, so they follow Try Again,
+ * Skip and a reindex's end at once (rulings P6-R14 and P6-R28). Administrators only.
  */
 @Component
 public class IndexOverview {
 
 	private static final Logger log = LoggerFactory.getLogger(IndexOverview.class);
+
+	/** How long one answer of the counts is kept */
+	static final long COUNTS_KEPT_MS = 10_000;
 
 	private final IndexCounts counts;
 
@@ -49,6 +55,15 @@ public class IndexOverview {
 
 	/** The index's folder, {@code index.dir}; tests set one of their own, and put it back */
 	volatile Supplier<String> folder = () -> Context.get().getConfig().getProperty("index.dir");
+
+	/** The clock the kept counts go by, in nanoseconds; tests set one of their own, and put it back */
+	volatile LongSupplier nanoTime = System::nanoTime;
+
+	/** The counts as last worked out, with {@link IndexCounts#changes()} then and when */
+	private record Kept(IndexCounts.Counts counts, long changes, long at) {
+	}
+
+	private volatile Kept kept;
 
 	@Autowired
 	public IndexOverview(IndexCounts counts, Jobs jobs, JobControl control) {
@@ -72,7 +87,7 @@ public class IndexOverview {
 	 */
 	public SearchIndexSummary summary(User actor) throws PersistenceException {
 		IndexReview.requireAdmin(actor);
-		IndexCounts.Counts now = counts.counts();
+		IndexCounts.Counts now = counts();
 		return new SearchIndexSummary(now, entries(), size(), DashboardService.searchIndexTile(now),
 				jobs.one(IndexerTask.NAME), control.runRefusal(IndexerTask.NAME));
 	}
@@ -88,7 +103,7 @@ public class IndexOverview {
 	 */
 	public Page<FailedDocument> failed(int offset, int limit, User actor) throws PersistenceException {
 		IndexReview.requireAdmin(actor);
-		return new Page<>(counts.failed(offset, limit), offset, limit, counts.counts().failed());
+		return new Page<>(counts.failed(offset, limit), offset, limit, counts().failed());
 	}
 
 	/**
@@ -101,7 +116,27 @@ public class IndexOverview {
 	 */
 	public Page<WaitingDocument> waiting(int offset, int limit, User actor) throws PersistenceException {
 		IndexReview.requireAdmin(actor);
-		return new Page<>(counts.waiting(offset, limit), offset, limit, counts.counts().waiting());
+		return new Page<>(counts.waiting(offset, limit), offset, limit, counts().waiting());
+	}
+
+	/**
+	 * @return the counts, as kept for up to {@value #COUNTS_KEPT_MS} ms while {@link IndexCounts#changes()} stays
+	 *         where it was; worked out again otherwise
+	 */
+	IndexCounts.Counts counts() {
+		long changes = counts.changes();
+		long now = nanoTime.getAsLong();
+		Kept last = kept;
+		if (last != null && last.changes() == changes && now - last.at() < COUNTS_KEPT_MS * 1_000_000)
+			return last.counts();
+		IndexCounts.Counts fresh = counts.counts();
+		kept = new Kept(fresh, changes, now);
+		return fresh;
+	}
+
+	/** Forgets the kept counts, so the next read works them out again; for tests */
+	void forget() {
+		kept = null;
 	}
 
 	/**

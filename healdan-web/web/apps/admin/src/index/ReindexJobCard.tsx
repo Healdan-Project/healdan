@@ -11,15 +11,21 @@ import { useKeptFocus } from '../monitoring/useKeptFocus'
 import { StaleNote } from '../people/StaleNote'
 import { plural, t } from '../strings'
 import { cancelReindex, hasEnded, isOutOfDate, indexKeys, reindexChanged, useActiveReindexes, type ReindexEnds } from './queries'
-import { jobTitle, outcomeWords, startedWords, timeLeftWords } from './text'
+import { jobTitle, outcomeWords, startedWords, timeLeftWords, unreachableWords } from './text'
 import styles from './SearchIndex.module.css'
 
 type A = adminComponents['schemas']
 
-/** What's said under a running reindex's bar: how far, how long is left, or that it waits for the index or is stopping */
+/**
+ * What's said under a running reindex's bar: how far, and how many of those on storage that couldn't be reached (P6-R23);
+ * then how long is left, or that it's stopping, that the server's worker fails at each try, or that it waits for the index
+ */
 function runningDetail(job: A['ReindexJob']): string {
   const parts = [plural('admin.searchIndex.job.ofDocuments', job.total, { value: job.done + job.failed + job.skipped })]
+  const unreachable = unreachableWords(job)
+  if (unreachable !== undefined) parts.push(unreachable)
   if (job.cancelling) parts.push(t('admin.searchIndex.job.stopping'))
+  else if (job.failingSince !== null) parts.push(t('admin.searchIndex.job.failing', { when: formatDateTime(job.failingSince) }))
   else if (job.stalledSince !== null) parts.push(t('admin.searchIndex.job.stalled', { when: formatDateTime(job.stalledSince) }))
   else {
     if (job.estimateSecondsLeft !== null) parts.push(timeLeftWords(job.estimateSecondsLeft))
@@ -45,7 +51,7 @@ interface CardProps {
 /**
  * A reindex's card (spec 8.9): its title, who started it and when, and, by its state, a running one's progress (`ProgressBar`,
  * done, failed and skipped together of its total) with Cancel, "Waiting for the index" while the index can't be written
- * (P6-R5), and that it's stopping once asked to; a waiting one's place in the queue with Cancel; and an ended one's outcome
+ * (P6-R5), that it makes no progress while the server's worker fails, and that it's stopping once asked to; a waiting one's place in the queue with Cancel; and an ended one's outcome
  * with Close. Its title takes the focus when the button that had it goes.
  */
 export function ReindexJobCard({ job, onCancel, onClose }: CardProps) {

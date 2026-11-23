@@ -18,7 +18,7 @@ export interface TypedDocNumber {
 
 /**
  * The doc #s typed or pasted, in the order given, with commas, spaces or new lines between them, a `#` before one
- * allowed: each once, a repeat left out, and what isn't a whole number kept apart, as no document has it. Only whole
+ * allowed, and a version after one (`10388.2`) read as its document: each once, a repeat left out, and what isn't a whole number kept apart, as no document has it. Only whole
  * numbers are sent, so the server never sees what isn't one.
  */
 export function readDocNumbers(text: string): { typed: TypedDocNumber[]; docNumbers: number[] } {
@@ -27,7 +27,8 @@ export function readDocNumbers(text: string): { typed: TypedDocNumber[]; docNumb
   for (const word of text.split(/[\s,;]+/)) {
     const written = word.replace(/^#/, '')
     if (written === '') continue
-    const docNumber = idFrom(written)
+    // A doc # with its version after a dot, as the User app's address for a version writes it (10388.2), is that document
+    const docNumber = idFrom(/^\d+\.\d+$/.test(written) ? written.slice(0, written.indexOf('.')) : written)
     const key = docNumber === undefined ? `text:${written}` : String(docNumber)
     if (seen.has(key)) continue
     seen.add(key)

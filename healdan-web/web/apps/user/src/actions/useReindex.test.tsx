@@ -36,11 +36,13 @@ function job(over: Partial<A['ReindexJob']> = {}): A['ReindexJob'] {
     done: 0,
     failed: 0,
     skipped: 0,
+    unreachable: 0,
     leftOut: 0,
     created: '2026-11-23T10:00:00Z',
     started: null,
     ended: null,
     stalledSince: null,
+    failingSince: null,
     estimateSecondsLeft: 2,
     ...over,
   }
@@ -75,6 +77,21 @@ const menu = () => screen.findByRole('menu')
 const item = async (name: string) => within(await menu()).findByRole('menuitem', { name })
 const question = () => screen.findByRole('dialog', { name: 'Reindex' })
 const toastOf = async (text: RegExp) => (await screen.findByText(text)).closest('[role="alertdialog"]') as HTMLElement
+
+/**
+ * Opens the target's menu where another has just closed: it waits up to 5 seconds for it, and fires the right-click again
+ * while none has opened, as one that lands while the menu or question before it is still closing can be lost on a slow
+ * machine (as in ContextMenus.test.tsx)
+ */
+async function openMenu(target: () => Promise<HTMLElement> | HTMLElement) {
+  await waitFor(
+    async () => {
+      if (!screen.queryByRole('menu')) fireEvent.contextMenu(await target())
+      expect(screen.getByRole('menu')).toBeTruthy()
+    },
+    { timeout: 5000 },
+  )
+}
 
 /** Opens the row's menu and picks Reindex */
 async function reindexRow(name: RegExp) {
@@ -125,7 +142,7 @@ describe('the question', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
 
     const tree = await screen.findByRole('treegrid', { name: 'My Matters' })
-    fireEvent.contextMenu(within(tree).getByRole('row', { name: /1001\.1/ }))
+    await openMenu(() => within(tree).findByRole('row', { name: /1001\.1/ }))
     await userEvent.click(await item('Reindex'))
     dialog = await question()
     expect(await within(dialog).findByText('Matter 1001.1 Charter Dispute')).toBeTruthy()
@@ -259,7 +276,9 @@ describe('the start', () => {
     let dialog = await reindexRow(/Drafts/)
     await userEvent.click(await within(dialog).findByRole('button', { name: 'Reindex 3 Documents' }))
     await toastOf(/Reindexing 1 document\./)
-    dialog = await reindexRow(/Drafts/)
+    await openMenu(() => row(/Drafts/))
+    await userEvent.click(await item('Reindex'))
+    dialog = await question()
     expect(await within(dialog).findByRole('button', { name: 'Reindex 4 Documents' })).toBeTruthy()
     expect(asked.previews).toHaveLength(2)
   })

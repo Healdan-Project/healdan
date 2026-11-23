@@ -13,7 +13,7 @@ import { plural, t } from '../strings'
 import { placed, type WorkspaceNode } from '../workspace/tree'
 import formStyles from '../forms/Form.module.css'
 import type { MatterChoice } from './reindexQueries'
-import type { TypedDocNumber } from './reindexText'
+import { MOST_DOC_NUMBERS, type TypedDocNumber } from './reindexText'
 import styles from './Reindex.module.css'
 
 type A = adminComponents['schemas']
@@ -232,7 +232,7 @@ export function DocumentsChoice({ text, onChange, typed, matches, error }: Docum
       <TextField label={t('admin.reindex.docNumbers')} description={t('admin.reindex.docNumbersHint')} multiline rows={3} autoComplete="off" value={text} onChange={onChange} error={error} />
       {typed.length > 0 && (
         <ul aria-label={t('admin.reindex.matches')} className={styles.matches}>
-          {typed.map((one) => {
+          {typed.slice(0, MOST_DOC_NUMBERS).map((one) => {
             const match = one.docNumber === undefined ? undefined : matches.get(one.docNumber)
             const missing = one.docNumber === undefined || match?.status === 'not-found'
             return (
@@ -249,6 +249,8 @@ export function DocumentsChoice({ text, onChange, typed, matches, error }: Docum
               </li>
             )
           })}
+          {/* Past the limit, which the field says, the rest are counted, not drawn, so a long paste stays quick */}
+          {typed.length > MOST_DOC_NUMBERS && <li className={styles.match}>{plural('admin.reindex.moreDocNumbers', typed.length - MOST_DOC_NUMBERS)}</li>}
         </ul>
       )}
     </div>
@@ -294,7 +296,7 @@ export interface EverythingChoiceProps {
 }
 
 /**
- * Everything (spec 8.9): every document, how long they take, and Empty the index first, unticked, under its warning: for
+ * Everything (spec 8.9): every document, how long they take, and Empty the Index First, unticked, under its warning: for
  * a damaged index only, as search misses documents until the run ends.
  */
 export function EverythingChoice({ line, emptyFirst, onEmptyFirst }: EverythingChoiceProps) {

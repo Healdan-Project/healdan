@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest'
 import type { adminComponents } from '@healdan/api'
 import { formatDateTime } from '@healdan/ui'
 import { expectNoAxeViolations } from '../test/axe'
-import { problem, searchIndexEvent, searchIndexEventPage, searchIndexRoutes, type Routes } from '../test/fakeApi'
+import { problem, searchIndexEvent, searchIndexEventPage, searchIndexJob, searchIndexRoutes, type Routes } from '../test/fakeApi'
 import { renderApp } from '../test/renderApp'
 
 type A = adminComponents['schemas']
@@ -48,6 +48,12 @@ describe('History', () => {
     ])
     expect(screen.getByText('No older events.')).toBeTruthy()
     await expectNoAxeViolations(view.container)
+  })
+
+  it("says how many of a reindex's skipped were on storage that couldn't be reached (P6-R23)", async () => {
+    const job = searchIndexJob({ state: 'done', done: 400, failed: 0, skipped: 12, unreachable: 9, ended: '2026-11-19T10:48:00Z', estimateSecondsLeft: null })
+    await openHistory({ 'GET /v1/admin/reindex': () => ({ items: [job], offset: 0, limit: 20, total: 1 }) satisfies A['ReindexJobList'] })
+    expect(rowsOf(reindexes())[0]?.[4]).toBe("Done: 400 reindexed, 12 skipped (9 on storage that couldn't be reached)")
   })
 
   it("says who did it as not recorded when the row names no one, and a reason as text", async () => {

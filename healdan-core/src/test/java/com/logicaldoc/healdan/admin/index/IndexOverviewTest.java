@@ -82,6 +82,8 @@ public class IndexOverviewTest extends AbstractHealdanTestCase {
 	public void putBack() {
 		overview.engine = SearchEngine::get;
 		overview.folder = () -> Context.get().getConfig().getProperty("index.dir");
+		overview.nanoTime = System::nanoTime;
+		overview.forget();
 	}
 
 	@Override
@@ -130,9 +132,27 @@ public class IndexOverviewTest extends AbstractHealdanTestCase {
 		assertTrue(summary.indexer().logicalDocTask());
 		assertEquals(JobControl.get().runRefusal(IndexerTask.NAME), summary.runRefusal());
 
-		// Read at the request: a change shows at once
+		// Kept a while, shared with the lists' totals (ruling P6-R28): a change made beside it doesn't show yet
 		jdbc.update("update ld_document set ld_indexed = ? where ld_docref is null", IndexingStatus.INDEXED.ordinal());
+		assertEquals(new IndexCounts.Counts(1, 1, 1), overview.summary(boss).counts());
+		assertEquals(1, overview.failed(0, 10, boss).total());
+		assertEquals(1, overview.waiting(0, 10, boss).total());
+
+		// Once the counts' changes move on, as Try Again, Skip and a reindex's end move them, it shows at once
+		IndexCounts.get().moved();
 		assertEquals(new IndexCounts.Counts(3, 0, 0), overview.summary(boss).counts());
+		assertEquals(0, overview.failed(0, 10, boss).total());
+
+		// And once the kept answer is 10 seconds old
+		long start = System.nanoTime();
+		overview.nanoTime = () -> start;
+		overview.forget();
+		assertEquals(new IndexCounts.Counts(3, 0, 0), overview.summary(boss).counts());
+		document("later.txt", IndexingStatus.TO_INDEX);
+		overview.nanoTime = () -> start + IndexOverview.COUNTS_KEPT_MS * 1_000_000 - 1;
+		assertEquals(new IndexCounts.Counts(3, 0, 0), overview.summary(boss).counts());
+		overview.nanoTime = () -> start + IndexOverview.COUNTS_KEPT_MS * 1_000_000;
+		assertEquals(new IndexCounts.Counts(3, 1, 0), overview.summary(boss).counts());
 	}
 
 	// What can't be read is null, each a warn line naming the class alone

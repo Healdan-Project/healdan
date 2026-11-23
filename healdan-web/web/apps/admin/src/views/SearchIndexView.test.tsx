@@ -6,7 +6,8 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import type { adminComponents } from '@healdan/api'
 import { formatDateTime } from '@healdan/ui'
-import { REINDEX_POLL_MS } from '../index/queries'
+import { INDEXER_POLL_MS, REINDEX_POLL_MS } from '../index/queries'
+import { SOON_MS } from '../monitoring/jobQueries'
 import { expectNoAxeViolations } from '../test/axe'
 import { jobOf, problem, searchIndexDoneJob, searchIndexJob, searchIndexOf, searchIndexRoutes, type Routes, type SearchIndexRoutesOptions } from '../test/fakeApi'
 import { renderApp } from '../test/renderApp'
@@ -105,6 +106,18 @@ describe('The Search Index', () => {
     await waitFor(() => expect(router.state.location.search).toEqual({ tab: 'waiting' }))
   })
 
+  it('closes the dialog Reindex… opened by stepping back, so Back then leaves no second Search Index behind', async () => {
+    const { router } = await openSearchIndex()
+    await act(() => router.navigate({ href: '/search-index?tab=waiting' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Reindex…' }))
+    await screen.findByRole('dialog', { name: 'Reindex' })
+    await userEvent.click(within(screen.getByRole('dialog', { name: 'Reindex' })).getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(router.state.location.search).toEqual({ tab: 'waiting' })
+    act(() => router.history.back())
+    await waitFor(() => expect(router.state.location.search).toEqual({}))
+  })
+
   it('says why a first read of the heading failed, with Try Again, and still shows the rest', async () => {
     let failing = true
     const fake = searchIndexRoutes()
@@ -191,9 +204,9 @@ describe('Run Indexer Now', () => {
 })
 
 describe('Asking again (P6-R19)', () => {
-  async function polling(options: SearchIndexRoutesOptions) {
+  async function polling(options: SearchIndexRoutesOptions, over: Routes = {}) {
     vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
-    const rendered = await openSearchIndex(options)
+    const rendered = await openSearchIndex(options, over)
     await settle()
     return rendered
   }
@@ -247,6 +260,50 @@ describe('Asking again (P6-R19)', () => {
     const count = api.calls.length
     await waitSeconds(60)
     expect(api.calls).toHaveLength(count)
+  })
+
+  it('asks for the heading every 5 seconds while the Indexer runs, with no reindex, then the tabs and the Dashboard once its run ends', async () => {
+    const runningIndexer = { job: jobOf({ running: true, canRun: false, canStop: true, lastStart: '2026-11-19T10:42:00Z' }), runRefusal: 'This job is running already.' }
+    const { api, fake } = await polling({ jobs: [searchIndexDoneJob], index: searchIndexOf({ indexer: runningIndexer }) })
+    const at = { index: reads(api, 'GET /v1/admin/search-index'), failed: reads(api, 'GET /v1/admin/search-index/failed'), dashboard: reads(api, 'GET /v1/admin/dashboard') }
+    await waitSeconds(INDEXER_POLL_MS / 1000)
+    expect(reads(api, 'GET /v1/admin/search-index')).toBe(at.index + 1)
+    await waitSeconds(INDEXER_POLL_MS / 1000)
+    expect(reads(api, 'GET /v1/admin/search-index')).toBe(at.index + 2)
+    // Only the heading: the open tab waits for the run's end
+    expect(reads(api, 'GET /v1/admin/search-index/failed')).toBe(at.failed)
+    expect(reads(api, 'GET /v1/admin/reindex')).toBe(1)
+
+    // The run ends: the next read shows it, the tab and the Dashboard are asked again at once, and the button comes back
+    fake.setIndex(searchIndexOf({ waiting: 0, indexer: { job: jobOf({ lastStart: '2026-11-19T10:42:00Z', lastEnd: '2026-11-19T10:43:10Z' }), runRefusal: null } }))
+    await waitSeconds(INDEXER_POLL_MS / 1000)
+    expect(reads(api, 'GET /v1/admin/search-index')).toBe(at.index + 3)
+    await waitFor(() => expect(reads(api, 'GET /v1/admin/search-index/failed')).toBe(at.failed + 1))
+    expect(reads(api, 'GET /v1/admin/dashboard')).toBeGreaterThan(at.dashboard)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Run Indexer Now' }).hasAttribute('disabled')).toBe(false))
+    // Nothing runs now, so nothing more is asked on a timer
+    const count = api.calls.length
+    await waitSeconds(60)
+    expect(api.calls).toHaveLength(count)
+  })
+
+  it("asks for the heading once 2 seconds after Run Indexer Now, as the answer may not show the run yet, then every 5 while it runs", async () => {
+    // The server's answer, before the run shows
+    const { api, fake } = await polling({ jobs: [searchIndexDoneJob] }, { 'POST /v1/admin/search-index/run': () => ({ job: jobOf(), runRefusal: null }) satisfies A['Indexer'] })
+    await userEvent.click(screen.getByRole('button', { name: 'Run Indexer Now' }))
+    await screen.findByText('Asked the Indexer to run now')
+    await settle()
+    const at = reads(api, 'GET /v1/admin/search-index')
+    fake.setIndex(searchIndexOf({ indexer: { job: jobOf({ running: true, canRun: false, canStop: true, lastStart: '2026-11-19T10:42:00Z' }), runRefusal: 'This job is running already.' } }))
+    await waitSeconds(SOON_MS / 1000)
+    expect(reads(api, 'GET /v1/admin/search-index')).toBe(at + 1)
+    await waitFor(() => expect(tiles()[3]!.textContent).toContain('The Indexer is running'))
+    expect(screen.getByRole('button', { name: 'Run Indexer Now' }).hasAttribute('disabled')).toBe(true)
+    // Once: then every 5 seconds while the run goes on
+    await waitSeconds(SOON_MS / 1000)
+    expect(reads(api, 'GET /v1/admin/search-index')).toBe(at + 1)
+    await waitSeconds((INDEXER_POLL_MS - SOON_MS) / 1000)
+    expect(reads(api, 'GET /v1/admin/search-index')).toBe(at + 2)
   })
 
   it('stops when the page is left', async () => {
