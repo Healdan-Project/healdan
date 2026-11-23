@@ -51,6 +51,13 @@ On the right are the folder's name and, for any folder but the top, **Rename**, 
 them are [Who Can Use This Folder](../permissions/#who-can-use-this-folder), and then the values the folder sets, or a
 search folder's rule.
 
+On a matter's **Workspace** tab, a folder also has **Reindex**, which opens the
+[Search Index](../system/search-and-indexing/#reindex) with its Reindex dialog open and the folder chosen: the
+documents in the folder and in every folder inside it, at every level, are indexed again, straight through, and search
+keeps finding them meanwhile.
+
+<!-- P6 docs pass 2 -->
+
 ### Making, Renaming, Moving and Deleting Folders
 
 - **New Folder** asks for a name, and **Create** makes the folder in the folder chosen. **New Search Folder** asks for

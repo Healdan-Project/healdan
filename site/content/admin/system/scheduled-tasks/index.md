@@ -5,7 +5,7 @@ weight: 6
 
 LogicalDOC's background work runs as tasks on schedules, listed under **Administration → System → Scheduled
 Tasks**. Healdan's own background work, such as making [Office previews](../../office-previews/) as files arrive,
-isn't listed here.
+or a [reindex](../search-and-indexing/#reindex), isn't listed here.
 
 The Admin app's [Background Jobs](../../monitoring/background-jobs/) lists these tasks beside Healdan's own jobs, with
 when each last ran and how it went, and runs, stops, enables, disables and schedules them as this screen does, and
@@ -31,7 +31,10 @@ Each first runs between half an hour and an hour and a half after Healdan starts
 ## Running a Task Now
 
 Right-click the task and choose **Execute**. **Progress** shows how far it has got, and **Stop** stops it. Background
-Jobs' **Run Now** and **Stop** do the same.
+Jobs' **Run Now** and **Stop** do the same, and so, for the Indexer, does **Run Indexer Now** on the Admin app's
+[Search Index](../search-and-indexing/#the-search-index).
+
+<!-- P6 docs pass 2 -->
 
 ## Changing a Schedule
 
@@ -63,6 +66,11 @@ their filters, and a doc # such as `#1234`, find a new document at once.
 To find new documents by their words within about a minute, select the **Indexer**, choose the **Simple** policy,
 set both **Initial delay** and **Repeat interval** to 60, and click **Save**. A run with nothing new to read
 finishes quickly.
+
+To have documents already filed indexed again, the Search Index's [Reindex](../search-and-indexing/#reindex) indexes
+them straight through, without waiting for the Indexer's runs.
+
+<!-- P6 docs pass 2 -->
 
 ## Turning a Task Off
 

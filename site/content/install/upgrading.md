@@ -280,6 +280,13 @@ isn't in the index at all. After the upgrade, rebuild the index once:
 4. Leave the server running. The Indexer works through the documents on its next runs, and each one's new entry
    replaces its old.
 
+From a version with the Admin app's Search Index, steps 2 and 4 can be one reindex instead: choose **Reindex…** there,
+then **Everything**, and leave **Empty the index first** unticked. It indexes every document again straight through,
+without waiting for the Indexer's runs, while searches keep working. Do step 3 first, as a reindex leaves out the
+documents set not to be indexed. See [Reindex](../../admin/system/search-and-indexing/#reindex).
+
+<!-- P6 docs pass 2 -->
+
 This costs the Indexer's time. Its **Batch** is 500 documents to begin with, taken every 30 minutes, about 1,000
 documents an hour, so 50,000 documents take about two days. [Finding New Documents
 Sooner](../../admin/system/scheduled-tasks/#finding-new-documents-sooner) says how to run it more often, and **Batch** is
@@ -354,3 +361,9 @@ upgrade's first night. The setting arrives with the upgrade, so open it as soon 
 good.
 
 The start's log says how many items it made, in a line beginning `Trash items made for what was already deleted:`.
+
+## Reindexing from the Admin App
+
+The upgrade that brings the Admin app's [Search Index](../../admin/system/search-and-indexing/) adds two tables of
+Healdan's own, which keep the reindexes started there. The app's first start makes them, as it upgrades Healdan's own
+tables on every start, so there's nothing to do by hand. LogicalDOC's tables don't change.
