@@ -257,8 +257,8 @@ public class IndexCountsTest extends AbstractHealdanTestCase {
 		assertEquals(content.getCustomId(), first.docNumber());
 		assertEquals("content.txt", first.name());
 		assertEquals(new FailedDocument.Matter(matter.getId(), "1001.1", "Charter Dispute"), first.matter());
-		assertFalse(first.propertiesOnly());
-		assertTrue(waiting.get(1).propertiesOnly());
+		assertEquals(jdbc.queryForObject("select ld_lastmodified from ld_document where ld_id = ?",
+				java.sql.Timestamp.class, content.getId()).toInstant(), first.lastChanged());
 		assertNull(waiting.get(3).matter());
 
 		// Paged

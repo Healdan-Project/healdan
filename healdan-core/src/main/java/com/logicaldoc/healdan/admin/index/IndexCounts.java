@@ -228,7 +228,7 @@ public class IndexCounts {
 		if (limit <= 0)
 			return List.of();
 		String sql = """
-				select d.ld_id, d.ld_customid, d.ld_filename, d.ld_indexed,
+				select d.ld_id, d.ld_customid, d.ld_filename, d.ld_lastmodified,
 				       c.ld_stringvalue as client, m.ld_stringvalue as matter
 				  from ld_document d
 				  left join ld_document_ext c on c.ld_docid = d.ld_id and c.ld_name = :clientname
@@ -238,18 +238,18 @@ public class IndexCounts {
 		MapSqlParameterSource params = params().addValue("clientname", HealdanConstants.ATTR_CLIENT)
 				.addValue("mattername", HealdanConstants.ATTR_MATTER).addValue("offset", Math.max(0, offset))
 				.addValue("limit", limit);
-		record Waiting(long id, String docNumber, String name, boolean properties, Stamp stamp) {
+		record Waiting(long id, String docNumber, String name, Instant lastChanged, Stamp stamp) {
 		}
 		List<Waiting> rows = jdbc.query(sql, params,
 				(rs, i) -> new Waiting(rs.getLong("ld_id"), rs.getString("ld_customid"), rs.getString("ld_filename"),
-						rs.getInt("ld_indexed") == IndexingStatus.TO_INDEX_METADATA.ordinal(),
+						rs.getTimestamp("ld_lastmodified").toInstant(),
 						new Stamp(number(rs.getString("client")), number(rs.getString("matter")))));
 
 		Map<String, FailedDocument.Matter> matters = matters(rows.stream().map(Waiting::stamp).toList());
 		List<WaitingDocument> waiting = new ArrayList<>();
 		for (Waiting row : rows)
 			waiting.add(new WaitingDocument(row.id(), row.docNumber(), row.name(), row.stamp().in(matters),
-					row.properties()));
+					row.lastChanged()));
 		return waiting;
 	}
 

@@ -87,6 +87,7 @@ public class JobControlTest extends AbstractHealdanTestCase {
 	public void testRunNowOfATaskStartsItOffTheCallersThread() throws Exception {
 		held = new HeldTask();
 		JobsTestHooks.list(held);
+		assertNull(control.runRefusal(HeldTask.NAME));
 
 		JobView answer = control.run(HeldTask.NAME, admin);
 
@@ -98,7 +99,8 @@ public class JobControlTest extends AbstractHealdanTestCase {
 		assertTrue(running.running());
 		assertFalse(running.canRun());
 		assertTrue(running.canStop());
-		// While it runs, a second is refused
+		// While it runs, a second is refused, as the check without running says
+		assertEquals(JobControl.ALREADY_RUNNING, control.runRefusal(HeldTask.NAME));
 		assertEquals(JobControl.ALREADY_RUNNING,
 				assertThrows(HealdanRuleException.class, () -> control.run(HeldTask.NAME, admin)).getMessage());
 		assertEquals(List.of(record("job.run-requested", HeldTask.NAME, null)), AdminRecord.events());
@@ -108,6 +110,7 @@ public class JobControlTest extends AbstractHealdanTestCase {
 		assertFalse(ended.running());
 		assertEquals(JobView.SUCCEEDED, ended.result());
 		assertTrue(ended.canRun());
+		assertNull(control.runRefusal(HeldTask.NAME));
 	}
 
 	/**
@@ -122,6 +125,7 @@ public class JobControlTest extends AbstractHealdanTestCase {
 
 		control.run(HeldTask.NAME, admin);
 		assertEquals("CE's run hasn't begun", Task.STATUS_IDLE, held.getStatus());
+		assertEquals(JobControl.ALREADY_RUNNING, control.runRefusal(HeldTask.NAME));
 		assertEquals(JobControl.ALREADY_RUNNING,
 				assertThrows(HealdanRuleException.class, () -> control.run(HeldTask.NAME, admin)).getMessage());
 		assertEquals(Task.STATUS_IDLE, held.getStatus());
@@ -145,6 +149,7 @@ public class JobControlTest extends AbstractHealdanTestCase {
 				JobView view = jobs.one(name);
 				assertTrue(name, view.enabled());
 				assertFalse(name, view.canRun());
+				assertEquals(name, JobControl.SCHEDULED_TASKS_OFF, control.runRefusal(name));
 				assertEquals(name, JobControl.SCHEDULED_TASKS_OFF,
 						assertThrows(HealdanRuleException.class, () -> control.run(name, admin)).getMessage());
 			}
@@ -209,6 +214,7 @@ public class JobControlTest extends AbstractHealdanTestCase {
 		JobsTestHooks.list(held);
 
 		assertFalse(jobs.one(HeldTask.NAME).canRun());
+		assertEquals(JobControl.DISABLED, control.runRefusal(HeldTask.NAME));
 		assertEquals(JobControl.DISABLED,
 				assertThrows(HealdanRuleException.class, () -> control.run(HeldTask.NAME, admin)).getMessage());
 		assertEquals(Task.STATUS_IDLE, held.getStatus());
@@ -264,6 +270,7 @@ public class JobControlTest extends AbstractHealdanTestCase {
 	public void testRunNowOfAJobThatRunsByItselfIsRefused() throws Exception {
 		for (String name : List.of(PreviewWorker.JOB, EmailIndexWorker.JOB)) {
 			assertFalse(name, jobs.one(name).canRun());
+			assertEquals(name, JobControl.RUNS_BY_ITSELF, control.runRefusal(name));
 			assertEquals(name, JobControl.RUNS_BY_ITSELF,
 					assertThrows(HealdanRuleException.class, () -> control.run(name, admin)).getMessage());
 		}
@@ -426,6 +433,7 @@ public class JobControlTest extends AbstractHealdanTestCase {
 	@Test
 	public void testAnUnknownJobIsNone() throws Exception {
 		assertNull(control.run("no-such-job", admin));
+		assertNull(control.runRefusal("no-such-job"));
 		assertNull(control.stop("no-such-job", admin));
 		assertNull(control.enable("no-such-job", admin));
 		assertNull(control.disable("no-such-job", admin));

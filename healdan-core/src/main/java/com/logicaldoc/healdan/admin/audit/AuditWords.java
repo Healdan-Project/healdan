@@ -179,8 +179,8 @@ public final class AuditWords {
 		words("job.disabled", "Disabled a job");
 		words("job.schedule-changed", "Changed a job's schedule");
 		// The Search Index
-		words("index.retried", "Tried indexing a document again");
-		words("index.skipped", "Set a document to Skip");
+		words("index.retried", "Tried to index a document again");
+		words("index.skipped", "Set a document not to be indexed");
 
 		// The storage record, from the Classic Interface's Storage tab
 		words(AuditFeed.KEY_SHOWN, "Showed a recovery key");

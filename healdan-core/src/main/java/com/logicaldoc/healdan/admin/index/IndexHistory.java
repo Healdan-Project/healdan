@@ -32,7 +32,8 @@ import com.logicaldoc.util.spring.Context;
 /**
  * The search index's history (Admin app spec section 8.9; ruling P6-R13): {@code ld_history}'s
  * {@code event.indexed} and {@code event.indexed.error} rows of the reader's tenant, newest first, by a cursor
- * ({@link IndexHistoryCursor}). Rows marked deleted are left out.
+ * ({@link IndexHistoryCursor}). Rows marked deleted are left out, and so are those whose document is no longer kept,
+ * as destroying a document takes its rows. Who did it is named as the Audit Trail names it ({@link PersonNames#who}).
  * <p>
  * No index serves a newest-first read of {@code ld_history} by its event, so, as the Audit Trail reads a source no
  * index serves, each page looks through at most {@link #SCAN} of the tenant's rows by the table's key, below the
@@ -87,8 +88,8 @@ public class IndexHistory {
 	}
 
 	/** A row as the window's statement reads it */
-	private record Raw(long id, Instant when, String event, String comment, Long userId, String username, long docId,
-			String fileName) {
+	private record Raw(long id, Instant when, String event, String comment, Long userId, String username,
+			Long docId) {
 	}
 
 	/** Where a page's window of rows ends: its oldest row */
@@ -127,7 +128,7 @@ public class IndexHistory {
 
 		List<Object> params = new ArrayList<>(List.of(tenantId, upper));
 		String sql = "select t.ld_id, " + DATE + ", t.ld_event, t.ld_comment, t.ld_userid, t.ld_username,"
-				+ " t.ld_docid, t.ld_filename from ld_history t where t.ld_tenantid = ? and t.ld_id < ?";
+				+ " t.ld_docid from ld_history t where t.ld_tenantid = ? and t.ld_id < ?";
 		if (low != null) {
 			sql += " and t.ld_id >= ?";
 			params.add(low);
@@ -139,7 +140,7 @@ public class IndexHistory {
 		sent.accept(rows);
 		List<Raw> raws = jdbc.query(rows.text(), ps -> bind(ps, rows.params()),
 				(rs, n) -> new Raw(rs.getLong(1), instant(rs.getTimestamp(2)), rs.getString(3), rs.getString(4),
-						(Long) rs.getObject(5, Long.class), rs.getString(6), rs.getLong(7), rs.getString(8)));
+						rs.getObject(5, Long.class), rs.getString(6), rs.getObject(7, Long.class)));
 
 		IndexHistoryCursor next;
 		Instant readBackTo;
@@ -165,7 +166,8 @@ public class IndexHistory {
 		for (Raw raw : raws) {
 			if (raw.userId() != null)
 				userIds.add(raw.userId());
-			docIds.add(raw.docId());
+			if (raw.docId() != null)
+				docIds.add(raw.docId());
 		}
 		Map<Long, String> people = people(userIds, tenantId);
 		Map<Long, Kept> documents = documents(docIds, tenantId);
@@ -174,14 +176,15 @@ public class IndexHistory {
 
 		List<IndexEvent> events = new ArrayList<>(raws.size());
 		for (Raw raw : raws) {
+			Kept kept = raw.docId() != null ? documents.get(raw.docId()) : null;
+			// A row whose document is no longer kept is left out, as destroying a document takes its rows
+			if (kept == null)
+				continue;
 			boolean failed = DocumentEvent.INDEXED_ERROR.toKey().equals(raw.event());
-			String who = raw.userId() != null && people.containsKey(raw.userId()) ? people.get(raw.userId())
-					: blankToNull(raw.username());
-			Kept kept = documents.get(raw.docId());
+			String who = PersonNames.who(raw.userId() != null ? people.get(raw.userId()) : null, raw.username());
 			// An indexed event's comment is the start of the document's text, which isn't the history's to give
 			events.add(new IndexEvent(raw.id(), raw.when(), failed, failed ? blankToNull(raw.comment()) : null, who,
-					raw.docId(), kept != null ? kept.docNumber() : null,
-					kept != null ? kept.fileName() : raw.fileName(), kept != null ? kept.stamp().in(matters) : null));
+					raw.docId(), kept.docNumber(), kept.fileName(), kept.stamp().in(matters)));
 		}
 		return events;
 	}

@@ -3,6 +3,8 @@
 
 package com.logicaldoc.healdan.admin.index;
 
+import java.time.Instant;
+
 /**
  * A document waiting to be indexed (Admin app spec sections 8.9 and 9.6): CE's Indexer will take it, and it hasn't
  * failed.
@@ -11,9 +13,9 @@ package com.logicaldoc.healdan.admin.index;
  * @param docNumber its doc #; null if it has none
  * @param name its file name
  * @param matter the matter stamped on it; null if none is, or the stamps name no live matter
- * @param propertiesOnly whether only its properties wait to be indexed ({@code TO_INDEX_METADATA}), its content
- *        staying as the index has it
+ * @param lastChanged when it was last changed ({@code ld_lastmodified}): for most documents when they began to wait,
+ *        though a mark of every document at once, by JDBC, leaves it as it was
  */
 public record WaitingDocument(long id, String docNumber, String name, FailedDocument.Matter matter,
-		boolean propertiesOnly) {
+		Instant lastChanged) {
 }

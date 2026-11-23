@@ -11,6 +11,7 @@ import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Date;
@@ -19,6 +20,7 @@ import java.util.Map;
 
 import javax.sql.DataSource;
 
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -32,6 +34,7 @@ import com.logicaldoc.core.document.DocumentManager;
 import com.logicaldoc.core.document.IndexingStatus;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
+import com.logicaldoc.core.parser.ParsingException;
 import com.logicaldoc.core.searchengine.SearchEngine;
 import com.logicaldoc.core.security.Tenant;
 import com.logicaldoc.core.security.user.User;
@@ -39,6 +42,7 @@ import com.logicaldoc.core.store.Store;
 import com.logicaldoc.healdan.AbstractHealdanTestCase;
 import com.logicaldoc.healdan.HealdanRuleException;
 import com.logicaldoc.healdan.support.LogCapture;
+import com.logicaldoc.healdan.util.StorageUnreachableException;
 import com.logicaldoc.healdan.matter.Matter;
 import com.logicaldoc.healdan.support.AdminRecord;
 import com.logicaldoc.healdan.support.HealdanFixtures;
@@ -78,6 +82,11 @@ public class IndexReviewTest extends AbstractHealdanTestCase {
 		review = IndexReview.get();
 		// The matter's own record comes before
 		recorded = AdminRecord.events().size();
+	}
+
+	@After
+	public void putBack() {
+		review.indexing = docId -> DocumentManager.get().index(docId, null, null);
 	}
 
 	@Override
@@ -123,7 +132,6 @@ public class IndexReviewTest extends AbstractHealdanTestCase {
 		assertTrue(tried.indexed());
 		assertEquals(IndexReview.INDEXED, tried.outcome());
 		assertNull(tried.reason());
-		assertEquals("notes.txt", tried.document().name());
 		assertEquals(IndexingStatus.INDEXED.ordinal(), indexed(document));
 		assertNull(IndexCounts.get().failure(document.getId(), Tenant.DEFAULT_ID));
 		assertNotNull(SearchEngine.get().getHit(document.getId()));
@@ -134,7 +142,7 @@ public class IndexReviewTest extends AbstractHealdanTestCase {
 		assertEquals(boss.getId(), ((Number) event.get("ld_userid")).longValue());
 		assertEquals(changes + 1, IndexCounts.get().changes());
 		assertEquals(List.of(boss.getId() + " boss null SEARCH_INDEX index.retried document " + document.getId()
-				+ " # " + document.getCustomId() + ", notes.txt {\"outcome\":{\"before\":null,\"after\":\"indexed\"}}"),
+				+ " # " + document.getCustomId() + " notes.txt {\"outcome\":{\"before\":null,\"after\":\"indexed\"}}"),
 				AdminRecord.eventsSince(recorded));
 	}
 
@@ -153,17 +161,43 @@ public class IndexReviewTest extends AbstractHealdanTestCase {
 		assertEquals(IndexReview.FAILED, tried.outcome());
 		FailedDocument now = IndexCounts.get().failure(document.getId(), Tenant.DEFAULT_ID);
 		assertNotNull(now);
+		assertNotNull(tried.reason());
 		assertEquals(now.reason(), tried.reason());
-		assertEquals(now.when(), tried.when());
-		assertTrue(tried.when().isAfter(base));
+		assertTrue(now.when().isAfter(base));
 		assertEquals(IndexingStatus.TO_INDEX.ordinal(), indexed(document));
 		// The new error's event is the actor's
 		assertEquals(boss.getId(), (long) jdbc.queryForObject("select ld_userid from ld_history where ld_docid = ?"
 				+ " and ld_event = ? order by ld_id desc limit 1", Long.class, document.getId(),
 				DocumentEvent.INDEXED_ERROR.toKey()));
 		assertEquals(List.of(boss.getId() + " boss null SEARCH_INDEX index.retried document " + document.getId()
-				+ " # " + document.getCustomId() + ", gone.txt {\"outcome\":{\"before\":null,\"after\":\"failed\"}}"),
+				+ " # " + document.getCustomId() + " gone.txt {\"outcome\":{\"before\":null,\"after\":\"failed\"}}"),
 				AdminRecord.eventsSince(recorded));
+	}
+
+	// A file whose storage can't be reached is an outage, not the document's failure: nothing is written, counted or
+	// recorded (ruling P6-R23)
+	@Test
+	public void testTryAgainOnAFileWhoseStorageCantBeReached() throws Exception {
+		Document document = failed("cloud.txt");
+		long changes = IndexCounts.get().changes();
+		int rows = jdbc.queryForObject("select count(*) from ld_history where ld_docid = ?", Integer.class,
+				document.getId());
+		StorageUnreachableException outage = new StorageUnreachableException("Cloud", true, null);
+		// As CE's index throws it, the store's failure wrapped by its parse
+		review.indexing = docId -> {
+			throw new ParsingException(new RuntimeException(outage));
+		};
+
+		UncheckedIOException thrown = assertThrows(UncheckedIOException.class,
+				() -> review.retry(document.getId(), boss, null));
+
+		assertSame(outage, StorageUnreachableException.in(thrown));
+		assertEquals(rows, (int) jdbc.queryForObject("select count(*) from ld_history where ld_docid = ?",
+				Integer.class, document.getId()));
+		assertNotNull(IndexCounts.get().failure(document.getId(), Tenant.DEFAULT_ID));
+		assertEquals("Timed out", IndexCounts.get().failure(document.getId(), Tenant.DEFAULT_ID).reason());
+		assertEquals(changes, IndexCounts.get().changes());
+		assertEquals(List.of(), AdminRecord.eventsSince(recorded));
 	}
 
 	@Test
@@ -181,7 +215,7 @@ public class IndexReviewTest extends AbstractHealdanTestCase {
 		assertEquals(new IndexCounts.Counts(0, 0, 0), IndexCounts.get().counts());
 		assertEquals(changes + 1, IndexCounts.get().changes());
 		assertEquals(List.of(boss.getId() + " boss null SEARCH_INDEX index.skipped document " + document.getId()
-				+ " # " + document.getCustomId() + ", skipped.txt null"), AdminRecord.eventsSince(recorded));
+				+ " # " + document.getCustomId() + " skipped.txt null"), AdminRecord.eventsSince(recorded));
 	}
 
 	@Test
@@ -238,7 +272,7 @@ public class IndexReviewTest extends AbstractHealdanTestCase {
 
 	@Test
 	public void testTheRecordsName() {
-		assertEquals("# 12, a.pdf", IndexReview.name(new FailedDocument(1, "12", "a.pdf", null, null, null)));
+		assertEquals("# 12 a.pdf", IndexReview.name(new FailedDocument(1, "12", "a.pdf", null, null, null)));
 		assertEquals("a.pdf", IndexReview.name(new FailedDocument(1, null, "a.pdf", null, null, null)));
 		assertEquals("# 12", IndexReview.name(new FailedDocument(1, "12", " ", null, null, null)));
 	}

@@ -139,8 +139,11 @@ public class IndexHistoryTest extends AbstractHealdanTestCase {
 				Tenant.DEFAULT_ID);
 		row(1005, t0.plusSeconds(4), boss.getId(), "Ann Lee", ERROR, letter.getId(), "kept.txt", "Elsewhere", 0,
 				Tenant.DEFAULT_ID + 1000);
-		// An account the tenant no longer has: the name the row kept; a document no longer kept: the name too
-		row(1006, t0.plusSeconds(5), 987654L, "Former Clerk", ERROR, 876543L, "lost.txt", "Encrypted", 0,
+		// An account the tenant no longer has: the name the row kept
+		row(1006, t0.plusSeconds(5), 987654L, "Former Clerk", ERROR, other.getId(), "kept.txt", "Encrypted", 0,
+				Tenant.DEFAULT_ID);
+		// A document no longer kept: left out
+		row(1007, t0.plusSeconds(6), boss.getId(), "Ann Lee", ERROR, 876543L, "lost.txt", "Gone", 0,
 				Tenant.DEFAULT_ID);
 
 		IndexHistoryPage page = history.page(IndexHistoryCursor.START, 50, boss);
@@ -149,14 +152,11 @@ public class IndexHistoryTest extends AbstractHealdanTestCase {
 		assertNull(page.nextCursor());
 		assertNull(page.readBackTo());
 
-		IndexEvent lost = page.items().get(0);
-		assertTrue(lost.failed());
-		assertEquals("Encrypted", lost.reason());
-		assertEquals("Former Clerk", lost.who());
-		assertEquals(876543L, lost.docId());
-		assertNull(lost.docNumber());
-		assertEquals("lost.txt", lost.fileName());
-		assertNull(lost.matter());
+		IndexEvent former = page.items().get(0);
+		assertTrue(former.failed());
+		assertEquals("Encrypted", former.reason());
+		assertEquals("Former Clerk", former.who());
+		assertEquals(other.getId(), former.docId());
 
 		IndexEvent failed = page.items().get(1);
 		assertEquals("The file can't be read", failed.reason());
@@ -176,12 +176,14 @@ public class IndexHistoryTest extends AbstractHealdanTestCase {
 		assertEquals("letter.txt", indexed.fileName());
 		assertEquals(new FailedDocument.Matter(matter.getId(), "1001.1", "Charter Dispute"), indexed.matter());
 
-		// Paged by the cursor
+		// Paged by the cursor: the row left out still counts against a page's limit, so this one holds one
 		IndexHistoryPage first = history.page(IndexHistoryCursor.START, 2, boss);
-		assertEquals(List.of(1006L, 1002L), ids(first.items()));
-		assertEquals(new IndexHistoryCursor(1002), first.nextCursor());
-		assertEquals(t0.plusSeconds(1), first.readBackTo());
-		assertEquals(List.of(1001L), ids(history.page(first.nextCursor(), 2, boss).items()));
+		assertEquals(List.of(1006L), ids(first.items()));
+		assertEquals(new IndexHistoryCursor(1006), first.nextCursor());
+		assertEquals(t0.plusSeconds(5), first.readBackTo());
+		IndexHistoryPage second = history.page(first.nextCursor(), 2, boss);
+		assertEquals(List.of(1002L, 1001L), ids(second.items()));
+		assertEquals(List.of(1006L, 1002L, 1001L), ids(all(2)));
 	}
 
 	// With more rows than a window, a page looks through a window and may be short, even empty, with a cursor

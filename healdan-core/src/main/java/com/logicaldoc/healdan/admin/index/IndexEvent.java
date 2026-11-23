@@ -17,8 +17,8 @@ import java.time.Instant;
  * @param who who it was done by: the person's name as it is now, or as the event kept it when no account of the
  *        tenant has its user id; null when it names nobody
  * @param docId the document's id
- * @param docNumber its doc #; null if it has none, or the document is no longer kept
- * @param fileName its file name: as it is now, or as the event kept it when the document is no longer kept
+ * @param docNumber its doc #; null if it has none
+ * @param fileName its file name, as it is now
  * @param matter the matter stamped on it; null if none is, or the stamps name no live matter
  */
 public record IndexEvent(long id, Instant when, boolean failed, String reason, String who, long docId,

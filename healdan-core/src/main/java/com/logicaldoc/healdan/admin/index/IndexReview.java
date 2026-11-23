@@ -3,7 +3,7 @@
 
 package com.logicaldoc.healdan.admin.index;
 
-import java.time.Instant;
+import java.io.UncheckedIOException;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -18,10 +18,15 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 import com.logicaldoc.core.PersistenceException;
+import com.logicaldoc.core.document.Document;
+import com.logicaldoc.core.document.DocumentDAO;
+import com.logicaldoc.core.document.DocumentEvent;
 import com.logicaldoc.core.document.DocumentHistory;
 import com.logicaldoc.core.document.DocumentManager;
+import com.logicaldoc.core.document.IndexingStatus;
 import com.logicaldoc.core.parser.ParsingException;
 import com.logicaldoc.core.security.Session;
+import com.logicaldoc.core.security.TenantDAO;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.healdan.HealdanRuleException;
 import com.logicaldoc.healdan.admin.AdminArea;
@@ -30,12 +35,13 @@ import com.logicaldoc.healdan.admin.AdminEvent.Change;
 import com.logicaldoc.healdan.admin.AdminEvents;
 import com.logicaldoc.healdan.rules.FilingRules;
 import com.logicaldoc.healdan.util.CacheEvictor;
+import com.logicaldoc.healdan.util.StorageUnreachableException;
 import com.logicaldoc.util.spring.Context;
 
 /**
  * Try Again and Skip, for a document that couldn't be indexed (Admin app spec section 8.9; ruling P6-R11). Try Again
- * indexes the document now, on the caller's thread, through CE's own {@code DocumentManager.index}, which writes its
- * {@code event.indexed} or {@code event.indexed.error} row as the actor; Skip sets the document to Skip, so CE's
+ * indexes the document now, on the caller's thread, through CE's own {@code DocumentManager.index}, with its
+ * {@code event.indexed} or {@code event.indexed.error} row as the actor's; Skip sets the document to Skip, so CE's
  * Indexer leaves it. Each takes only a live document of the actor's tenant that couldn't be indexed, each moves
  * {@link IndexCounts#changes()} on, and each is recorded straight after it (area {@code SEARCH_INDEX}, aimed at the
  * document by its id, named by its doc # and file name): {@value #RETRIED}, with the outcome, and {@value #SKIPPED}.
@@ -76,6 +82,15 @@ public class IndexReview {
 
 	private final JdbcTemplate jdbc;
 
+	/** Indexes a document through CE's index, which then writes no event of its own; a seam for tests */
+	volatile Indexing indexing = docId -> DocumentManager.get().index(docId, null, null);
+
+	/** Indexes a document */
+	@FunctionalInterface
+	interface Indexing {
+		void index(long docId) throws PersistenceException, ParsingException;
+	}
+
 	@Autowired
 	public IndexReview(IndexCounts counts, AdminEvents events, CacheEvictor evictor, DataSource dataSource) {
 		this.counts = counts;
@@ -94,13 +109,11 @@ public class IndexReview {
 	/**
 	 * What Try Again did.
 	 *
-	 * @param document the document as it was, failed, when it was tried
 	 * @param outcome {@link #INDEXED} or {@link #FAILED}
 	 * @param reason when it failed, why, as the new error's event says; null when it was indexed, or the error says
 	 *        nothing
-	 * @param when when it failed, as the new error's event says; null when it was indexed
 	 */
-	public record Tried(FailedDocument document, String outcome, String reason, Instant when) {
+	public record Tried(String outcome, String reason) {
 
 		/** @return whether the document is in the index now */
 		public boolean indexed() {
@@ -126,39 +139,74 @@ public class IndexReview {
 	}
 
 	/**
-	 * Try Again: indexes a document that couldn't be indexed, now, on the caller's thread. CE writes the event as the
-	 * actor, with the session when there is one; the outcome is answered either way.
+	 * Try Again: indexes a document that couldn't be indexed, now, on the caller's thread, through CE's own
+	 * {@code DocumentManager.index}, and writes the event CE's Indexer writes, {@code event.indexed} or
+	 * {@code event.indexed.error} with the error's message, as the actor, with the session when there is one; the
+	 * outcome is answered either way. A file whose storage can't be reached is neither (ruling P6-R23): nothing is
+	 * written, counted or recorded, and the outage is thrown, which the API answers {@code 503}.
+	 * <p>
+	 * CE's index reads the file inside itself, and when it's given an event it writes the error's row before it
+	 * throws, so it's given none, and the row is written here once the failure is known to be the document's own.
 	 *
 	 * @param docId the document's id
 	 * @param actor who asks
 	 * @param session the actor's session; null for none
 	 * @return what it did
 	 * @throws PersistenceException {@link #ONLY_ADMINS} for anyone but an administrator, before anything else, and
-	 *         {@link #NOT_FAILED} for a document that isn't a live one of the actor's tenant that couldn't be indexed
+	 *         {@link #NOT_FAILED} for a document that isn't a live one of the actor's tenant that couldn't be indexed;
+	 *         any other failure of the index's, such as the document's row not being read, as it is
+	 * @throws UncheckedIOException with the {@link StorageUnreachableException} when the file's storage can't be
+	 *         reached
 	 */
 	public Tried retry(long docId, User actor, Session session) throws PersistenceException {
 		requireAdmin(actor);
 		FailedDocument failed = requireFailed(docId, actor);
 
-		DocumentHistory history = new DocumentHistory();
-		history.setUser(actor);
-		if (session != null)
-			history.setSession(session);
 		Tried tried;
 		try {
-			DocumentManager.get().index(docId, null, history);
-			tried = new Tried(failed, INDEXED, null, null);
-		} catch (ParsingException | PersistenceException e) {
-			// CE has written the error's event, which says why; its message can name the file, so it isn't logged
+			indexing.index(docId);
+			event(docId, DocumentEvent.INDEXED, null, actor, session);
+			tried = new Tried(INDEXED, null);
+		} catch (ParsingException e) {
+			StorageUnreachableException outage = StorageUnreachableException.in(e);
+			if (outage != null)
+				throw new UncheckedIOException(outage);
+			// The document's own failure, the index's included, which CE wraps so. Its message can name the file, so
+			// it isn't logged
 			log.debug("Document {} couldn't be indexed again: {}", docId, e.getClass().getName());
+			event(docId, DocumentEvent.INDEXED_ERROR, e.getMessage(), actor, session);
 			FailedDocument now = counts.failure(docId, actor.getTenantId());
-			tried = now != null ? new Tried(failed, FAILED, now.reason(), now.when())
-					: new Tried(failed, FAILED, e.getMessage(), null);
+			tried = new Tried(FAILED, now != null ? now.reason() : e.getMessage());
 		}
 		counts.moved();
 		events.recordAfter(new AdminEvent(AdminArea.SEARCH_INDEX, RETRIED, TARGET, docId, name(failed),
 				Map.of("outcome", new Change(null, tried.outcome()))), actor);
 		return tried;
+	}
+
+	/**
+	 * Writes an index event of the document's, as CE's index writes it when it's given one: the error's with its
+	 * message as the comment, and Skip after it where the tenant's {@code index.skiponerror} says so
+	 */
+	private static void event(long docId, DocumentEvent which, String comment, User actor, Session session)
+			throws PersistenceException {
+		DocumentDAO dao = DocumentDAO.get();
+		Document document = dao.findById(docId);
+		if (document == null)
+			return;
+		DocumentHistory history = new DocumentHistory();
+		history.setUser(actor);
+		if (session != null)
+			history.setSession(session);
+		history.setEvent(which);
+		history.setComment(comment);
+		history.setDocument(document);
+		dao.saveDocumentHistory(document, history);
+		if (which == DocumentEvent.INDEXED_ERROR && Context.get().getConfig().getTenantBoolean(
+				Context.get(TenantDAO.class).getTenantName(document.getTenantId()), "index.skiponerror", false)) {
+			document.setIndexingStatus(IndexingStatus.SKIP);
+			dao.store(document);
+		}
 	}
 
 	/**
@@ -192,15 +240,14 @@ public class IndexReview {
 	}
 
 	/**
-	 * @return how the record names a document: its doc # and file name, as the Audit Trail names a document's rows,
-	 *         such as {@code # 10388, letter.pdf}
+	 * @return how the record names a document: its doc # and file name, such as {@code # 10412 Witness Statement.pdf}
 	 */
 	static String name(FailedDocument document) {
 		String number = document.docNumber();
 		boolean numbered = number != null && !number.isBlank();
 		if (document.name() == null || document.name().isBlank())
 			return numbered ? "# " + number.strip() : null;
-		return numbered ? "# " + number.strip() + ", " + document.name() : document.name();
+		return numbered ? "# " + number.strip() + " " + document.name() : document.name();
 	}
 
 	/*
