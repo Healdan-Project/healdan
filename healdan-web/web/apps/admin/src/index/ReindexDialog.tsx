@@ -15,7 +15,8 @@ import { useMatter, useWorkspaceTree } from '../workspace/queries'
 import { findNode } from '../workspace/tree'
 import formStyles from '../forms/Form.module.css'
 import { DocumentsChoice, EverythingChoice, FolderChoice, MatterFinder, StoreChoice } from './ReindexChoices'
-import { choiceOfRow, reindexStarted, useMatterChoices, useReindexPreview, type MatterChoice } from './reindexQueries'
+import { reindexChanged } from './queries'
+import { choiceOfRow, useMatterChoices, useReindexPreview, type MatterChoice } from './reindexQueries'
 import { estimateLine, everythingLine, MOST_DOC_NUMBERS, readDocNumbers } from './reindexText'
 import styles from './Reindex.module.css'
 
@@ -28,8 +29,8 @@ export interface ReindexDialogProps {
   id?: number
   /** For Folder, the matter whose workspace the folder is in, by its id: the address's `matter` */
   matter?: number
-  /** The reindex as the server started it, just before the dialog closes; what to do with it is the caller's */
-  onStarted: (job: A['ReindexJob']) => void
+  /** The reindex as the server started it, once it's among the Search Index's, just before the dialog closes */
+  onStarted?: (job: A['ReindexJob']) => void
   /** The dialog closes: Cancel, Esc, a click outside, or once started. The caller stops drawing it. */
   onClose: () => void
 }
@@ -45,7 +46,7 @@ type Picked<T> = T | undefined
  * about how long they take, asked again once a change settles, its last answer kept meanwhile; the button states the
  * count, and is greyed out while there's nothing to reindex or the preview is on its way. What the server would refuse is
  * said before it (spec 7.2). While the start is on its way the dialog holds: its choices, Cancel, Esc and a click outside
- * do nothing. Once started, the reindex goes to `onStarted`, every list of reindexes is asked for again, and it closes.
+ * do nothing. Once started, the reindex joins those waiting or running (reindexChanged), goes to `onStarted`, and the dialog closes.
  */
 export function ReindexDialog({ kind: opening, id, matter: matterParam, onStarted, onClose }: ReindexDialogProps) {
   const api = useApi()
@@ -124,8 +125,9 @@ export function ReindexDialog({ kind: opening, id, matter: matterParam, onStarte
       // Empty the index first is sent only from Everything, and only when ticked
       const body: A['ReindexScope'] = scope.kind === 'everything' && emptyFirst ? { ...scope, emptyFirst: true } : scope
       const job = await api.send<A['ReindexJob']>('POST', '/v1/admin/reindex', body)
-      reindexStarted(queryClient)
-      onStarted(job)
+      // In the Search Index's reindexes at once, so its card shows, and every list of them asked again
+      await reindexChanged(queryClient, job)
+      onStarted?.(job)
       // Not through the dialog's own close, which is held while busy
       onClose()
     } catch (error) {

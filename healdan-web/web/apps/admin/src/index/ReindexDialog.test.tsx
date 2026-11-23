@@ -11,10 +11,10 @@ import type { ReindexKind } from '../addresses'
 import { TYPING_DELAY_MS } from '../pickers/typing'
 import { problemLookup } from '../strings'
 import { expectNoAxeViolations } from '../test/axe'
-import { fakeApi, problem, reindexJobOf, reindexRoutes, workspaceRoutes, type Routes } from '../test/fakeApi'
+import { fakeApi, problem, reindexJobOf, reindexRoutes, searchIndexRoutes, workspaceRoutes, type Routes } from '../test/fakeApi'
 import { renderApp } from '../test/renderApp'
 import { slowAnswer } from '../test/slowAnswer'
-import { reindexKeys } from './reindexQueries'
+import { indexKeys } from './queries'
 import { ReindexDialog } from './ReindexDialog'
 
 type A = adminComponents['schemas']
@@ -31,8 +31,8 @@ const pause = () => act(() => new Promise((resolve) => setTimeout(resolve, TYPIN
 function renderDialog(open: { kind: ReindexKind; id?: number; matter?: number }, routes: Routes = {}) {
   const api = fakeApi({ ...reindexRoutes(), ...routes })
   const queryClient = createQueryClient({ retry: false })
-  // A list of reindexes the Search Index has read, which a start makes stale
-  queryClient.setQueryData([...reindexKeys.jobs, { active: true }], { items: [], offset: 0, limit: 100, total: 0 })
+  // The reindexes waiting or running, as the Search Index has read them, which a start joins
+  queryClient.setQueryData<A['ReindexJob'][]>(indexKeys.active, [])
   const onClose = vi.fn()
   const onStarted = vi.fn<(job: A['ReindexJob']) => void>()
   const view = render(
@@ -99,7 +99,7 @@ describe('Reindex', () => {
     await expectNoAxeViolations(view.baseElement)
   })
 
-  it('starts the reindex, hands it on, asks for the lists of reindexes again and closes', async () => {
+  it('starts the reindex, puts it among those waiting or running, asks for the lists of reindexes again, hands it on and closes', async () => {
     let sent: unknown
     const { onStarted, onClose, queryClient } = renderDialog(
       { kind: 'matter', id: 11 },
@@ -117,7 +117,8 @@ describe('Reindex', () => {
     expect(sent).toEqual({ kind: 'matter', targetId: 11 } satisfies A['ReindexScope'])
     expect(onStarted).toHaveBeenCalledWith(reindexJobOf())
     expect(onStarted.mock.invocationCallOrder[0]).toBeLessThan(onClose.mock.invocationCallOrder[0]!)
-    expect(queryClient.getQueryState([...reindexKeys.jobs, { active: true }])?.isInvalidated).toBe(true)
+    expect(queryClient.getQueryData(indexKeys.active)).toEqual([reindexJobOf()])
+    expect(queryClient.getQueryState(indexKeys.active)?.isInvalidated).toBe(true)
   })
 
   it('opens with the matter the address names chosen, shown first though it is no recent one', async () => {
@@ -454,6 +455,7 @@ describe('Reindex on a matter and on its folders', () => {
     await userEvent.click(link)
     // In the app, by the router
     await waitFor(() => expect(router.state.location.pathname).toBe('/search-index'))
+    // As the address writes them, which the Search Index's route reads as numbers
     expect(router.state.location.search).toEqual({ reindex: 'matter', id: '11' })
   })
 
@@ -484,5 +486,76 @@ describe('Reindex on a matter and on its folders', () => {
     await userEvent.pointer({ keys: '[MouseRight]', target: within(tree).getByRole('row', { name: 'Pleadings' }) })
     await screen.findByRole('menu')
     expect(screen.queryByRole('menuitem', { name: 'Reindex' })).toBeNull()
+  })
+})
+
+describe('Reindex on the Search Index page', () => {
+  /** The page at an address, its reindexes and counts from 36a's fake, the dialog's reads and start from its own */
+  async function openPage(path: string) {
+    const fake = searchIndexRoutes({ jobs: [] })
+    const rendered = await renderApp(path, {
+      ...fake.routes,
+      ...reindexRoutes(),
+      // The server keeps the reindex it starts, so the page's next read of those waiting or running has it
+      'POST /v1/admin/reindex': ({ body }: Sent) => {
+        const scope = body as A['ReindexScope']
+        const job = reindexJobOf({ kind: scope.kind, targetId: scope.targetId ?? null })
+        fake.setJob(job)
+        return job
+      },
+    })
+    // Behind the dialog when the address opens it, so hidden from a screen reader then
+    await screen.findByRole('heading', { level: 1, name: 'Search Index', hidden: true })
+    return rendered
+  }
+
+  it('opens the dialog the address names, with what it chose, and Esc and Cancel take it out of the address in place', async () => {
+    const { router, view } = await openPage('/search-index?tab=waiting&reindex=matter&id=11')
+    await screen.findByRole('dialog', { name: 'Reindex' })
+    expect(pressed()).toEqual(['Matter'])
+    await waitFor(() => expect(selected()).toEqual(['1001.1 – Charter Dispute – MV Northern StarSaltmarsh Shipping Ltd']))
+    await expectNoAxeViolations(view.baseElement)
+    const length = router.history.length
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    // The tab stays; the dialog's parameters go, in place, so Back doesn't open it again
+    expect(router.state.location.search).toEqual({ tab: 'waiting' })
+    expect(router.history.length).toBe(length)
+
+    // Reindex… opens it on Matter, and Cancel closes it
+    await userEvent.click(screen.getByRole('button', { name: /^Reindex/ }))
+    await screen.findByRole('dialog', { name: 'Reindex' })
+    expect(router.state.location.search).toEqual({ tab: 'waiting', reindex: 'matter' })
+    await userEvent.click(within(dialog()).getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(router.state.location.search).toEqual({ tab: 'waiting' })
+  })
+
+  it('opens on a folder and its matter, as the Workspace Editor links to it, and Back closes it', async () => {
+    const { router } = await openPage('/search-index')
+    await act(() => router.navigate({ href: '/search-index?reindex=folder&id=114&matter=11' }))
+    await screen.findByRole('dialog', { name: 'Reindex' })
+    expect(pressed()).toEqual(['Folder'])
+    await waitFor(() => expect(selected()).toEqual(['Pleadings']))
+    await waitFor(() => expect(start().textContent).toBe('Reindex 38 Documents'))
+    await act(async () => router.history.back())
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(router.state.location.search).toEqual({})
+  })
+
+  it('closes once a reindex is started, which shows among the reindexes above the tabs at once', async () => {
+    const { api, router } = await openPage('/search-index?reindex=store&id=4')
+    await screen.findByRole('dialog', { name: 'Reindex' })
+    await waitFor(() => expect(start().textContent).toBe('Reindex 1,004 Documents'))
+    await waitFor(() => expect(isDisabled(start())).toBe(false))
+    const reads = api.callsTo('GET /v1/admin/reindex').length
+    await userEvent.click(start())
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(router.state.location.search).toEqual({})
+    expect(await screen.findByText('Waiting to Reindex Matter 1001.1 Charter Dispute – MV Northern Star')).toBeTruthy()
+    // Every list of reindexes is asked again, and the card stays, as the server has it
+    await waitFor(() => expect(api.callsTo('GET /v1/admin/reindex').length).toBeGreaterThan(reads))
+    await pause()
+    expect(screen.getByText('Waiting to Reindex Matter 1001.1 Charter Dispute – MV Northern Star')).toBeTruthy()
   })
 })

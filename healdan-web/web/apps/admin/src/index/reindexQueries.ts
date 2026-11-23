@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback } from 'react'
 import type { adminComponents } from '@healdan/api'
 import { useApi, useRecentMatters } from '@healdan/shell'
@@ -11,19 +11,11 @@ import { adminKey } from '../queries'
 
 type A = adminComponents['schemas']
 
-/** The reindexes, as the Search Index lists them, under the route's own segments; and the dialog's previews under them */
-export const reindexKeys = {
-  jobs: adminKey('/v1/admin/reindex'),
-  preview: ['admin', 'reindex', 'preview'] as const,
-}
-
 /**
- * A reindex was started: every list of reindexes is asked for again (the Search Index's running card and its History),
- * the dialog's previews left alone, as it closes.
+ * The dialog's previews, by the scope asked: apart from `['admin', 'reindex']`, the reindexes' own keys (indexKeys), so a
+ * start's re-read of every reindex never asks a preview again as the dialog closes
  */
-export function reindexStarted(queryClient: QueryClient) {
-  void queryClient.invalidateQueries({ queryKey: reindexKeys.jobs, predicate: (query) => query.queryKey[2] !== 'preview' })
-}
+export const previewKey = ['admin', 'reindex-preview'] as const
 
 export interface PreviewState {
   /** The last answer, for this choice; kept while the next is asked, so the count doesn't blink */
@@ -46,11 +38,11 @@ export function useReindexPreview(scope: A['ReindexScope'] | undefined): Preview
   const settled = useDebounced(asked)
   const sent = settled === '' ? undefined : (JSON.parse(settled) as A['ReindexScope'])
   const answer = useQuery({
-    queryKey: [...reindexKeys.preview, settled],
+    queryKey: [...previewKey, settled],
     queryFn: () => api.send<A['ReindexPreview']>('POST', '/v1/admin/reindex/preview', sent),
     enabled: sent !== undefined,
     placeholderData: (previous, previousQuery) => {
-      const before = previousQuery?.queryKey[3]
+      const before = previousQuery?.queryKey[2]
       return typeof before === 'string' && before !== '' && (JSON.parse(before) as A['ReindexScope']).kind === scope?.kind ? previous : undefined
     },
     // A preview is of that moment: another reindex may start, or documents be filed, meanwhile

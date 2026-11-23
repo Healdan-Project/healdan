@@ -14,6 +14,7 @@ import { Refusal } from '../forms/Refusal'
 import { FailedList } from '../index/FailedList'
 import { IndexHistory } from '../index/IndexHistory'
 import { indexChanged, indexerAnswered, indexKeys, isOutOfDate, runIndexer, useActiveReindexes, useReindexEnds, useSearchIndex } from '../index/queries'
+import { ReindexDialog } from '../index/ReindexDialog'
 import { ReindexJobs } from '../index/ReindexJobCard'
 import { WaitingList } from '../index/WaitingList'
 import { StaleNote } from '../people/StaleNote'
@@ -173,6 +174,18 @@ export function SearchIndexView({ search }: { search: SearchIndexSearch }) {
         <Figures index={data} />
       )}
       <ReindexJobs ends={ends} fallback={heading} />
+      {/* The Reindex dialog, open while the address says (P6-R18): Back closes it, and so do Cancel, Esc and a start, which
+          take its parameters out of the address in place, the reindex started showing among the cards */}
+      {search.reindex !== undefined && (
+        <ReindexDialog
+          // By what the address chose, so another address's choice opens afresh
+          key={`${search.reindex}-${search.id ?? ''}-${search.matter ?? ''}`}
+          kind={search.reindex}
+          id={search.id}
+          matter={search.matter}
+          onClose={() => void navigate({ to: routes.searchIndex, search: (prev) => ({ ...prev, reindex: undefined, id: undefined, matter: undefined }), replace: true })}
+        />
+      )}
       <Tabs
         label={t('admin.searchIndex.tabs')}
         selected={tab}
