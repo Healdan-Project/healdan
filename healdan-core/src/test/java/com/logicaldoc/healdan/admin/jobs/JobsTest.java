@@ -36,6 +36,7 @@ import com.logicaldoc.core.task.TaskTrigger;
 import com.logicaldoc.healdan.AbstractHealdanTestCase;
 import com.logicaldoc.healdan.admin.errors.CapturedError;
 import com.logicaldoc.healdan.admin.errors.ErrorStore;
+import com.logicaldoc.healdan.admin.index.ReindexWorker;
 import com.logicaldoc.healdan.email.EmailIndexWorker;
 import com.logicaldoc.healdan.preview.PreviewWorker;
 import com.logicaldoc.healdan.setting.HealdanSettings;
@@ -171,19 +172,20 @@ public class JobsTest extends AbstractHealdanTestCase {
 	public void testHealdanJobsComeFirstThenLogicalDocTasks() {
 		List<JobView> all = jobs.all();
 		List<String> names = all.stream().map(JobView::name).toList();
-		// healdan-storage's jobs come between them, when it is there
-		assertEquals(List.of(PreviewWorker.JOB, EmailIndexWorker.JOB, TrashStartup.JOB), names.subList(0, 3));
-		assertEquals(List.of("preview", "email-index", "trash-destroyer"), names.subList(0, 3));
-		assertEquals(List.of("Previews", "Email Index", "Trash Destroyer"),
-				all.subList(0, 3).stream().map(JobView::label).toList());
+		// healdan-storage's jobs come between the Trash's and the reindex's, when it is there
+		assertEquals(List.of(PreviewWorker.JOB, EmailIndexWorker.JOB, TrashStartup.JOB, ReindexWorker.JOB),
+				names.subList(0, 4));
+		assertEquals(List.of("preview", "email-index", "trash-destroyer", "reindex"), names.subList(0, 4));
+		assertEquals(List.of("Previews", "Email Index", "Trash Destroyer", "Reindex"),
+				all.subList(0, 4).stream().map(JobView::label).toList());
 		// In TaskManager's order, which is the plugin registry's
-		assertEquals(taskNames(), names.subList(3, names.size()));
+		assertEquals(taskNames(), names.subList(4, names.size()));
 		assertEquals(TASKS, Set.copyOf(taskNames()));
 		assertEquals(6, taskNames().size());
-		assertTrue(all.subList(3, all.size()).stream().allMatch(JobView::logicalDocTask));
-		assertFalse(all.subList(0, 3).stream().anyMatch(JobView::logicalDocTask));
+		assertTrue(all.subList(4, all.size()).stream().allMatch(JobView::logicalDocTask));
+		assertFalse(all.subList(0, 4).stream().anyMatch(JobView::logicalDocTask));
 		// Healdan's own run wherever healdan-core is
-		assertTrue(all.subList(0, 3).stream().allMatch(JobView::enabled));
+		assertTrue(all.subList(0, 4).stream().allMatch(JobView::enabled));
 	}
 
 	@Test

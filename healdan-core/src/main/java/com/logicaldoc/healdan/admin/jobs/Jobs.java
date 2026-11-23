@@ -79,7 +79,7 @@ public class Jobs {
 
 	/** The order Healdan's jobs come in */
 	static final List<String> ORDER = List.of("preview", "email-index", "trash-destroyer", "storage-mover",
-			"storage-retest", "storage-purge", "storage-alert", "storage-nightly-check");
+			"storage-retest", "storage-purge", "storage-alert", "storage-nightly-check", "reindex");
 
 	/**
 	 * What CE's {@code Task.run} logs at ERROR that isn't a failure of its own:

@@ -11,6 +11,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicLong;
 
 import javax.sql.DataSource;
 
@@ -79,6 +80,9 @@ public class IndexCounts {
 
 	private final NamedParameterJdbcTemplate jdbc;
 
+	/** What {@link #changes()} gives */
+	private final AtomicLong changes = new AtomicLong();
+
 	@Autowired
 	public IndexCounts(DataSource dataSource) {
 		this.jdbc = new NamedParameterJdbcTemplate(dataSource);
@@ -107,6 +111,21 @@ public class IndexCounts {
 	 * @param failed how many couldn't be indexed
 	 */
 	public record Counts(long indexed, long waiting, long failed) {
+	}
+
+	/**
+	 * @return a count that moves on when the counts may have changed in a way a person waits to see, as when a
+	 *         reindex job ends (ruling P6-R15)
+	 */
+	public long changes() {
+		return changes.get();
+	}
+
+	/**
+	 * The counts may have changed in a way a person waits to see: moves {@link #changes()} on. Never throws.
+	 */
+	public void moved() {
+		changes.incrementAndGet();
 	}
 
 	/**
