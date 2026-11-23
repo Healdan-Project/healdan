@@ -14,6 +14,8 @@ import { expectNoAxeViolations } from '../test/axe'
 import { fakeApi, problem, reindexJobOf, reindexRoutes, searchIndexRoutes, workspaceRoutes, type Routes } from '../test/fakeApi'
 import { renderApp } from '../test/renderApp'
 import { slowAnswer } from '../test/slowAnswer'
+import { jobKeys } from '../monitoring/jobQueries'
+import { adminKeys } from '../queries'
 import { indexKeys } from './queries'
 import { ReindexDialog } from './ReindexDialog'
 
@@ -50,8 +52,8 @@ function renderDialog(open: { kind: ReindexKind; id?: number; matter?: number },
 const dialog = () => screen.getByRole('dialog', { name: 'Reindex' })
 const choice = (name: string) => within(dialog()).getByRole('radio', { name })
 const pressed = () => within(within(dialog()).getByRole('radiogroup', { name: 'What to Reindex' })).getAllByRole('radio').filter((one) => one.getAttribute('aria-checked') === 'true').map((one) => one.textContent)
-/** The Reindex button, whatever its count says */
-const start = () => within(dialog()).getByRole('button', { name: /^Reindex/ })
+/** The Reindex button, whatever its count says, and with Empty the Index First ticked */
+const start = () => within(dialog()).getByRole('button', { name: /^(Empty the Index and )?Reindex/ })
 const isDisabled = (button: HTMLElement) => button.getAttribute('disabled') !== null
 const options = () => within(within(dialog()).getByRole('listbox')).getAllByRole('option')
 const option = (name: RegExp | string) => within(within(dialog()).getByRole('listbox')).getByRole('option', { name })
@@ -99,7 +101,7 @@ describe('Reindex', () => {
     await expectNoAxeViolations(view.baseElement)
   })
 
-  it('starts the reindex, puts it among those waiting or running, asks for the lists of reindexes again, hands it on and closes', async () => {
+  it('starts the reindex, puts it among those waiting or running, asks for the lists of reindexes, Background Jobs and the Dashboard again, hands it on and closes', async () => {
     let sent: unknown
     const { onStarted, onClose, queryClient } = renderDialog(
       { kind: 'matter', id: 11 },
@@ -110,10 +112,15 @@ describe('Reindex', () => {
         },
       },
     )
+    // Background Jobs' list and the Dashboard, as read before, which show the reindex job
+    queryClient.setQueryData(jobKeys.jobs, [])
+    queryClient.setQueryData(adminKeys.dashboard, {})
     await waitFor(() => expect(start().textContent).toBe('Reindex 412 Documents'))
     await waitFor(() => expect(isDisabled(start())).toBe(false))
     await userEvent.click(start())
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1))
+    expect(queryClient.getQueryState(jobKeys.jobs)?.isInvalidated).toBe(true)
+    expect(queryClient.getQueryState(adminKeys.dashboard)?.isInvalidated).toBe(true)
     expect(sent).toEqual({ kind: 'matter', targetId: 11 } satisfies A['ReindexScope'])
     expect(onStarted).toHaveBeenCalledWith(reindexJobOf())
     expect(onStarted.mock.invocationCallOrder[0]).toBeLessThan(onClose.mock.invocationCallOrder[0]!)
@@ -181,7 +188,7 @@ describe('Reindex', () => {
     expect(pressed()).toEqual(['Documents'])
     const field = within(dialog()).getByRole('textbox', { name: 'Doc #s' })
     await userEvent.click(field)
-    await userEvent.paste('10412, 10398 10388\n99999, abc #10412 10377')
+    await userEvent.paste('10412, 10398 10388.2\n99999, abc #10412 10377 10388')
     await pause()
     expect(previews(api)).toEqual([{ kind: 'documents', docNumbers: [10412, 10398, 10388, 99999, 10377] }])
     const rows = () => within(within(dialog()).getByRole('list', { name: 'Doc #s Given' })).getAllByRole('listitem').map((one) => one.textContent)
@@ -214,6 +221,10 @@ describe('Reindex', () => {
     expect(within(dialog()).getByText('Reindex at most 1,000 documents at a time.')).toBeTruthy()
     expect(previews(api)).toEqual([])
     expect(isDisabled(start())).toBe(true)
+    // The first 1,000 are drawn, and the rest counted
+    const rows = within(within(dialog()).getByRole('list', { name: 'Doc #s Given' })).getAllByRole('listitem')
+    expect(rows).toHaveLength(1001)
+    expect(rows.at(-1)?.textContent).toBe('… and 1 more')
   })
 
   it('Store is a plain list, each with its documents, and opens with the Store the address names', async () => {
@@ -233,7 +244,7 @@ describe('Reindex', () => {
     ])
   })
 
-  it('Everything says how many and how long, and offers Empty the index first, unticked, sent only when ticked', async () => {
+  it('Everything says how many and how long, and offers Empty the Index First, unticked, sent only when ticked', async () => {
     const bodies: unknown[] = []
     const { view, onClose } = renderDialog(
       { kind: 'everything' },
@@ -245,9 +256,9 @@ describe('Reindex', () => {
       },
     )
     await waitFor(() => expect(status()).toContain("All 1,284 documents, in about 37 minutes. Search keeps finding them while they're replaced."))
-    const tick = within(dialog()).getByRole('checkbox', { name: 'Empty the index first' }) as HTMLInputElement
+    const tick = within(dialog()).getByRole('checkbox', { name: 'Empty the Index First' }) as HTMLInputElement
     expect(tick.checked).toBe(false)
-    expect(within(dialog()).getByText('Empty the index first is for a damaged index. Search then misses documents until the run ends.')).toBeTruthy()
+    expect(within(dialog()).getByText('Empty the Index First is for a damaged index. Search then misses documents until the run ends.')).toBeTruthy()
     await waitFor(() => expect(isDisabled(start())).toBe(false))
     expect(start().textContent).toBe('Reindex Everything')
     await expectNoAxeViolations(view.baseElement)
@@ -260,14 +271,15 @@ describe('Reindex', () => {
     await expectNoAxeViolations(view.baseElement)
 
     await userEvent.click(tick)
-    // A change takes the refusal away
+    // A change takes the refusal away, and the button says what it now does
     expect(within(dialog()).queryByRole('alert')).toBeNull()
+    expect(start().textContent).toBe('Empty the Index and Reindex Everything')
     await userEvent.click(start())
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1))
     expect(bodies[1]).toEqual({ kind: 'everything', emptyFirst: true })
   })
 
-  it('offers Empty the index first under Everything only, and never sends it from another choice', async () => {
+  it('offers Empty the Index First under Everything only, and never sends it from another choice', async () => {
     let sent: unknown
     renderDialog(
       { kind: 'everything' },
@@ -278,10 +290,10 @@ describe('Reindex', () => {
         },
       },
     )
-    await userEvent.click(await within(dialog()).findByRole('checkbox', { name: 'Empty the index first' }))
+    await userEvent.click(await within(dialog()).findByRole('checkbox', { name: 'Empty the Index First' }))
     for (const name of ['Documents', 'Folder', 'Matter', 'Store']) {
       await userEvent.click(choice(name))
-      expect(within(dialog()).queryByRole('checkbox', { name: 'Empty the index first' })).toBeNull()
+      expect(within(dialog()).queryByRole('checkbox', { name: 'Empty the Index First' })).toBeNull()
     }
     await userEvent.click(await within(dialog()).findByRole('radio', { name: 'Client Work' }))
     await waitFor(() => expect(start().textContent).toBe('Reindex 1,004 Documents'))
@@ -329,7 +341,7 @@ describe('Reindex', () => {
     expect(onClose).not.toHaveBeenCalled()
   })
 
-  it("says a refusal of the doc #s' limit beside them, and Empty the index first's above the buttons, in the app's words", async () => {
+  it("says a refusal of the doc #s' limit beside them, and Empty the Index First's above the buttons, in the app's words", async () => {
     const validation = (field: string, code: string) => new ApiError(422, 'validation', 'Server words.', { code: 'validation', fields: [{ field, code, detail: 'Server words.' }] })
     const documents = renderDialog({ kind: 'documents' }, { 'POST /v1/admin/reindex': validation('docNumbers', 'too-many') })
     await userEvent.type(within(dialog()).getByRole('textbox', { name: 'Doc #s' }), '10412')
@@ -347,7 +359,7 @@ describe('Reindex', () => {
     expect(alert.textContent).not.toBe('')
     expect(alert.textContent).not.toContain('Server words.')
     expect(within(dialog()).queryByText("That name isn't allowed.")).toBeNull()
-    expect(within(dialog()).getByRole('checkbox', { name: 'Empty the index first' }).getAttribute('aria-invalid')).toBeNull()
+    expect(within(dialog()).getByRole('checkbox', { name: 'Empty the Index First' }).getAttribute('aria-invalid')).toBeNull()
   })
 
   it("says so when the preview can't find the target any more", async () => {
@@ -558,6 +570,21 @@ describe('Reindex on the Search Index page', () => {
     await userEvent.click(within(dialog()).getByRole('button', { name: 'Cancel' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
     expect(router.state.location.search).toEqual({ tab: 'waiting' })
+  })
+
+  it("gives the focus to the page's heading once a dialog a link opened closes, and back to Reindex… once one it opened does", async () => {
+    await openPage('/search-index?reindex=matter&id=11')
+    await screen.findByRole('dialog', { name: 'Reindex' })
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('heading', { level: 1, name: 'Search Index' })))
+
+    const reindex = screen.getByRole('button', { name: 'Reindex…' })
+    await userEvent.click(reindex)
+    await screen.findByRole('dialog', { name: 'Reindex' })
+    await userEvent.click(within(dialog()).getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    await waitFor(() => expect(document.activeElement).toBe(reindex))
   })
 
   it('opens on a folder and its matter, as the Workspace Editor links to it, and Back closes it', async () => {

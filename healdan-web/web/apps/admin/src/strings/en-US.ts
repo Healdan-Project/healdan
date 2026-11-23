@@ -1441,6 +1441,7 @@ export const adminEnUS = {
   'admin.searchIndex.job.startedBy': 'Started by {name}, {when}',
   'admin.searchIndex.job.documents': 'Documents',
   'admin.searchIndex.job.lessThanAMinute': 'less than a minute left',
+  'admin.searchIndex.sideways': '{name} (Scrolls Sideways)',
   'admin.searchIndex.outcome.skippedOf': '{skipped} ({unreachable})',
   'admin.searchIndex.job.searchWorks': 'search keeps working while it runs',
   'admin.searchIndex.job.stalled': "waiting for the index, which can't be written to since {when}: it tries again shortly",
@@ -1498,13 +1499,14 @@ export const adminEnUS = {
   'admin.reindex.notCounted': 'Not counted yet',
   'admin.reindex.noStores': 'There are no Stores yet.',
   // Everything's tick box, unticked, and its warning
-  'admin.reindex.emptyFirst': 'Empty the index first',
-  'admin.reindex.emptyFirstWarning': 'Empty the index first is for a damaged index. Search then misses documents until the run ends.',
+  'admin.reindex.emptyFirst': 'Empty the Index First',
+  'admin.reindex.emptyFirstWarning': 'Empty the Index First is for a damaged index. Search then misses documents until the run ends.',
   'admin.reindex.estimate.short': 'Under a minute for {documents}. Search keeps working meanwhile.',
   'admin.reindex.everything.short': "All {documents}, in under a minute. Search keeps finding them while they're replaced.",
   // The button, until the preview gives its count, and for Everything
   'admin.reindex.start': 'Reindex',
   'admin.reindex.startEverything': 'Reindex Everything',
+  'admin.reindex.startEmptied': 'Empty the Index and Reindex Everything',
   // Its openers: on a matter's page, and on a folder of a matter's Workspace
   'admin.matter.reindex': 'Reindex',
   'admin.workspace.reindex': 'Reindex',
@@ -1632,6 +1634,7 @@ export const adminPlurals = {
     other: "All {documents}, in about {n} hours. Search keeps finding them while they're replaced.",
   },
   // What the preview leaves out of a folder, matter, Store or everything
+  'admin.reindex.moreDocNumbers': { one: '… and {n} more', other: '… and {n} more' },
   'admin.reindex.leftOut': {
     one: "{n} more is left out: a shortcut, or a document set to Skip, archived or being changed.",
     other: '{n} more are left out: shortcuts, and documents set to Skip, archived or being changed.',

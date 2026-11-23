@@ -176,6 +176,12 @@
   overflow-x: auto;
 }
 
+/* A Tab stop while it scrolls sideways (SidewaysBox), the outline inside it, as the box is as wide as the page */
+.tableBox:focus-visible {
+  outline: var(--hd-focus-outline);
+  outline-offset: calc(var(--hd-focus-offset) * -1);
+}
+
 .table {
   width: 100%;
   border-collapse: collapse;

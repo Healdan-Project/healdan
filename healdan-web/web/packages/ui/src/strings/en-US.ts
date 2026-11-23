@@ -184,8 +184,8 @@ export const enUS = {
   'fields.disallowed': "Your administrator doesn't allow that kind of file.",
   'fields.empty': 'The file is empty.',
   'fields.class-mismatch': "That Subclass doesn't belong to the Class.",
-  // More documents than a reindex takes at a time, the server's own limit
-  'fields.too-many': 'Reindex at most 1,000 documents at a time.',
+  // More than a route takes at a time; a screen that knows the limit says it in its own words (the reindex's, reindex.tooMany)
+  'fields.too-many': "That's more than can be taken at once.",
   'doc.heading': 'Document # {n}',
   'doc.actions': 'Document Actions',
   'doc.notFound': 'No document # {n} that you can see.',

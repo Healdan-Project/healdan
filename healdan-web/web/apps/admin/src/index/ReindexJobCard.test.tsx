@@ -119,13 +119,16 @@ describe('Cancel', () => {
   })
 
   it("cancels a waiting reindex at once: its card says it was cancelled until it's closed, and Close's focus goes to the next card", async () => {
-    await open()
+    const { api } = await open()
     const waiting = await screen.findByRole('region', { name: 'Waiting to Reindex Store Client Work' })
     await userEvent.click(within(waiting).getByRole('button', { name: /^Cancel/ }))
     const question = await screen.findByRole('alertdialog', { name: 'Cancel the Reindex of Store Client Work?' })
     expect(within(question).getByText("It hasn't started, so nothing in the index changes.")).toBeTruthy()
+    const dashboard = api.callsTo('GET /v1/admin/dashboard').length
     await userEvent.click(within(question).getByRole('button', { name: 'Cancel Reindex' }))
     const ended = await screen.findByRole('region', { name: 'Cancelled Reindexing Store Client Work' })
+    // The Dashboard's answer, which the left pane's counts are, is asked for again, as it shows the reindex job
+    await waitFor(() => expect(api.callsTo('GET /v1/admin/dashboard').length).toBeGreaterThan(dashboard))
     expect(within(ended).getByText('Cancelled before it started, so nothing in the index changed.')).toBeTruthy()
     // It keeps its place, after the running one
     expect(card('Reindexing Matter 1001.1 Charter Dispute').compareDocumentPosition(ended) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()

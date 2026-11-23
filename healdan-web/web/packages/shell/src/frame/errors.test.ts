@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from 'vitest'
 import { ApiError } from '@healdan/api'
-import { messageFor } from './errors'
+import { fieldErrors, messageFor } from './errors'
 
 // The shared catalogue's messages, for every code the User app's contract lists, are the User app's errors.test.ts.
 describe("messageFor with an app's own catalogue", () => {
@@ -31,5 +31,12 @@ describe("messageFor with an app's own catalogue", () => {
     const unknown = (key: string) => (key === 'problems.unknown' ? 'Not that.' : undefined)
     expect(messageFor(new ApiError(500, 'no-such-code', 'x', {}), unknown)).toBe('Not that.')
     expect(messageFor(undefined, unknown)).toBe('Not that.')
+  })
+})
+
+describe('fieldErrors', () => {
+  it("says a field's too-many in general words, which fit any route, never one screen's limit", () => {
+    const refusal = new ApiError(422, 'validation', 'x', { code: 'validation', fields: [{ field: 'items', code: 'too-many' }] })
+    expect(fieldErrors(refusal).get('items')).toBe("That's more than can be taken at once.")
   })
 })

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from '@tanstack/react-router'
+import { useNavigate, useRouter } from '@tanstack/react-router'
 import { useEffect, useId, useRef, useState } from 'react'
 import type { adminComponents } from '@healdan/api'
 import { ErrorPanel, useApi } from '@healdan/shell'
@@ -91,6 +91,11 @@ export function SearchIndexView({ search }: { search: SearchIndexSearch }) {
   const api = useApi()
   const queryClient = useQueryClient()
   const navigate = useNavigate({ from: routes.searchIndex })
+  const router = useRouter()
+  // Whether the open dialog was opened by this page's Reindex…, a step of its own, so closing it steps back rather than
+  // leave a second Search Index behind; one an address opened (a link, Back, Forward) closes in place. It's forgotten once
+  // the dialog has closed, by any way.
+  const openedHere = useRef(false)
   const refusalId = useId()
   const heading = useRef<HTMLHeadingElement>(null)
   const active = useActiveReindexes()
@@ -148,6 +153,22 @@ export function SearchIndexView({ search }: { search: SearchIndexSearch }) {
   }, [busy, refusal])
   useFocusWhenGone(refusal !== null && !busy, heading)
 
+  // The dialog closing gives the focus back to what opened it, Reindex…; one a link opened, from a matter's page or the
+  // Workspace Editor, had nothing on this page to give it back to, so the focus goes to the page's heading: once React
+  // Aria has given it back where it could, a frame later, and only if it's on nothing
+  const dialogOpen = search.reindex !== undefined
+  const wasOpen = useRef(dialogOpen)
+  useEffect(() => {
+    const closed = wasOpen.current && !dialogOpen
+    wasOpen.current = dialogOpen
+    if (!closed) return
+    openedHere.current = false
+    const frame = requestAnimationFrame(() => {
+      if (focusLost()) heading.current?.focus()
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [dialogOpen])
+
   return (
     <div className={styles.view}>
       <div className={styles.head}>
@@ -161,7 +182,13 @@ export function SearchIndexView({ search }: { search: SearchIndexSearch }) {
               {t('admin.searchIndex.run')}
             </span>
           </Button>
-          <Button variant="default" onPress={() => void navigate({ to: routes.searchIndex, search: (prev) => ({ ...prev, reindex: 'matter' }) })}>
+          <Button
+            variant="default"
+            onPress={() => {
+              openedHere.current = true
+              void navigate({ to: routes.searchIndex, search: (prev) => ({ ...prev, reindex: 'matter' }) })
+            }}
+          >
             <span className={styles.withIcon}>
               <Icon name="refresh" />
               {t('admin.searchIndex.reindex')}
@@ -187,7 +214,8 @@ export function SearchIndexView({ search }: { search: SearchIndexSearch }) {
       )}
       <ReindexJobs ends={ends} fallback={heading} />
       {/* The Reindex dialog, open while the address says (P6-R18): Back closes it, and so do Cancel, Esc and a start, which
-          take its parameters out of the address in place, the reindex started showing among the cards */}
+          step back when Reindex… opened it, and otherwise take its parameters out of the address in place, the reindex
+          started showing among the cards */}
       {search.reindex !== undefined && (
         <ReindexDialog
           // By what the address chose, so another address's choice opens afresh
@@ -195,7 +223,12 @@ export function SearchIndexView({ search }: { search: SearchIndexSearch }) {
           kind={search.reindex}
           id={search.id}
           matter={search.matter}
-          onClose={() => void navigate({ to: routes.searchIndex, search: (prev) => ({ ...prev, reindex: undefined, id: undefined, matter: undefined }), replace: true })}
+          onClose={() => {
+            if (openedHere.current) {
+              openedHere.current = false
+              router.history.back()
+            } else void navigate({ to: routes.searchIndex, search: (prev) => ({ ...prev, reindex: undefined, id: undefined, matter: undefined }), replace: true })
+          }}
         />
       )}
       <Tabs

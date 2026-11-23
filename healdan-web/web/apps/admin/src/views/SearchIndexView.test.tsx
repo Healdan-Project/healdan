@@ -106,6 +106,18 @@ describe('The Search Index', () => {
     await waitFor(() => expect(router.state.location.search).toEqual({ tab: 'waiting' }))
   })
 
+  it('closes the dialog Reindex… opened by stepping back, so Back then leaves no second Search Index behind', async () => {
+    const { router } = await openSearchIndex()
+    await act(() => router.navigate({ href: '/search-index?tab=waiting' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Reindex…' }))
+    await screen.findByRole('dialog', { name: 'Reindex' })
+    await userEvent.click(within(screen.getByRole('dialog', { name: 'Reindex' })).getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(router.state.location.search).toEqual({ tab: 'waiting' })
+    act(() => router.history.back())
+    await waitFor(() => expect(router.state.location.search).toEqual({}))
+  })
+
   it('says why a first read of the heading failed, with Try Again, and still shows the rest', async () => {
     let failing = true
     const fake = searchIndexRoutes()

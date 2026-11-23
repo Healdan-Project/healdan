@@ -3,7 +3,7 @@
 
 import { useQueryClient } from '@tanstack/react-query'
 import { useId, useState } from 'react'
-import type { adminComponents } from '@healdan/api'
+import { ApiError, type adminComponents } from '@healdan/api'
 import { fieldErrors, useApi } from '@healdan/shell'
 import { Button, Dialog, ToggleButtons } from '@healdan/ui'
 import type { ReindexKind } from '../addresses'
@@ -36,6 +36,13 @@ export interface ReindexDialogProps {
 }
 
 const KINDS: ReindexKind[] = ['documents', 'folder', 'matter', 'store', 'everything']
+
+/** Whether the start was refused for more doc #s than a reindex takes (`422`, `too-many` on `docNumbers`) */
+function refusedAsTooMany(failure: unknown): boolean {
+  if (!(failure instanceof ApiError) || failure.code !== 'validation') return false
+  const fields = (failure.body as { fields?: unknown } | null)?.fields
+  return Array.isArray(fields) && fields.some((one: { field?: unknown; code?: unknown } | null) => one?.field === 'docNumbers' && one.code === 'too-many')
+}
 
 /** Chosen here, or not yet: undefined while the dialog still takes what the address chose */
 type Picked<T> = T | undefined
@@ -103,12 +110,12 @@ export function ReindexDialog({ kind: opening, id, matter: matterParam, onStarte
   const { preview, current, failure: previewFailure } = useReindexPreview(scope)
 
   const fields = fieldErrors(failure)
-  // The doc #s the server refused are said beside them; anything else, Empty the index first's refusal too, above the
+  // The doc #s the server refused are said beside them; anything else, Empty the Index First's refusal too, above the
   // buttons, as no field's own words fit it
   const fieldShown = kind === 'documents' && fields.has('docNumbers')
   const refusal = preview?.refusal ?? null
   const ready = scope !== undefined && current && preview !== undefined && preview.count > 0 && refusal === null
-  const label = kind === 'everything' ? t('admin.reindex.startEverything') : preview !== undefined && preview.count > 0 ? plural('admin.reindex.startCount', preview.count) : t('admin.reindex.start')
+  const label = kind === 'everything' ? t(emptyFirst ? 'admin.reindex.startEmptied' : 'admin.reindex.startEverything') : preview !== undefined && preview.count > 0 ? plural('admin.reindex.startCount', preview.count) : t('admin.reindex.start')
   const estimate = preview !== undefined && preview.estimateSeconds !== null ? (kind === 'everything' ? everythingLine : estimateLine)(preview.count, preview.estimateSeconds) : undefined
   const matches = new Map((preview?.documents ?? []).map((match) => [match.docNumber, match]))
 
@@ -122,7 +129,7 @@ export function ReindexDialog({ kind: opening, id, matter: matterParam, onStarte
     setBusy(true)
     setFailure(undefined)
     try {
-      // Empty the index first is sent only from Everything, and only when ticked
+      // Empty the Index First is sent only from Everything, and only when ticked
       const body: A['ReindexScope'] = scope.kind === 'everything' && emptyFirst ? { ...scope, emptyFirst: true } : scope
       const job = await api.send<A['ReindexJob']>('POST', '/v1/admin/reindex', body)
       // In the Search Index's reindexes at once, so its card shows, and every list of them asked again
@@ -204,8 +211,8 @@ export function ReindexDialog({ kind: opening, id, matter: matterParam, onStarte
                 }}
                 typed={typed}
                 matches={matches}
-                // The server's own words for the limit, which it's checked against here first
-                error={tooMany ? t('fields.too-many') : fields.get('docNumbers')}
+                // The limit in the reindex's own words, which it's checked against here first, as the server does
+                error={tooMany || refusedAsTooMany(failure) ? t('reindex.tooMany') : fields.get('docNumbers')}
               />
             )}
             {kind === 'store' && (
