@@ -478,21 +478,27 @@ for (const scheme of ['light', 'dark'] as const) {
     })
 
     // Phase 6's screens (admin spec 8.9 and 13): the Search Index on each of its tabs; Run Indexer Now greyed out under the
-    // focus, and a reindex's card while it runs with its Cancel question, both drawn from answers this test gives the page
-    // itself (the stack's own Indexer is left to its 5 seconds, and a reindex of the stack's runs too fast to be seen
-    // running); the Reindex dialog on each of its five choices, cancelled; and the User app's Reindex question, cancelled.
-    // It only reads: no request it makes may change anything, and only the dialog's and the question's counts (the
-    // preview) are sent as POSTs
+    // focus, the heading asked again every 5 seconds while the Indexer runs, a reindex's card while it runs, with its Cancel
+    // question, and while the server's worker fails at it, and Try Again refused while the index can't be written, its row
+    // kept, all drawn from answers this test gives the page itself (the stack's own Indexer is left to its 5 seconds, a
+    // reindex of the stack's runs too fast to be seen running, and no document of the stack's is tried again); the Reindex
+    // dialog on each of its five choices, cancelled; and the User app's Reindex question, cancelled. It only reads: no
+    // request it makes may change anything, only the dialog's and the question's counts (the preview) are sent as POSTs,
+    // and the one Try Again it presses is answered by the test, never sent
     test("the Search Index, a reindex's card, the Reindex dialog on each choice, and the User app's Reindex question", async () => {
       test.setTimeout(150_000)
       const pane = page.getByRole('navigation', { name: 'Navigation' })
       const heading = main().getByRole('heading', { level: 1, name: 'Search Index' })
       const tab = (name: string) => main().getByRole('tab', { name: new RegExp(`^${name}( \\([\\d,]+\\))?$`) })
       const returned = () => page.evaluate(() => void window.dispatchEvent(new Event('focus')))
+      /** A doc # no document of the stack's has, for the row Try Again is pressed on */
+      const madeUpDocNumber = 999_999_901
+      // What the test answers itself, which never reaches the server
+      const answeredHere = new Set([`/api/v1/admin/search-index/failed/${madeUpDocNumber}/retry`])
       const changes: string[] = []
       const writes = (request: Request) => {
         const path = new URL(request.url()).pathname
-        if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method()) && path !== '/api/v1/admin/reindex/preview') changes.push(`${request.method()} ${path}`)
+        if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method()) && path !== '/api/v1/admin/reindex/preview' && !answeredHere.has(path)) changes.push(`${request.method()} ${path}`)
       }
       page.on('request', writes)
 
@@ -597,12 +603,82 @@ for (const scheme of ['light', 'dark'] as const) {
             await question.getByRole('button', { name: 'Cancel', exact: true }).click()
             await expect(question).toBeHidden()
             await expect(cancel, 'the focus back on Cancel').toBeFocused()
-            // Left before the made-up reindex leaves the answers, so the page never asks the server for it
+
+            // The same reindex while the server's worker fails at each try: its line says so, in place of the time left
+            Object.assign(job, { failingSince: new Date(now.getTime() - 120_000).toISOString() })
             await page.goto('/admin/search-index')
-            await expect(heading).toBeVisible()
+            await expect(card).toBeVisible()
+            await expect(bar).toHaveAccessibleDescription(/^212 of 412 documents · 4 on storage that couldn't be reached · making no progress since .+, as the server can't go on with it: it tries again every 30 seconds, and Background Jobs says why$/)
+            await check("a reindex's card, its worker failing")
           } finally {
             await page.unroute(matched, active)
           }
+          // A page loaded with the answers the server gives again, which hold no made-up reindex, so the page never asks
+          // the server for it
+          await page.goto('/admin/search-index')
+          await expect(heading).toBeVisible()
+          await expect(main().getByRole('region', { name: new RegExp(`E2E A11y ${scheme}`) })).toHaveCount(0)
+        })
+
+        await test.step("Try Again, refused while the index can't be written, its row kept", async () => {
+          // Couldn't Be Indexed holding one made-up document, whose Try Again the test answers as the server does while the
+          // index can't be written (P6-R29)
+          const sentence = "The search index can't be written just now. Try again later."
+          const failure = {
+            document: { id: 2_000_000_001, docNumber: madeUpDocNumber, fileName: `E2E A11y ${scheme}.pdf`, matter: null },
+            reason: 'The file could not be parsed',
+            when: new Date().toISOString(),
+          }
+          const failed = (route: Route) => route.fulfill({ json: { items: [failure], offset: 0, limit: 100, total: 1 } })
+          const retried = (route: Route) =>
+            route.fulfill({ status: 409, contentType: 'application/problem+json', json: { type: 'about:blank', title: 'Refused', status: 409, code: 'refused', detail: sentence } })
+          const isFailed = (url: URL) => url.pathname === '/api/v1/admin/search-index/failed'
+          const isRetry = (url: URL) => answeredHere.has(url.pathname)
+          await page.route(isFailed, failed)
+          await page.route(isRetry, retried)
+          try {
+            await page.goto('/admin/search-index')
+            const list = main().getByRole('table', { name: "Couldn't Be Indexed" })
+            const row = list.getByRole('row').filter({ has: page.getByRole('rowheader', { name: `# ${madeUpDocNumber}` }) })
+            await expect(row).toBeVisible()
+            const button = row.getByRole('button', { name: `Try Again: # ${madeUpDocNumber} ${failure.document.fileName}` })
+            await button.click()
+            await expect(list.getByText(sentence, { exact: true })).toBeVisible()
+            // The row stays, with the focus on its button
+            await expect(row).toBeVisible()
+            await expect(button).toBeFocused()
+            await check("Try Again refused while the index can't be written")
+          } finally {
+            await page.unroute(isRetry, retried)
+            await page.unroute(isFailed, failed)
+          }
+          await page.goto('/admin/search-index')
+          await expect(heading).toBeVisible()
+        })
+
+        await test.step('the heading, asked again every 5 seconds while the Indexer runs', async () => {
+          // The heading's answer as the server gave it, but with the Indexer running, which it is only for a moment at a time
+          const index = await page.evaluate(async () => (await (await fetch('/api/v1/admin/search-index')).json()) as { indexer: { job: Record<string, unknown> } })
+          const running = (route: Route) => route.fulfill({ json: { ...index, indexer: { ...index.indexer, job: { ...index.indexer.job, running: true } } } })
+          const matched = (url: URL) => url.pathname === '/api/v1/admin/search-index'
+          let asked = 0
+          const counted = (request: Request) => {
+            if (request.method() === 'GET' && matched(new URL(request.url()))) asked++
+          }
+          await page.route(matched, running)
+          page.on('request', counted)
+          try {
+            await page.goto('/admin/search-index')
+            await expect(main().getByText(/^The Indexer is running/)).toBeVisible()
+            const first = asked
+            // Two more asks, 5 seconds apart, with nothing done on the page
+            await expect.poll(() => asked - first, { message: 'the heading asked again while the Indexer runs', timeout: 20_000, intervals: [1_000] }).toBeGreaterThanOrEqual(2)
+          } finally {
+            page.off('request', counted)
+            await page.unroute(matched, running)
+          }
+          await page.goto('/admin/search-index')
+          await expect(heading).toBeVisible()
         })
 
         await test.step('the Reindex dialog on each of its choices, cancelled', async () => {
@@ -616,7 +692,8 @@ for (const scheme of ['light', 'dark'] as const) {
           await check('the Reindex dialog, Matter')
           await dialog.getByRole('textbox', { name: 'Matter' }).fill('Smoke Matter')
           await dialog.getByRole('option', { name: /^1\.1 – Smoke Matter/ }).click()
-          await expect(dialog.getByRole('button', { name: /^Reindex [\d,]+ Documents?$/ })).toBeEnabled()
+          // Its count once the preview has come, or, on a stack whose matter 1.1 holds no document yet, that there's nothing
+          await expect(dialog.getByRole('button', { name: /^Reindex [\d,]+ Documents?$/ }).or(dialog.getByText("There's nothing here to reindex."))).toBeVisible()
           await check('the Reindex dialog, Matter chosen')
 
           await choice('Folder').click()
@@ -657,7 +734,8 @@ for (const scheme of ['light', 'dark'] as const) {
           await row.getByRole('rowheader').click({ button: 'right' })
           await page.getByRole('menu', { name: 'Actions for Documents' }).getByRole('menuitem', { name: 'Reindex' }).click()
           const question = page.getByRole('dialog', { name: 'Reindex' })
-          await expect(question.getByRole('button', { name: /^Reindex [\d,]+ Documents?$/ })).toBeEnabled()
+          // Its count once the preview has come, or, on a stack whose Documents folder holds no document yet, that there's nothing
+          await expect(question.getByRole('button', { name: /^Reindex [\d,]+ Documents?$/ }).or(question.getByText("There's nothing here to reindex."))).toBeVisible()
           await check("the User app's Reindex question")
           await question.getByRole('button', { name: 'Cancel' }).click()
           await expect(question).toBeHidden()
@@ -704,14 +782,51 @@ for (const scheme of ['light', 'dark'] as const) {
 
       // The Search Index's Waiting and History tables, each in a box of its own that scrolls sideways when it's narrower
       // than its table: a region named for its table and a Tab stop then, which the arrow keys scroll, and neither when it
-      // isn't. At 768 pixels, then at 480, where any of them with rows is narrower than its table. The last of the loop's
-      // screens was the Search Index. A tab with no rows has no table.
+      // isn't. At 768 pixels, where they fit, then at 480, where they don't. Their rows are answered by this test, as the
+      // stack's Indexer empties Waiting within seconds and a run's Reindexes may have none yet.
+      const madeUp = (n: number) => ({ id: 2_000_000_100 + n, docNumber: 999_999_100 + n, fileName: `E2E A11y Sideways ${n}.pdf`, matter: { id: 1, number: '1.1', name: 'Smoke Matter' } })
+      const at = new Date().toISOString()
+      const me = await page.evaluate(async () => (await (await fetch('/api/v1/me')).json()) as { id: number; username: string; name: string })
+      const reindexes = [1, 2, 3].map((n) => ({
+        id: 2_000_000_200 + n,
+        kind: 'folder',
+        targetId: 1,
+        name: `Folder E2E A11y Sideways ${n} in 1.1 Smoke Matter`,
+        startedBy: { id: me.id, username: me.username, name: me.name },
+        state: 'done',
+        cancelling: false,
+        emptyFirst: false,
+        total: 3,
+        done: 3,
+        failed: 0,
+        skipped: 0,
+        unreachable: 0,
+        leftOut: 0,
+        created: at,
+        started: at,
+        ended: at,
+        stalledSince: null,
+        failingSince: null,
+        estimateSecondsLeft: null,
+      }))
+      const served: [(url: URL) => boolean, (route: Route) => Promise<void>][] = [
+        [(url) => url.pathname === '/api/v1/admin/search-index/waiting', (route) => route.fulfill({ json: { items: [1, 2, 3].map((n) => ({ document: madeUp(n), lastChanged: at })), offset: 0, limit: 100, total: 3 } })],
+        [(url) => url.pathname === '/api/v1/admin/reindex' && url.searchParams.get('active') !== 'true', (route) => route.fulfill({ json: { items: reindexes, offset: 0, limit: 20, total: 3 } })],
+        [
+          (url) => url.pathname === '/api/v1/admin/search-index/history',
+          (route) =>
+            route.fulfill({
+              json: { items: [1, 2, 3].map((n) => ({ id: 2_000_000_300 + n, when: at, event: 'indexed', reason: null, who: me.name, document: madeUp(n) })), nextCursor: null, readBackTo: null },
+            }),
+        ],
+      ]
+      for (const [url, handler] of served) await page.route(url, handler)
       const sideways = async (tabName: string, table: string, from: (tab: Locator) => Locator) => {
         const tab = main().getByRole('tab', { name: new RegExp(`^${tabName}( \\([\\d,]+\\))?$`) })
         await tab.click()
         await expect(main().getByText('Loading…')).toHaveCount(0)
         const drawn = main().getByRole('table', { name: table })
-        if ((await drawn.count()) === 0) return `${table}: no rows`
+        await expect(drawn).toBeVisible()
         const box = drawn.locator('xpath=..')
         const overflows = await box.evaluate((element) => element.scrollWidth > element.clientWidth)
         if (!overflows) {
@@ -732,18 +847,45 @@ for (const scheme of ['light', 'dark'] as const) {
         await check(`the ${table} table scrolling sideways at ${page.viewportSize()?.width} pixels`)
         return `${table}: scrolls sideways`
       }
-      for (const width of [768, 480]) {
-        await page.setViewportSize({ width, height: 1024 })
-        const seen = [
-          await sideways('Waiting', 'Waiting', (tab) => tab),
-          await sideways('History', 'Reindexes', () => main().getByRole('heading', { level: 2, name: 'Reindexes' })),
-          await sideways('History', 'Index Events', () => main().getByRole('heading', { level: 2, name: 'Index Events' })),
-        ]
-        test.info().annotations.push({ type: `sideways at ${width} pixels`, description: seen.join('; ') })
-        console.log(`sideways at ${width} pixels (${scheme}): ${seen.join('; ')}`)
+      try {
+        // A page loaded afresh, so the tabs read the answers above
+        await page.goto('/admin/search-index')
+        await expect(main().getByRole('heading', { level: 1, name: 'Search Index' })).toBeVisible()
+        for (const width of [768, 480]) {
+          await page.setViewportSize({ width, height: 1024 })
+          const seen = [
+            await sideways('Waiting', 'Waiting', (tab) => tab),
+            await sideways('History', 'Reindexes', () => main().getByRole('heading', { level: 2, name: 'Reindexes' })),
+            await sideways('History', 'Index Events', () => main().getByRole('heading', { level: 2, name: 'Index Events' })),
+          ]
+          test.info().annotations.push({ type: `sideways at ${width} pixels`, description: seen.join('; ') })
+          console.log(`sideways at ${width} pixels (${scheme}): ${seen.join('; ')}`)
+          // At 480 pixels every one of them is narrower than its table, so the region and its Tab stop are always checked
+          if (width === 480) expect(seen, 'each table scrolls sideways at 480 pixels').toEqual(['Waiting: scrolls sideways', 'Reindexes: scrolls sideways', 'Index Events: scrolls sideways'])
+        }
+      } finally {
+        for (const [url, handler] of served) await page.unroute(url, handler)
       }
       await page.setViewportSize({ width: 768, height: 1024 })
-      await main().getByRole('tab', { name: /^Couldn't Be Indexed/ }).click()
+      await page.goto('/admin/search-index')
+      await expect(main().getByRole('heading', { level: 1, name: 'Search Index' })).toBeVisible()
+
+      // The Reindex dialog at the same width: within the window, nothing scrolling sideways, and usable, Folder's matter
+      // search shown; cancelled with nothing sent
+      await main().getByRole('button', { name: 'Reindex…' }).click()
+      const dialog = page.getByRole('dialog', { name: 'Reindex' })
+      await expect(dialog.getByRole('textbox', { name: 'Matter' })).toBeVisible()
+      const box = await dialog.boundingBox()
+      expect(box, 'the dialog is drawn').not.toBeNull()
+      expect(box!.x, 'the dialog within the window, on the left').toBeGreaterThanOrEqual(0)
+      expect(box!.x + box!.width, 'the dialog within the window, on the right').toBeLessThanOrEqual(768)
+      expect(await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth), 'nothing in the dialog scrolls sideways').toBe(true)
+      await check('the Reindex dialog at 768 pixels')
+      await dialog.getByRole('radiogroup', { name: 'What to Reindex' }).getByRole('radio', { name: 'Folder' }).click()
+      await expect(dialog.getByRole('textbox', { name: 'Matter' })).toBeVisible()
+      await check('the Reindex dialog on Folder at 768 pixels')
+      await dialog.getByRole('button', { name: 'Cancel' }).click()
+      await expect(dialog).toBeHidden()
 
       await navigation.click()
       await page.getByRole('navigation', { name: 'Navigation' }).getByRole('link', { name: 'Dashboard' }).click()
