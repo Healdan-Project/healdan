@@ -226,6 +226,42 @@ tags:
         a job's runs and schedule aren't kept in the database. A change
         that changes nothing isn't recorded, and nothing that reads is: a
         log's download and the Audit Trail's export included.
+  - name: Search Index
+    description: |
+      The Search Index area (`AdminArea.SEARCH_INDEX`): the index's counts
+      and health, LogicalDOC's Indexer, the documents that couldn't be
+      indexed or wait to be, what the index was given, and reindexing
+      (Admin app spec sections 8.9, 9.6 and 13). Only members of `admin`,
+      on the web session, reach these routes: no session is
+      `401 unauthenticated`, a device token `403 web-session-only`, and
+      anyone else `403 admins-only`.
+
+      - The documents counted are the live ones, not shortcuts and not in
+        the Trash. A document is indexed once its entry has been written to
+        the index, until it's marked to be indexed again. It waits when it's
+        marked to be indexed, its file or its properties alone, and isn't
+        archived, which LogicalDOC's Indexer leaves alone; the Indexer takes
+        those waiting a batch at a time, on its schedule. It couldn't be
+        indexed when it's marked to have its file indexed, isn't archived,
+        and the last time it was tried it couldn't be: those are counted and
+        listed apart from those waiting, and the Indexer goes on trying each
+        on its schedule until it's indexed or set to Skip. One set to Skip is
+        counted in none of the three.
+      - A document is named by its doc #, as in the public API, and by
+        LogicalDOC's internal id, which only tells documents apart here.
+      - A reindex runs on the server, straight through, one at a time,
+        replacing each document's entry as it's done, so search keeps
+        finding its documents while it runs (spec section 9.6). It's
+        started, watched and cancelled here; Background Jobs lists the
+        worker that runs it, `reindex`, which is never run there.
+      - A reindex's start is recorded inside its transaction, and its
+        cancel, **Try Again** and **Skip** straight after each, all in the
+        Search Index area: `reindex.started` and `reindex.cancelled`, aimed
+        at what the reindex covers, and `index.retried` and
+        `index.skipped`, aimed at the document. **Run Indexer Now** is
+        recorded as Background Jobs records Run Now. A change that changes
+        nothing isn't recorded, and nothing that reads is, a preview
+        included.
 paths:
   /v1/admin/dashboard:
     get:
@@ -4761,8 +4797,10 @@ paths:
           it's switched on and isn't running: `trash-destroyer`,
           `storage-mover`, `storage-retest`, `storage-purge` and
           `storage-nightly-check`. It's never offered for `preview`,
-          `email-index` or `storage-alert`, and none of Healdan's jobs is
-          stopped, switched off or rescheduled here.
+          `email-index`, `storage-alert` or `reindex`, which runs by itself
+          while a reindex waits or runs, each started, watched and cancelled
+          on the Search Index, and none of Healdan's jobs is stopped,
+          switched off or rescheduled here.
         - LogicalDOC's tasks run on their `schedule`, while enabled. Run Now
           is offered while one is enabled and idle, unless the server has
           scheduled tasks switched off, **Stop** while it runs, and
@@ -4990,6 +5028,509 @@ paths:
         '409':
           $ref: '#/components/responses/Problem'
         '422':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/search-index:
+    get:
+      operationId: adminGetSearchIndex
+      summary: The Search Index
+      description: |
+        The Search Index's heading (Admin app spec section 8.9): how many
+        documents are indexed, waiting and couldn't be indexed, as the
+        Search Index tag counts them, worked out at the request, never
+        taken from the Dashboard's copy; how many entries the index holds
+        and how big its folder is, where those can be read; its health, as
+        the Dashboard's Search Index tile works it out; and LogicalDOC's
+        Indexer, with what **Run Indexer Now** would do. A reindex's
+        progress is `GET /v1/admin/reindex`'s, with `active=true`.
+      tags: [Search Index]
+      responses:
+        '200':
+          description: The Search Index
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchIndex'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/search-index/failed:
+    get:
+      operationId: adminListIndexFailures
+      summary: The documents that couldn't be indexed
+      description: |
+        The **Couldn't Be Indexed** tab (Admin app spec sections 8.9 and
+        9.6): each document that couldn't be indexed, as the Search Index
+        tag defines it, the latest error first, one with no time last, then
+        by the document's id, the highest first. A page of `limit` from
+        `offset`, with the total, which is `GET /v1/admin/search-index`'s
+        `failed` read again.
+
+        LogicalDOC's Indexer tries each of them again on its schedule, until
+        one is indexed or set to Skip. **Try Again** indexes one now, and
+        **Skip** stops it being tried again.
+
+        A negative `offset` or a `limit` outside 1 to 200 is
+        `400 bad-request`.
+      tags: [Search Index]
+      parameters:
+        - $ref: '#/components/parameters/PageOffset'
+        - $ref: '#/components/parameters/PageLimit'
+      responses:
+        '200':
+          description: A page of the documents that couldn't be indexed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IndexFailureList'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/search-index/waiting:
+    get:
+      operationId: adminListIndexWaiting
+      summary: The documents waiting to be indexed
+      description: |
+        The **Waiting** tab (Admin app spec section 8.9): each document that
+        waits for LogicalDOC's Indexer, as the Search Index tag defines it,
+        those that couldn't be indexed left out, by the document's id, the
+        lowest first. That is the order they were filed in, not the order
+        the Indexer takes them in, which isn't fixed. A page of `limit` from
+        `offset`, with the total, which is `GET /v1/admin/search-index`'s
+        `waiting` read again.
+
+        A negative `offset` or a `limit` outside 1 to 200 is
+        `400 bad-request`.
+      tags: [Search Index]
+      parameters:
+        - $ref: '#/components/parameters/PageOffset'
+        - $ref: '#/components/parameters/PageLimit'
+      responses:
+        '200':
+          description: A page of the documents waiting to be indexed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IndexWaitingList'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/search-index/history:
+    get:
+      operationId: adminListIndexHistory
+      summary: What the index was given
+      description: |
+        The **History** tab's events (Admin app spec section 8.9): each time
+        a document was indexed or couldn't be, newest first, from
+        LogicalDOC's document history, whoever did it: LogicalDOC's
+        Indexer, a reindex, **Try Again**, or the Classic Interface. The tab
+        lists the reindexes first, from `GET /v1/admin/reindex`, then these.
+        Rows are kept as the Audit Trail's are: a document destroyed for
+        good takes its rows with it.
+
+        A page holds at most `limit` rows, newest first, and looks through
+        only so many rows of the history, of every kind, so a page may hold
+        fewer, or none, and still have a `nextCursor`. Send `nextCursor`
+        back as `cursor` for the rows after it: rows written meanwhile never
+        repeat one on a later page, as `adminListAudit`'s don't, and are on
+        a fresh first page. There's no total. `nextCursor` is null only once
+        the history has been read to its end, and `readBackTo` says how far
+        back the page's reading reached.
+
+        A `limit` outside 1 to 200, or a `cursor` that isn't one this route
+        gives, is `400 bad-request`.
+      tags: [Search Index]
+      parameters:
+        - $ref: '#/components/parameters/PageLimit'
+        - name: cursor
+          in: query
+          required: false
+          description: An answer's `nextCursor`, for the rows after its page; the newest rows without it
+          schema:
+            type: string
+      responses:
+        '200':
+          description: A page of the index's events
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IndexHistoryPage'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/search-index/run:
+    post:
+      operationId: adminRunIndexer
+      summary: Run LogicalDOC's Indexer now
+      description: |
+        **Run Indexer Now** (Admin app spec section 8.9): starts a run of
+        LogicalDOC's Indexer at once, as Background Jobs' **Run Now** does
+        for `IndexerTask` (`adminRunJob`), and answers the Indexer, which
+        may not show it running yet. A run takes the next documents waiting,
+        as many as the Indexer takes in a run, those that couldn't be
+        indexed among them. Takes no body.
+
+        `409 refused`, with a sentence that says why, when the Indexer can't
+        run now (`Indexer.runRefusal`): it's disabled, the server has
+        scheduled tasks switched off, or it's running already.
+
+        Recorded as Background Jobs records Run Now: `job.run-requested`, in
+        the Monitoring area, aimed at the job `IndexerTask`.
+      tags: [Search Index]
+      responses:
+        '200':
+          description: The Indexer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Indexer'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/search-index/failed/{docNumber}/retry:
+    post:
+      operationId: adminRetryIndexing
+      summary: Index a document that couldn't be indexed, now
+      description: |
+        **Try Again** (Admin app spec sections 8.9 and 9.6): indexes the
+        document now, while the request waits, as LogicalDOC's Indexer would,
+        and answers how that went, `200` either way. Indexed, it leaves
+        **Couldn't Be Indexed**. Not, it stays there with the new reason,
+        and the Indexer goes on trying it on its schedule. Either way the
+        History tab has a row for it, naming the caller. A large or slow
+        file holds the request while it's read. Takes no body.
+
+        - `404 not-found` for a doc # no live document has: none with it,
+          one in the Trash or deleted, or another tenant's.
+        - `409 refused` for a document that isn't among those that couldn't
+          be indexed, as when it has been indexed or set to Skip meanwhile,
+          with the sentence
+          `This document is no longer waiting after an error.`
+
+        Recorded as `index.retried`, straight after it, aimed at the
+        document (`document`, its id), named by its doc # and file name, as
+        `# 10412 Witness Statement.pdf`, with one change, `outcome`, from
+        none to `indexed` or `failed`.
+      tags: [Search Index]
+      parameters:
+        - $ref: '#/components/parameters/IndexDocNumber'
+      responses:
+        '200':
+          description: How it went
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IndexRetry'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/search-index/failed/{docNumber}/skip:
+    post:
+      operationId: adminSkipIndexing
+      summary: Stop trying to index a document
+      description: |
+        **Skip** (Admin app spec sections 8.9 and 9.6): sets the document
+        not to be indexed (Skip), so LogicalDOC's Indexer stops trying it and
+        it leaves **Couldn't Be Indexed**, counted neither as waiting nor
+        as failed. Its entry in the index, if it has one, stays. A reindex
+        that covers it leaves it out from then on, as it leaves out every
+        document set to Skip. Answers `204`, with no body. Takes no body.
+
+        `404 not-found` and `409 refused` as `adminRetryIndexing` answers
+        them.
+
+        Recorded as `index.skipped`, straight after it, aimed and named as
+        `index.retried` is, with no change.
+      tags: [Search Index]
+      parameters:
+        - $ref: '#/components/parameters/IndexDocNumber'
+      responses:
+        '204':
+          description: It's set to Skip
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/reindex/preview:
+    post:
+      operationId: adminPreviewReindex
+      summary: What a reindex would cover
+      description: |
+        The Reindex dialog's count and estimate (Admin app spec sections
+        8.9 and 13): what `POST /v1/admin/reindex` would start with the same
+        body, now, and changes nothing. The User app asks it for the
+        question it asks before a reindex, too.
+
+        It answers the name the reindex would be given, how many documents
+        it would try (`count`, which a reindex started at once makes its
+        `total`), how many of those in its scope it would leave out
+        (`skipped`), about how long it would take, and for `documents`
+        each doc # as found or not. `refusal` says what
+        `POST /v1/admin/reindex` would refuse with now, so the dialog can
+        say it before its button: a scope with nothing to reindex, and one
+        an active reindex covers already.
+
+        It's checked as `POST /v1/admin/reindex` checks its body, in the
+        same order, `400`, `404` then `422`, and is never `409`.
+      tags: [Search Index]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReindexScope'
+      responses:
+        '200':
+          description: What the reindex would cover
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReindexPreview'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/reindex:
+    get:
+      operationId: adminListReindexJobs
+      summary: The reindexes
+      description: |
+        The reindexes started (Admin app spec sections 8.9 and 9.6), the
+        newest first: with `active=true`, only those waiting or running, for
+        the progress shown above the Search Index's tabs; without it, every
+        one, for the History tab, those that ended kept for good. A page of
+        `limit` from `offset`, with the total once `active` has applied.
+
+        One reindex runs at a time, across the server, and the others wait
+        their turn, oldest first.
+
+        An `active` that is neither `true` nor `false`, a negative `offset`
+        or a `limit` outside 1 to 200 is `400 bad-request`.
+      tags: [Search Index]
+      parameters:
+        - name: active
+          in: query
+          required: false
+          description: "`true` for only the reindexes waiting or running; `false` by default"
+          schema:
+            type: boolean
+            default: false
+        - $ref: '#/components/parameters/PageOffset'
+        - $ref: '#/components/parameters/PageLimit'
+      responses:
+        '200':
+          description: A page of reindexes
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReindexJobList'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: adminStartReindex
+      summary: Start a reindex
+      description: |
+        **Reindex** (Admin app spec sections 8.9, 9.6 and 13): starts a
+        reindex of the documents the scope covers, as
+        `POST /v1/admin/reindex/preview` counts them, and answers `201` with
+        it, its address as `Location`, waiting or running. It runs on the
+        server, straight through, whoever started it, and nothing waits for
+        it: the User app starts one from a right-click and stays where it
+        was.
+
+        - The documents it will try are fixed as it's started, `total` of
+          them; those it leaves out then are `leftOut`. Each is tried once,
+          in the order of its id, its entry in the index replaced as it's
+          done, so search keeps finding it throughout. A document that has
+          gone by its turn (deleted, in the Trash or destroyed), or has been
+          set to Skip, archived, or is being changed at that moment, is
+          counted `skipped`; one moved or given a new version is indexed as
+          it is then. A document it couldn't index joins
+          **Couldn't Be Indexed**, keeping the entry it had. A reindex that
+          ends `done` has `done`, `failed` and `skipped` adding up to
+          `total`.
+        - When the index can't be written, it waits and tries again, its
+          `stalledSince` saying since when, and counts nothing meanwhile.
+        - `emptyFirst`, with `everything` only, empties the index and marks
+          every document to be indexed as its run begins, not as it's
+          started, so no other reindex is running then. Search then misses
+          documents until each is done again, and LogicalDOC's Indexer takes
+          any the reindex doesn't cover, such as those filed meanwhile.
+          Without it, nothing is taken out of the index.
+
+        Refused in the order this file's introduction gives:
+
+        - `400 bad-request` as `ReindexScope` says.
+        - `404 not-found` for a `targetId` that isn't live, or is another
+          tenant's: a folder that doesn't exist, is deleted or in the Trash,
+          or is a folder alias; a matter that doesn't exist, is deleted or
+          is in the Trash; and anything but a live Store for `store`,
+          LogicalDOC's Default workspace, the Templates Store and the root
+          included.
+        - `422 validation`, each by its field: `kind` missing or null
+          (`required`), or not one of the five (`invalid`); `targetId`
+          missing or null for `folder`, `matter` or `store` (`required`);
+          `docNumbers` missing, null or empty for `documents` (`required`),
+          or holding more than 1,000 different doc #s (`too-many`); and
+          `emptyFirst` true for any kind but `everything` (`invalid`).
+        - `409 refused`, with a sentence that says why, for a scope whose
+          `count` would be 0, `There's nothing here to reindex.`, and for a
+          folder, matter, Store or everything that a reindex waiting or
+          running covers already, the same kind and the same `targetId`,
+          `This is already being reindexed.` Documents named by doc # are
+          never refused as already being reindexed.
+
+        Recorded as `reindex.started`, in the start's transaction, aimed at
+        the scope: `matter`, `folder` or `store` with its id, or `documents`
+        or `everything` with none, named by the reindex's `name`; with
+        three changes, from none: `kind`, `documents` (its `total`) and
+        `emptyFirst` (`true` or `false`).
+      tags: [Search Index]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReindexScope'
+      responses:
+        '201':
+          description: The reindex
+          headers:
+            Location:
+              description: Its address, such as `/api/v1/admin/reindex/7`
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReindexJob'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/reindex/{id}:
+    get:
+      operationId: adminGetReindexJob
+      summary: A reindex
+      description: |
+        A reindex, with its progress (Admin app spec section 8.9).
+
+        `404 not-found` for an id no reindex of the caller's tenant has.
+      tags: [Search Index]
+      parameters:
+        - $ref: '#/components/parameters/ReindexPath'
+      responses:
+        '200':
+          description: The reindex
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReindexJob'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+    delete:
+      operationId: adminCancelReindex
+      summary: Cancel a reindex
+      description: |
+        **Cancel** (Admin app spec section 8.9): cancels the reindex, and
+        answers it as it then is. One waiting is `cancelled` at once. One
+        running is asked to stop (`cancelling`) and is `cancelled` once the
+        batch of documents it's indexing ends, that batch's counts kept. The
+        documents it hasn't reached keep the entries in the index they have,
+        and stay indexed, waiting or failed as they were. A reindex already
+        asked to stop is answered as it is, and nothing is recorded.
+
+        - `404 not-found` as `adminGetReindexJob` answers.
+        - `409 refused` for a reindex that has ended, `done` or
+          `cancelled`, with the sentence `This reindex has ended.`
+
+        Recorded as `reindex.cancelled`, straight after it, aimed and named
+        as `reindex.started` is, with no change.
+      tags: [Search Index]
+      parameters:
+        - $ref: '#/components/parameters/ReindexPath'
+      responses:
+        '200':
+          description: The reindex, cancelled or cancelling
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReindexJob'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
           $ref: '#/components/responses/Problem'
         default:
           $ref: '#/components/responses/Problem'
@@ -5238,6 +5779,26 @@ components:
         of the person's username or name as the row kept them
       schema:
         type: string
+    IndexDocNumber:
+      name: docNumber
+      in: path
+      required: true
+      description: |
+        The document's doc #, as the public API's
+        `/v1/documents/{docNumber}` takes it
+      schema:
+        type: integer
+        format: int64
+        minimum: 0
+    ReindexPath:
+      name: id
+      in: path
+      required: true
+      description: The reindex's id, as `GET /v1/admin/reindex` gives it
+      schema:
+        type: integer
+        format: int64
+        minimum: 0
   responses:
     Problem:
       description: A refusal or an error
@@ -8730,3 +9291,501 @@ components:
         cron:
           type: [string, 'null']
           description: For `cron`, the cron expression, in Quartz's form
+    SearchIndex:
+      type: object
+      description: The Search Index's heading
+      additionalProperties: false
+      required: [indexed, waiting, failed, entries, bytes, health, indexer]
+      properties:
+        indexed:
+          type: integer
+          format: int64
+          minimum: 0
+          description: How many documents are in the index, as the Search Index tag counts them
+        waiting:
+          type: integer
+          format: int64
+          minimum: 0
+          description: How many wait for LogicalDOC's Indexer, those that couldn't be indexed left out
+        failed:
+          type: integer
+          format: int64
+          minimum: 0
+          description: How many couldn't be indexed
+        entries:
+          type: [integer, 'null']
+          format: int64
+          minimum: 0
+          description: |
+            How many entries the index holds, for documents and shortcuts
+            alike, which can differ from `indexed`; null when the index
+            can't be read
+        bytes:
+          type: [integer, 'null']
+          format: int64
+          minimum: 0
+          description: The size of the index's folder on the server's disk; null when it can't be read
+        health:
+          $ref: '#/components/schemas/IndexHealth'
+        indexer:
+          $ref: '#/components/schemas/Indexer'
+    IndexHealth:
+      type: object
+      description: The index's health, as the Dashboard's Search Index tile gives it
+      additionalProperties: false
+      required: [status, detail]
+      properties:
+        status:
+          type: string
+          description: |
+            `ok` when every document has been indexed or waits to be;
+            `attention` when one or more couldn't be indexed
+          enum: [ok, attention]
+        detail:
+          type: string
+          description: The tile's line in English
+          examples: ['None waiting, none failed', '5 waiting, 2 failed']
+    Indexer:
+      type: object
+      description: LogicalDOC's Indexer, and what **Run Indexer Now** would do
+      additionalProperties: false
+      required: [job, runRefusal]
+      properties:
+        job:
+          description: |
+            The Indexer, `IndexerTask`, as `GET /v1/admin/jobs` lists it: its
+            last start and end, how its last run ended, its next run,
+            whether it's running, and `canRun`, whether
+            **Run Indexer Now** runs it now
+          allOf:
+            - $ref: '#/components/schemas/Job'
+        runRefusal:
+          type: [string, 'null']
+          description: |
+            The sentence `POST /v1/admin/search-index/run` would refuse with
+            now, which the screen can show beside the greyed-out button:
+            the Indexer disabled, scheduled tasks switched off on the
+            server, or the Indexer running already. Null when `job.canRun`
+            is true
+          examples: [This job is running already.]
+    IndexDocument:
+      type: object
+      description: A document, as the Search Index names it
+      additionalProperties: false
+      required: [id, docNumber, fileName, matter]
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: "LogicalDOC's internal id of the document, not its doc #"
+        docNumber:
+          type: [integer, 'null']
+          format: int64
+          description: "Its doc #, which the User app's links take; null when it has none"
+        fileName:
+          type: string
+          description: Its file name
+        matter:
+          description: |
+            The matter stamped on it, by its client and matter numbers; null
+            when none is, or the stamps name no live matter
+          oneOf:
+            - $ref: '#/components/schemas/MatterBrief'
+            - type: 'null'
+    IndexFailure:
+      type: object
+      description: A document that couldn't be indexed, as the Couldn't Be Indexed tab shows it
+      additionalProperties: false
+      required: [document, reason, when]
+      properties:
+        document:
+          $ref: '#/components/schemas/IndexDocument'
+        reason:
+          type: [string, 'null']
+          description: |
+            Why it couldn't be indexed the last time it was tried, in
+            English, as LogicalDOC kept it; null when it kept none
+          examples: [The file is encrypted]
+        when:
+          type: [string, 'null']
+          format: date-time
+          description: When it was last tried; null when that isn't kept
+    IndexFailureList:
+      description: A page of the documents that couldn't be indexed
+      allOf:
+        - $ref: '#/components/schemas/Page'
+        - properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/IndexFailure'
+      unevaluatedProperties: false
+    IndexWaiting:
+      type: object
+      description: A document waiting to be indexed, as the Waiting tab shows it
+      additionalProperties: false
+      required: [document, lastChanged]
+      properties:
+        document:
+          $ref: '#/components/schemas/IndexDocument'
+        lastChanged:
+          type: string
+          format: date-time
+          description: |
+            When the document was last changed: for most documents, when
+            they began to wait, as a new file or version, or a change of
+            its properties, marks one to be indexed. A document marked to be
+            indexed again with every other, as Empty the Index First marks
+            them, keeps the time it last changed before
+    IndexWaitingList:
+      description: A page of the documents waiting to be indexed
+      allOf:
+        - $ref: '#/components/schemas/Page'
+        - properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/IndexWaiting'
+      unevaluatedProperties: false
+    IndexEvent:
+      type: object
+      description: A time a document was indexed, or couldn't be
+      additionalProperties: false
+      required: [id, when, event, reason, who, document]
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: The row's own, in LogicalDOC's document history, which a client only compares
+        when:
+          type: string
+          format: date-time
+          description: When it was done
+        event:
+          type: string
+          description: '`indexed`, its entry in the index written; `failed`, it couldn''t be indexed'
+          enum: [indexed, failed]
+        reason:
+          type: [string, 'null']
+          description: |
+            For `failed`, why it couldn't be indexed, in English, as
+            LogicalDOC kept it, null when it kept none; null for `indexed`
+          examples: [The file is encrypted]
+        who:
+          type: [string, 'null']
+          description: |
+            Who it was done for, as the Audit Trail's `who` names them: the
+            person who started the reindex or pressed **Try Again**, or the
+            account LogicalDOC's Indexer runs as; null when the row names
+            no one
+          examples: [Sam Okafor]
+        document:
+          $ref: '#/components/schemas/IndexDocument'
+    IndexHistoryPage:
+      type: object
+      description: |
+        A page of the index's events, and where the next one starts. It may
+        hold fewer rows than asked for, even none, while `nextCursor` isn't
+        null.
+      additionalProperties: false
+      required: [items, nextCursor, readBackTo]
+      properties:
+        items:
+          type: array
+          description: The events, newest first
+          maxItems: 200
+          items:
+            $ref: '#/components/schemas/IndexEvent'
+        nextCursor:
+          type: [string, 'null']
+          description: |
+            Where the next page starts, for `cursor`, which holds the
+            reading's place and nothing a client reads; null once the
+            history has been read to its end
+        readBackTo:
+          type: [string, 'null']
+          format: date-time
+          description: |
+            How far back the reading has reached: every event newer than
+            this has been given, on this page or an earlier one, so a page
+            with fewer rows than asked for, or none, says nothing more was
+            found back to it. Null once the history has been read to its
+            end, as `nextCursor` is
+    IndexRetry:
+      type: object
+      description: How **Try Again** went
+      additionalProperties: false
+      required: [outcome, reason]
+      properties:
+        outcome:
+          type: string
+          description: |
+            `indexed`, its entry in the index written; `failed`, it still
+            couldn't be indexed, and stays among those that couldn't
+          enum: [indexed, failed]
+        reason:
+          type: [string, 'null']
+          description: |
+            For `failed`, why, in English, as `IndexFailure.reason` gives it;
+            null for `indexed`
+    ReindexKind:
+      type: string
+      description: |
+        What a reindex covers: `documents`, documents named by doc #;
+        `folder`, the documents in a folder and every folder in it, at
+        every level; `matter`, those of a matter's own folder, likewise;
+        `store`, those of a Store's folder, its matters' included,
+        likewise; `everything`, every document of the tenant
+      enum: [documents, folder, matter, store, everything]
+    ReindexScope:
+      type: object
+      description: |
+        What to reindex: `kind`, and the member for it. A member for another
+        kind is left out or null.
+
+        - `400 bad-request` for a body that isn't a JSON object, a member
+          this doesn't list, a member of the wrong type, a doc # that isn't
+          a whole number from 0 up, and, for a `kind` of the five, a
+          `targetId` with `documents` or `everything`, or `docNumbers`
+          with any other kind.
+        - `422 validation` as `POST /v1/admin/reindex` says.
+      additionalProperties: false
+      required: [kind]
+      properties:
+        kind:
+          type: string
+          description: |
+            One of `ReindexKind`'s; any other value is `422 validation`
+            (`invalid`), not `400`
+          enum: [documents, folder, matter, store, everything]
+        targetId:
+          type: [integer, 'null']
+          format: int64
+          minimum: 0
+          description: |
+            For `folder`, the folder's id, as the Workspace Editor's tree and
+            the public API's folders give it, any folder that isn't a folder
+            alias; for `matter`, the matter's id, not its folder's, as the
+            admin Matters routes and the public API's matters give it; for
+            `store`, the Store's id, which is its folder's, as
+            `GET /v1/admin/stores` gives it. None for `documents` and
+            `everything`
+        docNumbers:
+          type: [array, 'null']
+          description: |
+            For `documents`, the doc #s, as typed or pasted, 1 to 1,000
+            different ones; a number given more than once counts once. None
+            for the other kinds
+          items:
+            type: integer
+            format: int64
+            minimum: 0
+        emptyFirst:
+          type: boolean
+          description: |
+            **Empty the index first**, for `everything` only: true empties
+            the index and marks every document to be indexed as the
+            reindex's run begins; false when left out
+    ReindexPreview:
+      type: object
+      description: What a reindex of a scope would cover, if it were started now
+      additionalProperties: false
+      required: [name, count, skipped, estimateSeconds, documents, refusal]
+      properties:
+        name:
+          type: string
+          description: The name a reindex started now would be given, as `ReindexJob.name` says
+          examples: [Matter 1001.1 Charter Dispute]
+        count:
+          type: integer
+          format: int64
+          minimum: 0
+          description: |
+            How many documents it would try: the scope's live documents, less
+            those `skipped` counts
+        skipped:
+          type: integer
+          format: int64
+          minimum: 0
+          description: |
+            How many it would leave out: in a folder, matter, Store or
+            everything, the shortcuts, which LogicalDOC's Indexer indexes
+            again once the document each leads to is done; and, in any
+            scope, the documents set to Skip,
+            those archived, which LogicalDOC's Indexer leaves out too, and
+            those being changed at that moment. A reindex started at once
+            makes it its `leftOut`
+        estimateSeconds:
+          type: [integer, 'null']
+          format: int64
+          minimum: 1
+          description: |
+            About how many seconds it would take once it runs, rounded up:
+            `count` times the time each document took in the latest reindex
+            that ended `done` having tried 20 or more, its run's time over
+            its `done` and `failed`, or 1.75 seconds each while no reindex
+            has; the reindexes that would run before it not counted. Null
+            when `count` is 0
+          examples: [721]
+        documents:
+          type: [array, 'null']
+          description: |
+            For `documents`, each doc # given, in the order given, a repeat
+            left out; null for the other kinds
+          items:
+            $ref: '#/components/schemas/ReindexMatch'
+        refusal:
+          type: [string, 'null']
+          description: |
+            The sentence `POST /v1/admin/reindex` would refuse this scope
+            with now: `There's nothing here to reindex.` when `count` is 0,
+            and `This is already being reindexed.` when a reindex waiting or
+            running covers it already; null when it would start one
+          examples: [There's nothing here to reindex.]
+    ReindexMatch:
+      type: object
+      description: "A doc # given for a reindex of `documents`, and what it names"
+      additionalProperties: false
+      required: [docNumber, status, document]
+      properties:
+        docNumber:
+          type: integer
+          format: int64
+          description: "The doc #, as given"
+        status:
+          type: string
+          description: |
+            `found`, a live document the reindex would try; `left-out`, a
+            live document it would leave out, counted in `skipped`, as it's
+            set to Skip, archived or being changed at that moment;
+            `not-found`, no live document of the tenant has it, as for one
+            in the Trash
+          enum: [found, left-out, not-found]
+        document:
+          description: The document it names; null for `not-found`
+          oneOf:
+            - $ref: '#/components/schemas/IndexDocument'
+            - type: 'null'
+    ReindexJob:
+      type: object
+      description: |
+        A reindex, with its progress: `done`, `failed` and `skipped`
+        together of `total`
+      additionalProperties: false
+      required: [id, kind, targetId, name, startedBy, state, cancelling, emptyFirst, total, done, failed, skipped,
+        leftOut, created, started, ended, stalledSince, estimateSecondsLeft]
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Its id, which its paths take
+        kind:
+          $ref: '#/components/schemas/ReindexKind'
+        targetId:
+          type: [integer, 'null']
+          format: int64
+          description: |
+            The folder's, the matter's or the Store's id, as `ReindexScope`
+            took it; null for `documents` and `everything`
+        name:
+          type: string
+          description: |
+            What it covers, in English, as it was started, at most 255
+            characters: `Matter 1001.1 Charter Dispute`; `Store Client Work`;
+            `Folder Pleadings`, followed by ` in 1001.1 Charter Dispute` when
+            the folder is in a matter; `3 Documents`, or `1 Document`,
+            counting the doc #s found; `Everything`
+          examples: [Matter 1001.1 Charter Dispute, Folder Pleadings in 1001.1 Charter Dispute, 3 Documents]
+        startedBy:
+          description: |
+            Who started it, read now; when that account has been deleted, the
+            username the reindex kept, as both `username` and `name`
+          allOf:
+            - $ref: '#/components/schemas/PersonBrief'
+        state:
+          type: string
+          description: |
+            `waiting` for its turn, as one reindex runs at a time, oldest
+            first; `running`; `done`, every document tried or skipped;
+            `cancelled`. A running reindex goes on from where it was when
+            the server starts again
+          enum: [waiting, running, done, cancelled]
+        cancelling:
+          type: boolean
+          description: |
+            Whether it was asked to stop while running: it's `cancelled` once
+            the batch it's indexing ends. False in every other state
+        emptyFirst:
+          type: boolean
+          description: Whether it empties the index first, as its run begins; only ever true for `everything`
+        total:
+          type: integer
+          format: int64
+          minimum: 0
+          description: How many documents it tries, fixed as it was started, its preview's `count`
+        done:
+          type: integer
+          format: int64
+          minimum: 0
+          description: How many it has indexed
+        failed:
+          type: integer
+          format: int64
+          minimum: 0
+          description: How many it couldn't index, which joined **Couldn't Be Indexed**
+        skipped:
+          type: integer
+          format: int64
+          minimum: 0
+          description: |
+            How many it skipped at their turn, as they had gone (deleted, in
+            the Trash or destroyed), or were set to Skip, archived or being
+            changed at that moment
+        leftOut:
+          type: integer
+          format: int64
+          minimum: 0
+          description: How many it left out as it was started, as its preview's `skipped` counts them, not in `total`
+        created:
+          type: string
+          format: date-time
+          description: When it was started, which `started` follows once its turn comes
+        started:
+          type: [string, 'null']
+          format: date-time
+          description: When its run began; null while it's waiting, and for one cancelled before its turn
+        ended:
+          type: [string, 'null']
+          format: date-time
+          description: When it ended, `done` or `cancelled`; null until it has
+        stalledSince:
+          type: [string, 'null']
+          format: date-time
+          description: |
+            While it's running, since when the index couldn't be written: it
+            waits and tries again, counting nothing meanwhile. Null while it
+            can be, and in every other state
+        estimateSecondsLeft:
+          type: [integer, 'null']
+          format: int64
+          minimum: 1
+          description: |
+            About how many seconds it has left, rounded up. For `running`,
+            the documents left (`total` less `done`, `failed` and `skipped`)
+            times the time each has taken in its run so far (its run's time
+            over its `done` and `failed`) once it has tried 20 or more, and
+            as a preview would estimate them before then; for `waiting`, its
+            `total` as a preview estimates it, the reindexes ahead of it not
+            counted. Null once it has ended, while `stalledSince` is set, and
+            when nothing is left
+          examples: [360]
+    ReindexJobList:
+      description: A page of reindexes
+      allOf:
+        - $ref: '#/components/schemas/Page'
+        - properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/ReindexJob'
+      unevaluatedProperties: false
