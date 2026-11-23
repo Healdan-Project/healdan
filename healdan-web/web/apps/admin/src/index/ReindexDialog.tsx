@@ -102,9 +102,9 @@ export function ReindexDialog({ kind: opening, id, matter: matterParam, onStarte
   const { preview, current, failure: previewFailure } = useReindexPreview(scope)
 
   const fields = fieldErrors(failure)
-  // A field the server named that the choice shows beside it; the rest is said above the buttons
-  const shownField = kind === 'documents' ? 'docNumbers' : kind === 'everything' ? 'emptyFirst' : undefined
-  const fieldShown = shownField !== undefined && fields.has(shownField)
+  // The doc #s the server refused are said beside them; anything else, Empty the index first's refusal too, above the
+  // buttons, as no field's own words fit it
+  const fieldShown = kind === 'documents' && fields.has('docNumbers')
   const refusal = preview?.refusal ?? null
   const ready = scope !== undefined && current && preview !== undefined && preview.count > 0 && refusal === null
   const label = kind === 'everything' ? t('admin.reindex.startEverything') : preview !== undefined && preview.count > 0 ? plural('admin.reindex.startCount', preview.count) : t('admin.reindex.start')
@@ -165,6 +165,7 @@ export function ReindexDialog({ kind: opening, id, matter: matterParam, onStarte
                   setPickedMatter(picked)
                   change()
                 }}
+                isDisabled={busy}
               />
             )}
             {kind === 'folder' && (
@@ -189,6 +190,7 @@ export function ReindexDialog({ kind: opening, id, matter: matterParam, onStarte
                   if (matter !== null) setPickedFolder({ matterId: matter.id, folderId: picked })
                   change()
                 }}
+                isDisabled={busy}
               />
             )}
             {kind === 'documents' && (
@@ -200,7 +202,8 @@ export function ReindexDialog({ kind: opening, id, matter: matterParam, onStarte
                 }}
                 typed={typed}
                 matches={matches}
-                error={tooMany ? t('admin.reindex.tooMany') : fields.get('docNumbers')}
+                // The server's own words for the limit, which it's checked against here first
+                error={tooMany ? t('fields.too-many') : fields.get('docNumbers')}
               />
             )}
             {kind === 'store' && (
@@ -221,7 +224,6 @@ export function ReindexDialog({ kind: opening, id, matter: matterParam, onStarte
                   setEmptyFirst(next)
                   change()
                 }}
-                error={fields.get('emptyFirst')}
               />
             )}
           </fieldset>

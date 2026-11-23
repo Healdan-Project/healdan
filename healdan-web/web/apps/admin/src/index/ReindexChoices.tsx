@@ -43,13 +43,15 @@ export interface MatterFinderProps {
   chosen: MatterChoice | null
   onPick: (matter: MatterChoice) => void
   inputRef?: Ref<HTMLInputElement>
+  /** Nothing can be typed or picked, as while the start is on its way */
+  isDisabled?: boolean
 }
 
 /**
  * Matter, and Folder's first step (spec 8.9, P6-R18): a search by number, name or client that starts from Recent Matters,
  * the words marked in each row, with its client and, where the row counts them, its documents.
  */
-export function MatterFinder({ initial, search, chosen, onPick, inputRef }: MatterFinderProps) {
+export function MatterFinder({ initial, search, chosen, onPick, inputRef, isDisabled = false }: MatterFinderProps) {
   const rows = chosen === null || initial.some((one) => one.id === chosen.id) ? initial : [chosen, ...initial]
   return (
     <SearchPicker<MatterChoice>
@@ -77,6 +79,9 @@ export function MatterFinder({ initial, search, chosen, onPick, inputRef }: Matt
       onPick={onPick}
       selectedId={chosen === null ? undefined : String(chosen.id)}
       inputRef={inputRef}
+      // One character is enough, as a matter's number can be one digit, as MatterPicker takes it
+      minLength={1}
+      isDisabled={isDisabled}
     />
   )
 }
@@ -98,13 +103,15 @@ function folderRows(root: WorkspaceNode): FolderRow[] {
 
 export interface FolderChoiceProps {
   /** Finding the matter, while none is chosen */
-  finder: Omit<MatterFinderProps, 'chosen' | 'inputRef'>
+  finder: Omit<MatterFinderProps, 'chosen' | 'inputRef' | 'isDisabled'>
   matter: MatterChoice | null
   /** Back to the search, for another matter */
   onClearMatter: () => void
   tree: UseQueryResult<A['WorkspaceNode']>
   folderId: number | undefined
   onPickFolder: (folderId: number) => void
+  /** Nothing can be typed or picked, as while the start is on its way */
+  isDisabled?: boolean
 }
 
 /**
@@ -112,7 +119,7 @@ export interface FolderChoiceProps {
  * filtered by words, with no count of their own: the preview counts the one picked, every folder inside it included. The
  * focus follows the step: to the folders once the matter is chosen, and back to the search when another is wanted.
  */
-export function FolderChoice({ finder, matter, onClearMatter, tree, folderId, onPickFolder }: FolderChoiceProps) {
+export function FolderChoice({ finder, matter, onClearMatter, tree, folderId, onPickFolder, isDisabled = false }: FolderChoiceProps) {
   const finderInput = useRef<HTMLInputElement>(null)
   const filterInput = useRef<HTMLInputElement>(null)
   const otherMatter = useRef<HTMLButtonElement>(null)
@@ -140,6 +147,7 @@ export function FolderChoice({ finder, matter, onClearMatter, tree, folderId, on
         {...finder}
         chosen={null}
         inputRef={finderInput}
+        isDisabled={isDisabled}
         onPick={(picked) => {
           stepped.current = 'matter'
           finder.onPick(picked)
@@ -152,11 +160,12 @@ export function FolderChoice({ finder, matter, onClearMatter, tree, folderId, on
       <div className={styles.chosen}>
         <Icon name="briefcase" kind="matter" />
         <span className={styles.chosenName}>
-          {t('admin.reindex.folderMatter')}: {matterLabel(matter)}
+          {t('admin.reindex.folderMatter', { name: matterLabel(matter) })}
         </span>
         <Button
           ref={otherMatter}
           variant="quiet"
+          isDisabled={isDisabled}
           aria-label={t('admin.reindex.otherMatter')}
           onPress={() => {
             stepped.current = 'cleared'
@@ -194,6 +203,9 @@ export function FolderChoice({ finder, matter, onClearMatter, tree, folderId, on
             onPick={(row) => onPickFolder(row.node.id)}
             selectedId={folderId === undefined ? undefined : String(folderId)}
             inputRef={filterInput}
+            // The filter is the folders' own, so one letter is enough
+            minLength={1}
+            isDisabled={isDisabled}
           />
         ))}
     </div>
@@ -279,14 +291,13 @@ export interface EverythingChoiceProps {
   line: string | undefined
   emptyFirst: boolean
   onEmptyFirst: (emptyFirst: boolean) => void
-  error?: string
 }
 
 /**
  * Everything (spec 8.9): every document, how long they take, and Empty the index first, unticked, under its warning: for
  * a damaged index only, as search misses documents until the run ends.
  */
-export function EverythingChoice({ line, emptyFirst, onEmptyFirst, error }: EverythingChoiceProps) {
+export function EverythingChoice({ line, emptyFirst, onEmptyFirst }: EverythingChoiceProps) {
   return (
     <div className={styles.pane}>
       {/* There before it has words, so a screen reader says them as they come */}
@@ -299,7 +310,7 @@ export function EverythingChoice({ line, emptyFirst, onEmptyFirst, error }: Ever
           {
             key: 'empty-first',
             sentence: t('admin.reindex.emptyFirstWarning'),
-            action: <CheckField label={t('admin.reindex.emptyFirst')} checked={emptyFirst} onChange={onEmptyFirst} error={error} />,
+            action: <CheckField label={t('admin.reindex.emptyFirst')} checked={emptyFirst} onChange={onEmptyFirst} />,
           },
         ]}
       />

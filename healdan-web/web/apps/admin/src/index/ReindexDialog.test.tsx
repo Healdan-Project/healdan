@@ -328,6 +328,27 @@ describe('Reindex', () => {
     expect(onClose).not.toHaveBeenCalled()
   })
 
+  it("says a refusal of the doc #s' limit beside them, and Empty the index first's above the buttons, in the app's words", async () => {
+    const validation = (field: string, code: string) => new ApiError(422, 'validation', 'Server words.', { code: 'validation', fields: [{ field, code, detail: 'Server words.' }] })
+    const documents = renderDialog({ kind: 'documents' }, { 'POST /v1/admin/reindex': validation('docNumbers', 'too-many') })
+    await userEvent.type(within(dialog()).getByRole('textbox', { name: 'Doc #s' }), '10412')
+    await pause()
+    await waitFor(() => expect(isDisabled(start())).toBe(false))
+    await userEvent.click(start())
+    expect(await within(dialog()).findByText('Reindex at most 1,000 documents at a time.')).toBeTruthy()
+    expect(within(dialog()).queryByRole('alert')).toBeNull()
+    documents.view.unmount()
+
+    renderDialog({ kind: 'everything' }, { 'POST /v1/admin/reindex': validation('emptyFirst', 'invalid') })
+    await waitFor(() => expect(isDisabled(start())).toBe(false))
+    await userEvent.click(start())
+    const alert = await within(dialog()).findByRole('alert')
+    expect(alert.textContent).not.toBe('')
+    expect(alert.textContent).not.toContain('Server words.')
+    expect(within(dialog()).queryByText("That name isn't allowed.")).toBeNull()
+    expect(within(dialog()).getByRole('checkbox', { name: 'Empty the index first' }).getAttribute('aria-invalid')).toBeNull()
+  })
+
   it("says so when the preview can't find the target any more", async () => {
     renderDialog({ kind: 'matter', id: 11 }, { 'POST /v1/admin/reindex/preview': problem(404, 'not-found') })
     const alert = await within(dialog()).findByRole('alert')
@@ -347,11 +368,47 @@ describe('Reindex', () => {
     await userEvent.click(cancel)
     await userEvent.keyboard('{Escape}')
     expect(onClose).not.toHaveBeenCalled()
-    // Its choices are held too
+    // Its choices are held too: the segments, the search, and its rows, a click on another leaving the matter chosen
     expect(choice('Store').matches(':disabled')).toBe(true)
-    await act(async () => slow.answer(reindexJobOf()))
-    expect(onStarted).toHaveBeenCalledWith(reindexJobOf())
-    expect(onClose).toHaveBeenCalledTimes(1)
+    expect((within(dialog()).getByRole('textbox', { name: 'Matter' }) as HTMLInputElement).disabled).toBe(true)
+    await userEvent.click(option(/^1003\.1/))
+    const chosen = ['1001.1 – Charter Dispute – MV Northern StarSaltmarsh Shipping Ltd']
+    expect(selected()).toEqual(chosen)
+    // Refused, it says so beside the choice it was about
+    await act(async () => slow.refuse(problem(409, 'refused', 'This is already being reindexed.')))
+    expect((await within(dialog()).findByRole('alert')).textContent).toBe('This is already being reindexed.')
+    expect(selected()).toEqual(chosen)
+    expect(onStarted).not.toHaveBeenCalled()
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it("holds Folder's rows too while the start is on its way", async () => {
+    const slow = slowAnswer<A['ReindexJob']>()
+    const { api } = renderDialog({ kind: 'folder', id: 114, matter: 11 }, { 'POST /v1/admin/reindex': () => slow.answered })
+    await waitFor(() => expect(isDisabled(start())).toBe(false))
+    await userEvent.click(start())
+    await waitFor(() => expect(api.callsTo('POST /v1/admin/reindex')).toHaveLength(1))
+    await userEvent.click(option('Evidence'))
+    expect(selected()).toEqual(['Pleadings'])
+    expect(within(dialog()).getByRole('button', { name: 'Choose Another Matter' }).matches(':disabled')).toBe(true)
+    await act(async () => slow.answer(reindexJobOf({ kind: 'folder', targetId: 114 })))
+    expect(api.callsTo('POST /v1/admin/reindex').map((call) => call.body)).toEqual([{ kind: 'folder', targetId: 114 }])
+  })
+
+  it('searches matters from one character, as a number can be one digit, and filters folders by one letter', async () => {
+    const { api } = renderDialog({ kind: 'matter' })
+    await userEvent.type(within(dialog()).getByRole('textbox', { name: 'Matter' }), '9')
+    await pause()
+    await waitFor(() => expect(api.callsTo('GET /v1/admin/matters').map((call) => call.query)).toEqual([{ q: '9', limit: 20 }]))
+    await waitFor(() => expect(options().map((one) => one.textContent)).toEqual(['998.1 – Firm PoliciesAshcombe Reeve LLP86 documents', '998.2 – IT and SystemsAshcombe Reeve LLP41 documents']))
+
+    // Folder starts afresh from Recent Matters
+    await userEvent.click(choice('Folder'))
+    await waitFor(() => expect(options()).toHaveLength(3))
+    await userEvent.click(option(/^1001\.1/))
+    await userEvent.type(await within(dialog()).findByRole('textbox', { name: 'Folder' }), 'e')
+    await pause()
+    expect(options().map((one) => one.textContent)).toEqual(['Correspondence', 'Evidence', 'Pleadings', 'Privileged', "Counsel's Advicein Privileged"])
   })
 
   it('is used by keyboard alone: choose, search, pick and start', async () => {

@@ -40,12 +40,16 @@ export interface SearchPickerProps<T> {
   leaveOut?: (item: T) => boolean
   /** The field itself, for moving the focus to it, as when the last row its list added is removed */
   inputRef?: Ref<HTMLInputElement>
+  /** The fewest characters a search asks for: SEARCH_MIN unless said, 1 where one is enough, as a one-digit number */
+  minLength?: number
+  /** Nothing can be typed or picked, as while the form it's in is on its way: the field and every row are greyed out */
+  isDisabled?: boolean
 }
 
 /** What the text asks the server to find, or nothing while it is too short */
-function searchable(text: string): string | undefined {
+function searchable(text: string, min: number): string | undefined {
   const q = text.trim().slice(0, SEARCH_MAX).trim()
-  return q.length >= SEARCH_MIN ? q : undefined
+  return q.length >= Math.max(1, min) ? q : undefined
 }
 
 /** The value once it has stayed the same for `delay` milliseconds */
@@ -138,9 +142,9 @@ type Answer<T> = { q: string; items: T[] } | { q: string; failed: true }
  * field: the arrow keys move through the rows, and Enter picks one (React Aria's Autocomplete). An answer to an older
  * question is dropped, and the last answer stays until the next, so the list doesn't blink while typing.
  */
-export function SearchPicker<T>({ label, placeholder, hint, initialHeading, initial, search, id, render, onPick, selectedId, leaveOut, inputRef }: SearchPickerProps<T>) {
+export function SearchPicker<T>({ label, placeholder, hint, initialHeading, initial, search, id, render, onPick, selectedId, leaveOut, inputRef, minLength = SEARCH_MIN, isDisabled = false }: SearchPickerProps<T>) {
   const [text, setText] = useState('')
-  const wanted = searchable(text)
+  const wanted = searchable(text, minLength)
   const settled = useDebounced(wanted, SEARCH_DELAY_MS)
   const [answer, setAnswer] = useState<Answer<T>>()
   const scroller = useRef<HTMLDivElement>(null)
@@ -175,7 +179,7 @@ export function SearchPicker<T>({ label, placeholder, hint, initialHeading, init
   useStopWhileScrolling(scroller, rows.length > 0, `${labelId} ${headingId}`)
 
   function choose(keys: Selection) {
-    if (keys === 'all') return
+    if (isDisabled || keys === 'all') return
     const [key] = [...keys]
     const item = rows.find((one) => id(one) === String(key))
     if (item) onPick(item)
@@ -184,7 +188,7 @@ export function SearchPicker<T>({ label, placeholder, hint, initialHeading, init
   return (
     <div className={styles.picker}>
       <Autocomplete inputValue={text} onInputChange={setText} disableAutoFocusFirst>
-        <AriaTextField className={fieldStyles.field}>
+        <AriaTextField className={fieldStyles.field} isDisabled={isDisabled}>
           {/* Its id names the rows' box too, while that's a stop */}
           <Label id={labelId} className={fieldStyles.label}>
             {label}
@@ -229,7 +233,7 @@ export function SearchPicker<T>({ label, placeholder, hint, initialHeading, init
               {(item) => {
                 const content = render(item, query)
                 return (
-                  <ListBoxItem id={id(item)} textValue={textOf(content).trim() || id(item)} className={styles.option}>
+                  <ListBoxItem id={id(item)} textValue={textOf(content).trim() || id(item)} className={styles.option} isDisabled={isDisabled}>
                     {({ isSelected }) => (
                       <>
                         {content}

@@ -1365,7 +1365,7 @@ export const adminEnUS = {
   'admin.reindex.matterHint': 'Search by {matterLower} number, name or client.',
   'admin.reindex.recentMatters': 'Recent {matters}',
   // Folder, once its matter is chosen: the matter, the way back to the search, and its folders
-  'admin.reindex.folderMatter': '{matter}',
+  'admin.reindex.folderMatter': '{matter}: {name}',
   'admin.reindex.otherMatter': 'Choose Another {matter}',
   'admin.reindex.folder': 'Folder',
   'admin.reindex.filterFolders': "Filter this {matterLower}'s folders",
@@ -1381,7 +1381,6 @@ export const adminEnUS = {
   'admin.reindex.matches': 'Doc #s Given',
   'admin.reindex.noSuchDocument': 'No such document',
   'admin.reindex.leftOutDocument': "Left out: it's set to Skip, archived or being changed",
-  'admin.reindex.tooMany': 'Reindex at most 1,000 documents at a time.',
   // Store: a plain list, each with its documents
   'admin.reindex.store': 'Store',
   'admin.reindex.notCounted': 'Not counted yet',
@@ -1391,8 +1390,6 @@ export const adminEnUS = {
   'admin.reindex.emptyFirstWarning': 'Empty the index first is for a damaged index. Search then misses documents until the run ends.',
   'admin.reindex.estimate.short': 'Under a minute for {documents}. Search keeps working meanwhile.',
   'admin.reindex.everything.short': "All {documents}, in under a minute. Search keeps finding them while they're replaced.",
-  // A part of the dialog whose list couldn't be read
-  'admin.reindex.unread': "This couldn't be read.",
   // The button, until the preview gives its count, and for Everything
   'admin.reindex.start': 'Reindex',
   'admin.reindex.startEverything': 'Reindex Everything',
