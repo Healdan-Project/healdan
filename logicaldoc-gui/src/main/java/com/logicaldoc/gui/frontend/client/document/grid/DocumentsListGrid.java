@@ -118,8 +118,6 @@ public class DocumentsListGrid extends RefreshableListGrid implements DocumentsG
 
     private static final String SHOWNDOCUMENTS = "showndocuments";
 
-    private static final String HIT_KEY = "hitKey";
-
     protected Cursor cursor = null;
 
     protected GUIFolder folder = null;
@@ -138,7 +136,7 @@ public class DocumentsListGrid extends RefreshableListGrid implements DocumentsG
      * A cache of summaries, it seems that a bug in SmartGWT deletes the content
      * of the summary field when the user expands the row the second time
      */
-    protected Map<String, String> summaries = new HashMap<>();
+    protected Map<Long, String> summaries = new HashMap<>();
 
     private DocumentsListGrid(GUIFolder folder, List<String> extendedAttributes) {
         this.folder = folder;
@@ -369,7 +367,7 @@ public class DocumentsListGrid extends RefreshableListGrid implements DocumentsG
                 int scoreValue = rec.getAttributeAsInt("score");
                 int red = 100 - scoreValue > 0 ? 100 - scoreValue : 0;
                 return "<img src='" + Util.imageUrl("dotblue.gif") + "' style='width: " + scoreValue
-                        + "px; height: 8px' title='" + scoreValue + "%'/>" + "<img src='" + Util.imageUrl("dotgrey.gif")
+                        + "px; height: 8px' title='" + scoreValue + "%'/><img src='" + Util.imageUrl("dotgrey.gif")
                         + "' style='width: " + red + "px; height: 8px' title='" + scoreValue + "%'/>";
             } catch (Exception e) {
                 return "";
@@ -757,8 +755,10 @@ public class DocumentsListGrid extends RefreshableListGrid implements DocumentsG
 
     @Override
     protected Canvas getExpansionComponent(final ListGridRecord rec) {
-        String summary = summaries.get(rec.getAttribute(HIT_KEY));
-        return new HTMLFlow("<span class='details'>" + (summary != null ? summary : "") + "</span>");
+        return new HTMLFlow("<span class='details'>"
+                + (summaries.get(rec.getAttributeAsLong("id")) != null ? summaries.get(rec.getAttributeAsLong("id"))
+                        : "")
+                + "</span>");
     }
 
     @Override
@@ -766,14 +766,11 @@ public class DocumentsListGrid extends RefreshableListGrid implements DocumentsG
         List<ListGridRecord> records = new ArrayList<>();
         summaries.clear();
 
-        int index = 0;
         for (GUIDocument document : documents) {
             ListGridRecord rec = DocumentGridUtil.fromDocument(document);
-            String key = document.getId() + "-" + index++;
-            rec.setAttribute(HIT_KEY, key);
             records.add(rec);
             if (document.getSummary() != null && !document.getSummary().trim().isEmpty())
-                summaries.put(key, document.getSummary());
+                summaries.put(rec.getAttributeAsLong("id"), document.getSummary());
         }
 
         setRecords(records.toArray(new ListGridRecord[0]));
