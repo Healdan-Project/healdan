@@ -35,6 +35,7 @@ import com.logicaldoc.core.document.IndexingStatus;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.core.parser.ParsingException;
+import com.logicaldoc.core.searchengine.IndexException;
 import com.logicaldoc.core.searchengine.SearchEngine;
 import com.logicaldoc.core.security.Tenant;
 import com.logicaldoc.core.security.user.User;
@@ -88,6 +89,7 @@ public class IndexReviewTest extends AbstractHealdanTestCase {
 	@After
 	public void putBack() {
 		review.indexing = docId -> DocumentManager.get().index(docId, null, null);
+		review.index = IndexFaults.REAL;
 	}
 
 	@Override
@@ -234,6 +236,68 @@ public class IndexReviewTest extends AbstractHealdanTestCase {
 			else
 				config.setProperty(key, before);
 		}
+	}
+
+	// The search index itself can't be written: not the document's failure, so nothing is written, set to Skip,
+	// counted or recorded, and Try Again is refused; once the index answers, the same failure is the document's own
+	// (rulings P6-R26 and P6-R29)
+	@Test
+	public void testTryAgainWhileTheIndexCantBeWritten() throws Exception {
+		Document document = failed("locked.txt");
+		long changes = IndexCounts.get().changes();
+		int rows = jdbc.queryForObject("select count(*) from ld_history where ld_docid = ?", Integer.class,
+				document.getId());
+		String key = Tenant.DEFAULT_NAME + ".index.skiponerror";
+		ContextProperties config = Context.get().getConfig();
+		String before = config.getProperty(key);
+		config.setProperty(key, "true");
+		// As CE's index throws it, the engine's failure wrapped by its parse
+		review.indexing = docId -> {
+			throw new ParsingException("The index can't be written", new IndexException("The index is locked"));
+		};
+		IndexTestHooks.indexDown();
+		try {
+			assertEquals(IndexReview.INDEX_UNWRITABLE, assertThrows(HealdanRuleException.class,
+					() -> review.retry(document.getId(), boss, null)).getMessage());
+
+			assertEquals(rows, (int) jdbc.queryForObject("select count(*) from ld_history where ld_docid = ?",
+					Integer.class, document.getId()));
+			assertEquals(IndexingStatus.TO_INDEX.ordinal(), indexed(document));
+			assertEquals("Timed out", IndexCounts.get().failure(document.getId(), Tenant.DEFAULT_ID).reason());
+			assertEquals(changes, IndexCounts.get().changes());
+			assertEquals(List.of(), AdminRecord.eventsSince(recorded));
+
+			review.index = IndexFaults.REAL;
+			IndexReview.Tried tried = review.retry(document.getId(), boss, null);
+			assertEquals(IndexReview.FAILED, tried.outcome());
+			assertEquals("The index can't be written", tried.reason());
+			assertEquals(IndexingStatus.SKIP.ordinal(), indexed(document));
+			assertEquals(1, AdminRecord.eventsSince(recorded).size());
+		} finally {
+			if (before == null)
+				config.remove(key);
+			else
+				config.setProperty(key, before);
+		}
+	}
+
+	// Any other failure than a parse, an index or a storage fault is the document's own, answered failed, its reason
+	// the failure's class when it has no message, as the reindex worker gives it (rulings P6-R29 and P6-R30)
+	@Test
+	public void testTryAgainThatFailsOtherwiseIsTheDocumentsFailure() throws Exception {
+		Document document = failed("stale.txt");
+		review.indexing = docId -> {
+			throw new IllegalStateException();
+		};
+
+		IndexReview.Tried tried = review.retry(document.getId(), boss, null);
+
+		assertEquals(IndexReview.FAILED, tried.outcome());
+		assertEquals("IllegalStateException", tried.reason());
+		assertEquals("IllegalStateException", IndexCounts.get().failure(document.getId(), Tenant.DEFAULT_ID).reason());
+		assertEquals(List.of(boss.getId() + " boss null SEARCH_INDEX index.retried document " + document.getId()
+				+ " # " + document.getCustomId() + " stale.txt {\"outcome\":{\"before\":null,\"after\":\"failed\"}}"),
+				AdminRecord.eventsSince(recorded));
 	}
 
 	@Test

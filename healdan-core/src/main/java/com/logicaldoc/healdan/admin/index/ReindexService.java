@@ -272,7 +272,7 @@ public class ReindexService {
 		int from = Math.max(0, offset);
 		List<ReindexJob> page = limit > 0 ? jobs.page(tenantId, activeOnly, from, limit) : List.of();
 		Double rate = jobs.secondsPerDocument(RATE_FROM);
-		return new Page<>(page.stream().map(job -> withEstimate(job, rate)).toList(), from, limit,
+		return new Page<>(page.stream().map(job -> withEstimate(failing(job), rate)).toList(), from, limit,
 				jobs.count(tenantId, activeOnly));
 	}
 
@@ -294,18 +294,24 @@ public class ReindexService {
 	}
 
 	private ReindexJob withEstimate(ReindexJob job) {
-		return job.active() ? withEstimate(job, jobs.secondsPerDocument(RATE_FROM)) : job;
+		return job.active() ? withEstimate(failing(job), jobs.secondsPerDocument(RATE_FROM)) : job;
+	}
+
+	/** @return a running job with since when the worker has failed at each try, as the worker keeps it */
+	private ReindexJob failing(ReindexJob job) {
+		return job.state() == State.RUNNING ? job.withFailingSince(worker.failingSince(job.id())) : job;
 	}
 
 	/**
 	 * @param rate {@link #estimateSeconds}' rate
 	 * @return the job with about how many seconds it has left: for one waiting, its total as a preview estimates it;
 	 *         for one running, what it has left at the rate of its own run once it has tried {@value #RATE_FROM}, as
-	 *         a preview estimates it before then; none once it has ended, while it's stalled, or when nothing is left
+	 *         a preview estimates it before then; none once it has ended, while it's stalled or failing, or when
+	 *         nothing is left
 	 */
 	static ReindexJob withEstimate(ReindexJob job, Double rate) {
 		long left = job.left();
-		if (!job.active() || job.stalledSince() != null || left == 0)
+		if (!job.active() || job.stalledSince() != null || job.failingSince() != null || left == 0)
 			return job.withEstimate(null);
 		long tried = job.done() + job.failed();
 		if (job.state() == State.RUNNING && job.started() != null && tried >= RATE_FROM) {

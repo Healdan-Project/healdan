@@ -46,11 +46,11 @@ import jakarta.ws.rs.core.UriInfo;
  * {@code ReindexWorker}, which runs them one at a time.
  * <p>
  * A scope is checked in the contract's order: its shape ({@code 400}: a member of the wrong type, a doc # that isn't a
- * whole number from 0 up, more than {@value #MOST_NUMBERS} numbers, or a member for another kind); a {@code kind}
- * that's missing or isn't one of the five ({@code 422}); then the service's checks, a member its kind needs
- * ({@code 422}), its target ({@code 404}), {@code emptyFirst} off Everything ({@code 422}), and, for a start, an empty
- * set or a reindex of the same target already waiting or running ({@code 409 refused}, with its sentence), which a
- * preview says as its {@code refusal}.
+ * whole number from 0 up, or more than {@value #MOST_NUMBERS} numbers); a {@code kind} that's missing or isn't one of
+ * the five ({@code 422}); for a {@code kind} of the five, a member for another kind ({@code 400}); then the service's
+ * checks, a member its kind needs ({@code 422}), its target ({@code 404}), {@code emptyFirst} off Everything
+ * ({@code 422}), and, for a start, an empty set or a reindex of the same target already waiting or running
+ * ({@code 409 refused}, with its sentence), which a preview says as its {@code refusal}.
  */
 @Component
 @Path("/v1/admin/reindex")

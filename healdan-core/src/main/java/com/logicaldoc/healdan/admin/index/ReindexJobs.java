@@ -56,8 +56,8 @@ public class ReindexJobs {
 
 	private static final String COLUMNS = """
 			select j.hd_id, j.hd_kind, j.hd_targetid, j.hd_name, j.hd_userid, j.hd_username, j.hd_state,
-			       j.hd_emptyfirst, j.hd_total, j.hd_done, j.hd_failed, j.hd_skipped, j.hd_leftout, j.hd_created,
-			       j.hd_started, j.hd_ended, j.hd_stalled, j.hd_cancel,
+			       j.hd_emptyfirst, j.hd_total, j.hd_done, j.hd_failed, j.hd_skipped, j.hd_unreachable, j.hd_leftout,
+			       j.hd_created, j.hd_started, j.hd_ended, j.hd_stalled, j.hd_cancel,
 			       u.ld_id as accountid, u.ld_firstname, u.ld_name as lastname, u.ld_username as account
 			  from hd_reindex_job j
 			  left join ld_user u on u.ld_id = j.hd_userid and u.ld_deleted = 0""";
@@ -97,8 +97,8 @@ public class ReindexJobs {
 		return jdbc.query("""
 				insert into hd_reindex_job (hd_tenantid, hd_kind, hd_targetid, hd_name, hd_userid, hd_username,
 				       hd_state, hd_cancel, hd_emptyfirst, hd_emptied, hd_total, hd_done, hd_failed, hd_skipped,
-				       hd_leftout, hd_position, hd_created)
-				values (?, ?, ?, ?, ?, ?, ?, 0, ?, 0, 0, 0, 0, 0, 0, 0, ?)
+				       hd_unreachable, hd_leftout, hd_position, hd_created)
+				values (?, ?, ?, ?, ?, ?, ?, 0, ?, 0, 0, 0, 0, 0, 0, 0, 0, ?)
 				returning hd_id""",
 				bind(tenantId, kind.name(), targetId != null ? targetId : NULL_BIGINT, StorableText.cut(name, TEXT_LIMIT),
 						actor.getId(), StorableText.cut(actor.getUsername(), TEXT_LIMIT), State.WAITING.name(),
@@ -250,13 +250,24 @@ public class ReindexJobs {
 	/**
 	 * Saves a batch's counts and the job's position, and clears its stall: a running job's, or one cancelled while
 	 * the batch was on its way.
+	 *
+	 * @param unreachable those of {@code skipped} whose storage couldn't be reached
 	 */
-	void saveBatch(long jobId, long done, long failed, long skipped, long position) {
+	void saveBatch(long jobId, long done, long failed, long skipped, long unreachable, long position) {
 		jdbc.update("""
 				update hd_reindex_job
 				   set hd_done = hd_done + ?, hd_failed = hd_failed + ?, hd_skipped = hd_skipped + ?,
-				       hd_position = greatest(hd_position, ?), hd_stalled = null
-				 where hd_id = ?""", done, failed, skipped, position, jobId);
+				       hd_unreachable = hd_unreachable + ?, hd_position = greatest(hd_position, ?), hd_stalled = null
+				 where hd_id = ?""", done, failed, skipped, unreachable, position, jobId);
+	}
+
+	/**
+	 * @return the job's tenant; null if there's no such job
+	 */
+	Long tenant(long jobId) {
+		List<Long> tenant = jdbc.queryForList("select hd_tenantid from hd_reindex_job where hd_id = ?", Long.class,
+				jobId);
+		return tenant.isEmpty() ? null : tenant.get(0);
 	}
 
 	/** The search index can't be written: the job waits, since the first time that was so */
@@ -326,9 +337,9 @@ public class ReindexJobs {
 				noTarget ? null : targetId, rs.getString("hd_name"), rs.getLong("hd_userid"), username, name,
 				state, state == State.RUNNING && rs.getInt("hd_cancel") == 1, rs.getInt("hd_emptyfirst") == 1,
 				rs.getLong("hd_total"),
-				rs.getLong("hd_done"), rs.getLong("hd_failed"), rs.getLong("hd_skipped"), rs.getLong("hd_leftout"),
-				instant(rs, "hd_created"), instant(rs, "hd_started"), instant(rs, "hd_ended"),
-				instant(rs, "hd_stalled"), null);
+				rs.getLong("hd_done"), rs.getLong("hd_failed"), rs.getLong("hd_skipped"), rs.getLong("hd_unreachable"),
+				rs.getLong("hd_leftout"), instant(rs, "hd_created"), instant(rs, "hd_started"), instant(rs, "hd_ended"),
+				instant(rs, "hd_stalled"), null, null);
 	}
 
 	private static Instant instant(ResultSet rs, String column) throws SQLException {

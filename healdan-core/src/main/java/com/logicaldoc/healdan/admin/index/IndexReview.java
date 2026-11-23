@@ -54,6 +54,9 @@ public class IndexReview {
 	/** The refusal of a document that isn't one that couldn't be indexed */
 	public static final String NOT_FAILED = "This document is no longer waiting after an error.";
 
+	/** The refusal of Try Again while the search index itself can't be written (ruling P6-R29) */
+	public static final String INDEX_UNWRITABLE = "The search index can't be written just now. Try again later.";
+
 	/** The action Try Again records */
 	public static final String RETRIED = "index.retried";
 
@@ -79,6 +82,9 @@ public class IndexReview {
 
 	/** Indexes a document through CE's index, which then writes no event of its own; a seam for tests */
 	volatile Indexing indexing = docId -> DocumentManager.get().index(docId, null, null);
+
+	/** The search index, asked whether it answers after an index fault; tests set it and put it back */
+	volatile IndexFaults.Index index = IndexFaults.REAL;
 
 	/** Indexes a document */
 	@FunctionalInterface
@@ -138,10 +144,12 @@ public class IndexReview {
 	 * {@code DocumentManager.index}, and writes the event CE's Indexer writes ({@link IndexEventRows}),
 	 * {@code event.indexed} or {@code event.indexed.error} with the error's message, as the actor, with the session
 	 * when there is one, and, like CE, sets the document to Skip after its error where {@code index.skiponerror} says
-	 * so; the outcome is answered either way (ruling P6-R24). Once the index has been asked, the counts move on and
-	 * the change is recorded even if writing the row then fails. A file whose storage can't be reached is neither
-	 * (ruling P6-R23): nothing is written, counted or recorded, and the outage is thrown, which the API answers
-	 * {@code 503}.
+	 * so; the outcome is answered either way (ruling P6-R24), and any failure but the two below is the document's
+	 * own (ruling P6-R29). Once the index has been asked, the counts move on and the change is recorded even if
+	 * writing the row then fails. A file whose storage can't be reached is neither (ruling P6-R23): nothing is
+	 * written, counted or recorded, and the outage is thrown, which the API answers {@code 503}. Nor is a failure an
+	 * index that can't be written gives, when the index is then asked and doesn't answer (rulings P6-R26 and P6-R29):
+	 * nothing is written, set to Skip, counted or recorded, and it's refused, {@link #INDEX_UNWRITABLE}.
 	 * <p>
 	 * CE's index reads the file inside itself, and when it's given an event it writes the error's row before it
 	 * throws, so it's given none, and the row is written here once the failure is known to be the document's own.
@@ -151,8 +159,8 @@ public class IndexReview {
 	 * @param session the actor's session; null for none
 	 * @return what it did
 	 * @throws PersistenceException {@link #ONLY_ADMINS} for anyone but an administrator, before anything else, and
-	 *         {@link #NOT_FAILED} for a document that isn't a live one of the actor's tenant that couldn't be indexed;
-	 *         any other failure of the index's, such as the document's row not being read, as it is
+	 *         {@link #NOT_FAILED} for a document that isn't a live one of the actor's tenant that couldn't be indexed,
+	 *         and {@link #INDEX_UNWRITABLE} while the search index can't be written
 	 * @throws UncheckedIOException with the {@link StorageUnreachableException} when the file's storage can't be
 	 *         reached
 	 */
@@ -165,15 +173,19 @@ public class IndexReview {
 		try {
 			try {
 				indexing.index(docId);
-			} catch (ParsingException e) {
+			} catch (VirtualMachineError e) {
+				throw e;
+			} catch (Throwable e) {
 				StorageUnreachableException outage = StorageUnreachableException.in(e);
 				if (outage != null)
 					throw new UncheckedIOException(outage);
-				// The document's own failure, the index's included, which CE wraps so. Its message can name the file,
-				// so it isn't logged
+				if (IndexFaults.indexFault(e) && !IndexFaults.answers(index))
+					throw new HealdanRuleException(INDEX_UNWRITABLE);
+				// The document's own failure, whatever it is. Its message can name the file, so it isn't logged
 				log.debug("Document {} couldn't be indexed again: {}", docId, e.getClass().getName());
-				tried = new Tried(FAILED, e.getMessage());
-				IndexEventRows.failed(docId, actor, e.getMessage(), sessionId);
+				String reason = IndexFaults.reason(e);
+				tried = new Tried(FAILED, reason);
+				IndexEventRows.failed(docId, actor, reason, sessionId);
 				// As CE's index does after the error's event, where the tenant says so
 				if (IndexSettings.skipOnError(actor.getTenantId()) && counts.skip(docId, actor.getTenantId()))
 					evictor.evictDocuments(List.of(docId));
