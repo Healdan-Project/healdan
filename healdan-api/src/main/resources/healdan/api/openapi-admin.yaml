@@ -5041,12 +5041,15 @@ paths:
       description: |
         The Search Index's heading (Admin app spec section 8.9): how many
         documents are indexed, waiting and couldn't be indexed, as the
-        Search Index tag counts them, worked out at the request, never
-        taken from the Dashboard's copy; how many entries the index holds
-        and how big its folder is, where those can be read; its health, as
-        the Dashboard's Search Index tile works it out; and LogicalDOC's
-        Indexer, with what **Run Indexer Now** would do. A reindex's
-        progress is `GET /v1/admin/reindex`'s, with `active=true`.
+        Search Index tag counts them, never taken from the Dashboard's copy:
+        the server keeps one count for up to 10 seconds, which this and both
+        lists' totals share, and counts again at once after **Try Again**,
+        **Skip**, a reindex's end or a waiting reindex's cancel; how many
+        entries the index holds and how big its folder is, where those can
+        be read; its health, as the Dashboard's Search Index tile works it
+        out; and LogicalDOC's Indexer, with what **Run Indexer Now** would
+        do. A reindex's progress is `GET /v1/admin/reindex`'s, with
+        `active=true`.
       tags: [Search Index]
       responses:
         '200':
@@ -5071,7 +5074,7 @@ paths:
         tag defines it, the latest error first, one with no time last, then
         by the document's id, the highest first. A page of `limit` from
         `offset`, with the total, which is `GET /v1/admin/search-index`'s
-        `failed` read again.
+        `failed`, from the same count.
 
         LogicalDOC's Indexer tries each of them again on its schedule, until
         one is indexed or set to Skip. **Try Again** indexes one now, and
@@ -5109,7 +5112,7 @@ paths:
         lowest first. That is the order they were filed in, not the order
         the Indexer takes them in, which isn't fixed. A page of `limit` from
         `offset`, with the total, which is `GET /v1/admin/search-index`'s
-        `waiting` read again.
+        `waiting`, from the same count.
 
         A negative `offset` or a `limit` outside 1 to 200 is
         `400 bad-request`.
@@ -5221,8 +5224,9 @@ paths:
       description: |
         **Try Again** (Admin app spec sections 8.9 and 9.6): indexes the
         document now, while the request waits, as LogicalDOC's Indexer would,
-        and answers how that went, `200` either way. Indexed, it leaves
-        **Couldn't Be Indexed**. Not, it stays there with the new reason,
+        and answers how that went, `200` either way: any failure but the
+        index's or the storage's (below) is the document's own. Indexed, it
+        leaves **Couldn't Be Indexed**. Not, it stays there with the new reason,
         and the Indexer goes on trying it on its schedule, unless the
         server is set to stop trying a document once it can't be indexed,
         which sets it to Skip, so it leaves the list. Either way the
@@ -5235,6 +5239,11 @@ paths:
           be indexed, as when it has been indexed or set to Skip meanwhile,
           with the sentence
           `This document is no longer waiting after an error.`
+        - `409 refused` when the search index itself can't be written just
+          then, with the sentence
+          `The search index can't be written just now. Try again later.`
+          The document stays as it was, with its reason, it isn't set to
+          Skip, the History tab gets no row, and nothing is recorded.
         - `503 storage-unreachable` when the storage that keeps the
           document's file can't be reached right now, as the public API
           answers it: its `detail` names the Store, and is meant to be
@@ -5409,21 +5418,30 @@ paths:
           gone by its turn (deleted, in the Trash or destroyed), or has been
           set to Skip, archived, or is being changed at that moment, is
           counted `skipped`, and so is one whose file's storage can't be
-          reached then, which keeps its entry and stays indexed, waiting or
-          failed as it was, with no row in the History tab: a reindex once
-          the storage is back covers it. One moved or given a new version
-          is indexed as it is then. A document it couldn't index joins
-          **Couldn't Be Indexed**, keeping the entry it had. A reindex that
-          ends `done` has `done`, `failed` and `skipped` adding up to
-          `total`.
+          reached then, counted in `unreachable` too, which keeps its entry
+          and stays indexed, waiting or failed as it was, with no row in the
+          History tab: a reindex once the storage is back covers it. One
+          moved or given a new version is indexed as it is then, and one
+          whose save meets another write at that moment is tried once more
+          at the end of its batch. A document it couldn't index joins
+          **Couldn't Be Indexed**, keeping the entry it had, unless the
+          server is set to stop trying a document once it can't be indexed,
+          which sets it to Skip, as **Try Again** does. A reindex that ends
+          `done` has `done`, `failed` and `skipped` adding up to `total`.
         - When the index can't be written, it waits and tries again, its
           `stalledSince` saying since when, and counts nothing meanwhile.
-        - `emptyFirst`, with `everything` only, empties the index and marks
-          every document to be indexed as its run begins, not as it's
-          started, so no other reindex is running then. Search then misses
-          documents until each is done again, and LogicalDOC's Indexer takes
-          any the reindex doesn't cover, such as those filed meanwhile.
-          Without it, nothing is taken out of the index.
+          Before it waits, the index is asked whether it answers: if it
+          does, the documents it refused are counted `failed`.
+        - When the server's reindex worker itself fails, it tries again
+          every 30 seconds, `failingSince` saying since when, and Background
+          Jobs giving the failure.
+        - `emptyFirst`, with `everything` only, marks every document to be
+          indexed, then empties the index, as its run begins, not as it's
+          started, so no other reindex is running then. An index the server
+          can't empty is waited for, as one that can't be written. Search
+          then misses documents until each is done again, and LogicalDOC's
+          Indexer takes any the reindex doesn't cover, such as those filed
+          meanwhile. Without it, nothing is taken out of the index.
 
         Refused in the order this file's introduction gives:
 
@@ -9697,7 +9715,7 @@ components:
         together of `total`
       additionalProperties: false
       required: [id, kind, targetId, name, startedBy, state, cancelling, emptyFirst, total, done, failed, skipped,
-        leftOut, created, started, ended, stalledSince, estimateSecondsLeft]
+        unreachable, leftOut, created, started, ended, stalledSince, failingSince, estimateSecondsLeft]
       properties:
         id:
           type: integer
@@ -9767,6 +9785,14 @@ components:
             the Trash or destroyed), or were set to Skip, archived or being
             changed at that moment, or the storage that keeps their file
             couldn't be reached then, each keeping its entry and its status
+        unreachable:
+          type: integer
+          format: int64
+          minimum: 0
+          description: |
+            How many of `skipped` it skipped because the storage that keeps
+            their file couldn't be reached at their turn: a reindex once the
+            storage is back covers them
         leftOut:
           type: integer
           format: int64
@@ -9791,6 +9817,16 @@ components:
             While it's running, since when the index couldn't be written: it
             waits and tries again, counting nothing meanwhile. Null while it
             can be, and in every other state
+        failingSince:
+          type: [string, 'null']
+          format: date-time
+          description: |
+            While it's running, since when the server's reindex worker has
+            failed at each try, so it makes no progress: it tries again every
+            30 seconds, and Background Jobs gives the failure, as its
+            `reindex` job. Kept in the server's memory, so null after a
+            restart until the worker fails again; null while the worker
+            doesn't fail, and in every other state
         estimateSecondsLeft:
           type: [integer, 'null']
           format: int64
@@ -9802,8 +9838,8 @@ components:
             over its `done` and `failed`) once it has tried 20 or more, and
             as a preview would estimate them before then; for `waiting`, its
             `total` as a preview estimates it, the reindexes ahead of it not
-            counted. Null once it has ended, while `stalledSince` is set, and
-            when nothing is left
+            counted. Null once it has ended, while `stalledSince` or
+            `failingSince` is set, and when nothing is left
           examples: [360]
     ReindexJobList:
       description: A page of reindexes
