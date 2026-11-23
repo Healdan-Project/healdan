@@ -28,6 +28,29 @@ async function open(options: SearchIndexRoutesOptions = {}, over: Routes = {}) {
   return { ...rendered, fake }
 }
 
+/**
+ * The list, where # 10412 has left Couldn't Be Indexed on the server meanwhile (indexed, or skipped by someone else): the
+ * action on it is refused as no longer waiting after an error, and every read of the list from then on lacks it
+ */
+async function openGoneMeanwhile(action: 'retry' | 'skip') {
+  let gone = false
+  const fake = searchIndexRoutes()
+  const list = fake.routes['GET /v1/admin/search-index/failed']
+  const rendered = await renderApp('/search-index', {
+    ...fake.routes,
+    'GET /v1/admin/search-index/failed': (request: { query?: Record<string, unknown> }) => {
+      const page = list(request)
+      return gone ? { ...page, items: page.items.filter((one) => one.document.docNumber !== 10412), total: page.total - 1 } : page
+    },
+    [`POST /v1/admin/search-index/failed/*/${action}`]: () => {
+      gone = true
+      return problem(409, 'refused', 'This document is no longer waiting after an error.')
+    },
+  })
+  await within(await screen.findByRole('table', { name: "Couldn't Be Indexed" })).findAllByRole('rowheader')
+  return rendered
+}
+
 describe("Couldn't Be Indexed", () => {
   it("lists each document that couldn't be indexed, the latest error first, with its doc #, title, matter, reason and when, as plain text", async () => {
     const { view } = await open()
@@ -127,11 +150,25 @@ describe('Try Again', () => {
     await expectNoAxeViolations(view.container)
   })
 
-  it("says a refusal in its row, in the rule's words, and leaves the row to say so", async () => {
-    await open({}, { 'POST /v1/admin/search-index/failed/*/retry': problem(409, 'refused', 'This document is no longer waiting after an error.') })
-    await userEvent.click(within(row('# 10412')).getByRole('button', { name: /^Try Again/ }))
+  it("says a refusal in its row, in the rule's words, and keeps the row to say so though the server no longer lists it, reading only the counts and the Dashboard again", async () => {
+    const { api } = await openGoneMeanwhile('retry')
+    const reads = { list: api.callsTo('GET /v1/admin/search-index/failed').length, index: api.callsTo('GET /v1/admin/search-index').length, dashboard: api.callsTo('GET /v1/admin/dashboard').length }
+    const button = within(row('# 10412')).getByRole('button', { name: /^Try Again/ })
+    button.focus()
+    await userEvent.keyboard('{Enter}')
     expect((await within(under('# 10412')).findByRole('alert')).textContent).toBe('This document is no longer waiting after an error.')
+    await waitFor(() => expect(api.callsTo('GET /v1/admin/search-index').length).toBeGreaterThan(reads.index))
+    expect(api.callsTo('GET /v1/admin/dashboard').length).toBeGreaterThan(reads.dashboard)
+    // A moment for anything else to have been asked: the list isn't, so the row and what it says stay, the focus on its button
+    await act(() => new Promise((resolve) => setTimeout(resolve, 50)))
+    expect(api.callsTo('GET /v1/admin/search-index/failed')).toHaveLength(reads.list)
     expect(docNumbers()).toEqual(['# 10412', '# 10398'])
+    expect(within(under('# 10412')).getByRole('alert').textContent).toBe('This document is no longer waiting after an error.')
+    expect(document.activeElement).toBe(button)
+    // The list's next read takes the row away, and the focus goes to the row that comes to its place
+    await act(async () => void window.dispatchEvent(new Event('focus')))
+    await waitFor(() => expect(docNumbers()).toEqual(['# 10398']))
+    await waitFor(() => expect(document.activeElement).toBe(within(table()).getByRole('rowheader', { name: '# 10398' })))
   })
 
   it("says in its row that the document's storage can't be reached, in the server's sentence, which names the Store", async () => {
@@ -192,11 +229,17 @@ describe('Skip', () => {
     await waitFor(() => expect(document.activeElement?.textContent).toMatch(/^Each document that couldn't be indexed/))
   })
 
-  it("says a refusal in its row, once the question has closed", async () => {
-    await open({}, { 'POST /v1/admin/search-index/failed/*/skip': problem(409, 'refused', 'This document is no longer waiting after an error.') })
-    await userEvent.click(within(row('# 10412')).getByRole('button', { name: /^Skip/ }))
+  it("says a refusal in its row, once the question has closed, and keeps the row to say so though the server no longer lists it", async () => {
+    const { api } = await openGoneMeanwhile('skip')
+    const reads = api.callsTo('GET /v1/admin/search-index/failed').length
+    const skip = within(row('# 10412')).getByRole('button', { name: /^Skip/ })
+    await userEvent.click(skip)
     await userEvent.click(within(await screen.findByRole('alertdialog', { name: /^Skip/ })).getByRole('button', { name: 'Skip' }))
     await waitFor(() => expect(screen.queryByRole('alertdialog', { name: /^Skip/ })).toBeNull())
     expect((await within(under('# 10412')).findByRole('alert')).textContent).toBe('This document is no longer waiting after an error.')
+    await act(() => new Promise((resolve) => setTimeout(resolve, 50)))
+    expect(api.callsTo('GET /v1/admin/search-index/failed')).toHaveLength(reads)
+    expect(docNumbers()).toEqual(['# 10412', '# 10398'])
+    await waitFor(() => expect(document.activeElement).toBe(skip))
   })
 })

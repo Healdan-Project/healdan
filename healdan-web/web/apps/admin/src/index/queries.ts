@@ -142,6 +142,16 @@ export function indexChanged(queryClient: QueryClient): void {
 }
 
 /**
+ * After a refusal that says a row of Couldn't Be Indexed is out of date (P6-R11's `409`, or a `404`): the heading's counts
+ * and the Dashboard read again, and nothing else, so the list keeps the row, and the refusal said in it, until the list is
+ * next read, by its poll, a return to the window or a later change. Nothing is waited for.
+ */
+export function countsStale(queryClient: QueryClient): void {
+  void queryClient.invalidateQueries({ queryKey: indexKeys.searchIndex, exact: true })
+  void queryClient.invalidateQueries({ queryKey: adminKeys.dashboard })
+}
+
+/**
  * After Run Indexer Now: the Indexer as the server answered, in the heading in place of what it had (a read on its way is
  * cancelled first, so an older answer can't overwrite it), then what indexChanged asks for, and Background Jobs' list,
  * which lists the Indexer too.

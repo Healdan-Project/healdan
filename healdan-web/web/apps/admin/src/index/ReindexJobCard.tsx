@@ -28,6 +28,12 @@ function runningDetail(job: A['ReindexJob']): string {
   return parts.join(' · ')
 }
 
+/** How an ended reindex went: what it did, or, for one cancelled before its turn came, that it never started */
+function endedWords(job: A['ReindexJob']): string {
+  if (job.state !== 'cancelled') return t('admin.searchIndex.job.doneOutcome', { outcome: outcomeWords(job) })
+  return job.started === null ? t('admin.searchIndex.job.cancelledBeforeStart') : t('admin.searchIndex.job.cancelledOutcome', { outcome: outcomeWords(job) })
+}
+
 interface CardProps {
   job: A['ReindexJob']
   /** Cancel, which asks first; none for a reindex that has ended or was asked to stop */
@@ -72,7 +78,7 @@ export function ReindexJobCard({ job, onCancel, onClose }: CardProps) {
       {job.state === 'waiting' && <p className={styles.line}>{t('admin.searchIndex.job.turn', { documents: plural('admin.searchIndex.documents', job.total) })}</p>}
       {ended && (
         <p className={styles.line}>
-          {job.state === 'cancelled' ? t('admin.searchIndex.job.cancelledOutcome', { outcome: outcomeWords(job) }) : t('admin.searchIndex.job.doneOutcome', { outcome: outcomeWords(job) })}
+          {endedWords(job)}
           {job.failed > 0 && ` ${t('admin.searchIndex.job.failedJoin')}`}
         </p>
       )}
@@ -88,8 +94,8 @@ export interface ReindexJobsProps {
 }
 
 /**
- * The reindexes above the tabs (spec 8.9, P6-R13): those that ended while the page was open, each until it's closed; the
- * running one; then those waiting their turn. Cancel asks first, naming the reindex and what it keeps; the answer is the
+ * The reindexes above the tabs (spec 8.9, P6-R13): the running one, then those waiting their turn, and those that ended
+ * while the page was open, each where it was until it's closed. Cancel asks first, naming the reindex and what it keeps; the answer is the
  * reindex as it then is, which its card shows, and a refusal stays in the question, the cards read again first when it says
  * they're out of date. While a new read fails, the cards it had stay, with a note (P4-R15).
  */
@@ -114,7 +120,10 @@ export function ReindexJobs({ ends, fallback }: ReindexJobsProps) {
     toast(t(hasEnded(answer) ? 'admin.searchIndex.job.cancelledToast' : 'admin.searchIndex.job.stoppingToast', { name: answer.name }))
   }
 
-  const jobs = [...ends.ended, ...(active.data ?? []).filter((job) => !ends.ended.some((one) => one.id === job.id))]
+  // In the order the reindexes take their turns, oldest first, which puts the running one first, as it's always the oldest
+  // active one (P6-R3): so each card keeps its place as it ends, among the others, and one started later comes after them
+  const shown = new Map<number, A['ReindexJob']>([...(active.data ?? []), ...ends.ended].map((job) => [job.id, job]))
+  const jobs = [...shown.values()].sort((a, b) => a.id - b.id)
   return (
     <>
       <StaleNote failed={active.isError && active.data !== undefined} onRetry={() => void active.refetch()} />

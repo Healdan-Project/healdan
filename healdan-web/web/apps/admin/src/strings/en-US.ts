@@ -1447,6 +1447,7 @@ export const adminEnUS = {
   'admin.searchIndex.job.turn': 'Waiting its turn, as one reindex runs at a time: {documents}.',
   'admin.searchIndex.job.doneOutcome': '{outcome}.',
   'admin.searchIndex.job.cancelledOutcome': 'Cancelled: {outcome} before it stopped.',
+  'admin.searchIndex.job.cancelledBeforeStart': 'Cancelled before it started, so nothing in the index changed.',
   'admin.searchIndex.job.failedJoin': "Those that couldn't be indexed are on the Couldn't Be Indexed tab.",
   'admin.searchIndex.job.cancel': 'Cancel',
   'admin.searchIndex.job.cancelName': 'Cancel {title}',

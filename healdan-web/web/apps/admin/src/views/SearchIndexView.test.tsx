@@ -55,7 +55,7 @@ describe('The Search Index', () => {
       '1,277Indexed1,290 entries · 412 MB',
       '5Waiting',
       "2Couldn't Be Indexed",
-      `Needs AttentionLast run ${formatDateTime('2026-11-19T10:30:00Z')} · next ${formatDateTime('2026-11-19T11:00:00Z')}`,
+      `Needs Attention5 waiting, 2 failedLast run ${formatDateTime('2026-11-19T10:30:00Z')} · next ${formatDateTime('2026-11-19T11:00:00Z')}`,
     ])
   })
 
@@ -148,6 +148,8 @@ describe('Run Indexer Now', () => {
     expect(run.getAttribute('aria-describedby')).toBe(reason.id)
     await waitFor(() => expect(api.callsTo('GET /v1/admin/dashboard').length).toBeGreaterThan(before.dashboard))
     expect(api.callsTo('GET /v1/admin/search-index/failed').length).toBeGreaterThan(before.failed)
+    // Greyed out under the focus once the press is done, the button gives the focus to the page's heading
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('heading', { level: 1, name: 'Search Index' })))
     await expectNoAxeViolations(view.container)
   })
 
@@ -159,10 +161,22 @@ describe('Run Indexer Now', () => {
     expect(api.callsTo('POST /v1/admin/search-index/run')).toHaveLength(0)
   })
 
-  it("says a refusal in the rule's words", async () => {
-    await openSearchIndex({}, { 'POST /v1/admin/search-index/run': problem(409, 'refused', 'This job is running already.') })
+  it("says a refusal in the rule's words while the Indexer is as it was, and takes it away once a new read shows it changed", async () => {
+    const { fake } = await openSearchIndex({}, { 'POST /v1/admin/search-index/run': problem(409, 'refused', 'The scheduled tasks are switched off on this server.') })
     await userEvent.click(screen.getByRole('button', { name: 'Run Indexer Now' }))
-    expect((await screen.findByRole('alert')).textContent).toBe('This job is running already.')
+    expect((await screen.findByRole('alert')).textContent).toBe('The scheduled tasks are switched off on this server.')
+    fake.setIndex(searchIndexOf({ indexer: { job: jobOf({ lastStart: '2026-11-19T11:00:00Z', nextRun: '2026-11-19T11:30:00Z' }), runRefusal: null } }))
+    await act(async () => void window.dispatchEvent(new Event('focus')))
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull())
+  })
+
+  it('says a refusal once: when the heading read again gives the reason, the reason beside the greyed-out button says it alone', async () => {
+    const { fake } = await openSearchIndex({}, { 'POST /v1/admin/search-index/run': problem(409, 'refused', 'This job is running already.') })
+    fake.setIndex(searchIndexOf({ indexer: { job: jobOf({ running: true, canRun: false }), runRefusal: 'This job is running already.' } }))
+    await userEvent.click(screen.getByRole('button', { name: 'Run Indexer Now' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Run Indexer Now' }).hasAttribute('disabled')).toBe(true))
+    expect(screen.getAllByText('This job is running already.')).toHaveLength(1)
+    expect(screen.queryByRole('alert')).toBeNull()
   })
 })
 

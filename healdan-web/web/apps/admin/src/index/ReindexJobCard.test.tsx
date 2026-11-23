@@ -108,7 +108,9 @@ describe('Cancel', () => {
     expect(within(question).getByText("It hasn't started, so nothing in the index changes.")).toBeTruthy()
     await userEvent.click(within(question).getByRole('button', { name: 'Cancel Reindex' }))
     const ended = await screen.findByRole('region', { name: 'Cancelled Reindexing Store Client Work' })
-    expect(within(ended).getByText('Cancelled: 0 reindexed before it stopped.')).toBeTruthy()
+    expect(within(ended).getByText('Cancelled before it started, so nothing in the index changed.')).toBeTruthy()
+    // It keeps its place, after the running one
+    expect(card('Reindexing Matter 1001.1 Charter Dispute').compareDocumentPosition(ended) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     const close = within(ended).getByRole('button', { name: 'Close Cancelled Reindexing Store Client Work' })
     close.focus()
     await userEvent.keyboard('{Enter}')
@@ -142,6 +144,16 @@ describe('A reindex that ends while the page is open', () => {
     await waitFor(() => expect(screen.queryByRole('region', { name: 'Reindexed Matter 1001.1 Charter Dispute' })).toBeNull())
     // Nothing else is there, so the focus goes to the page's heading
     await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('heading', { level: 1, name: 'Search Index' })))
+  })
+
+  it("says what a running reindex cancelled had done before it stopped, its card where it was, before those waiting", async () => {
+    const { fake } = await open()
+    await screen.findByRole('region', { name: 'Waiting to Reindex Store Client Work' })
+    fake.setJob(searchIndexJob({ state: 'cancelled', ended: '2026-11-19T10:48:00Z', estimateSecondsLeft: null }))
+    await act(async () => void window.dispatchEvent(new Event('focus')))
+    const ended = await screen.findByRole('region', { name: 'Cancelled Reindexing Matter 1001.1 Charter Dispute' })
+    expect(within(ended).getByText("Cancelled: 208 reindexed, 2 couldn't be indexed, 2 skipped before it stopped. Those that couldn't be indexed are on the Couldn't Be Indexed tab.")).toBeTruthy()
+    expect(ended.compareDocumentPosition(card('Waiting to Reindex Store Client Work')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
   it('is gone once the page is left', async () => {

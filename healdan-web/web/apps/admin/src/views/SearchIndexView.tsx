@@ -3,17 +3,17 @@
 
 import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
-import { useId, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import type { adminComponents } from '@healdan/api'
 import { ErrorPanel, useApi } from '@healdan/shell'
 import { Button, formatCount, formatDateTime, formatSize, Icon, StatusDot, Tabs, toast } from '@healdan/ui'
 import { routes, type IndexTab, type SearchIndexSearch } from '../addresses'
-import { useFocusWhenGone } from '../focus'
+import { focusLost, useFocusWhenGone } from '../focus'
 import { Problems } from '../forms/Problems'
 import { Refusal } from '../forms/Refusal'
 import { FailedList } from '../index/FailedList'
 import { IndexHistory } from '../index/IndexHistory'
-import { indexChanged, indexerAnswered, isOutOfDate, runIndexer, useActiveReindexes, useReindexEnds, useSearchIndex } from '../index/queries'
+import { indexChanged, indexerAnswered, indexKeys, isOutOfDate, runIndexer, useActiveReindexes, useReindexEnds, useSearchIndex } from '../index/queries'
 import { ReindexJobs } from '../index/ReindexJobCard'
 import { WaitingList } from '../index/WaitingList'
 import { StaleNote } from '../people/StaleNote'
@@ -21,6 +21,11 @@ import { plural, t } from '../strings'
 import styles from '../index/SearchIndex.module.css'
 
 type A = adminComponents['schemas']
+
+/** What a refusal of Run Indexer Now is said against: the Indexer as the heading has it */
+function indexerState(index: A['SearchIndex'] | undefined): string {
+  return JSON.stringify(index?.indexer ?? null)
+}
 
 /** A tab's label, with its count once the heading has it: "Couldn't Be Indexed (2)" */
 function counted(label: string, count: number | undefined): string {
@@ -62,6 +67,8 @@ function Figures({ index }: { index: A['SearchIndex'] }) {
       </li>
       <li className={styles.tile}>
         <StatusDot status={index.health.status}>{t(index.health.status === 'ok' ? 'admin.searchIndex.healthy' : 'admin.searchIndex.attention')}</StatusDot>
+        {/* Why it needs attention, as the Dashboard's tile says it */}
+        {index.health.status !== 'ok' && <span className={styles.small}>{index.health.detail}</span>}
         <span className={styles.small}>{indexerLine(index.indexer.job)}</span>
       </li>
     </ul>
@@ -89,19 +96,23 @@ export function SearchIndexView({ search }: { search: SearchIndexSearch }) {
   const ends = useReindexEnds(active.data)
   const index = useSearchIndex(running)
   const [busy, setBusy] = useState(false)
-  const [failure, setFailure] = useState<unknown>()
+  // Run Indexer Now's refusal, and the Indexer as the heading had it then: it's said only while the Indexer is as it was
+  const [refused, setRefused] = useState<{ failure: unknown; against: string }>()
   const tab: IndexTab = search.tab ?? 'failed'
 
   async function run() {
     setBusy(true)
-    setFailure(undefined)
+    setRefused(undefined)
     try {
       await indexerAnswered(queryClient, await runIndexer(api))
       toast(t('admin.searchIndex.runAsked'))
     } catch (error) {
-      setFailure(error)
-      // Refused as the Indexer has changed since: the heading read again shows it as it is
-      if (isOutOfDate(error)) indexChanged(queryClient)
+      // Refused as the Indexer has changed since: the heading is read again first, and the refusal said against it
+      if (isOutOfDate(error)) {
+        await queryClient.refetchQueries({ queryKey: indexKeys.searchIndex, exact: true })
+        indexChanged(queryClient)
+      }
+      setRefused({ failure: error, against: indexerState(queryClient.getQueryData<A['SearchIndex']>(indexKeys.searchIndex)) })
     } finally {
       setBusy(false)
     }
@@ -110,8 +121,19 @@ export function SearchIndexView({ search }: { search: SearchIndexSearch }) {
   const data = index.data
   // Run Indexer Now follows the server's reason, which can say it's running a moment before the job shows it
   const refusal = data?.indexer.runRefusal ?? null
-  // Greyed out under the focus, as once a run it was asked for shows, the button gives the focus to the page's heading
-  useFocusWhenGone(refusal !== null, heading)
+  // A refusal goes once a new read shows the Indexer changed since, and while the reason greys the button out it says it
+  const failure = refused !== undefined && refused.against === indexerState(data) && refusal === null ? refused.failure : undefined
+  // Greyed out under the focus, the button gives the focus to the page's heading: as the reason comes while it's on its way,
+  // once the press is done (a browser drops the focus from a disabled button only later), or as a new read greys it out
+  const wasBusy = useRef(false)
+  useEffect(() => {
+    const ended = wasBusy.current && !busy
+    wasBusy.current = busy
+    if (!ended || refusal === null) return
+    const focused = document.activeElement
+    if (focusLost() || (focused instanceof HTMLButtonElement && focused.disabled)) heading.current?.focus()
+  }, [busy, refusal])
+  useFocusWhenGone(refusal !== null && !busy, heading)
 
   return (
     <div className={styles.view}>

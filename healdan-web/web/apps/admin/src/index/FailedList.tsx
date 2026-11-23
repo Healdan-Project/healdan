@@ -11,7 +11,7 @@ import { Refusal } from '../forms/Refusal'
 import { useKeptFocus } from '../monitoring/useKeptFocus'
 import { StaleNote } from '../people/StaleNote'
 import { t } from '../strings'
-import { indexChanged, isOutOfDate, retryIndexing, skipIndexing, useIndexFailures } from './queries'
+import { countsStale, indexChanged, isOutOfDate, retryIndexing, skipIndexing, useIndexFailures } from './queries'
 import { docNumberHeader, documentWords, matterWords } from './text'
 import { ShowMore } from './ShowMore'
 import styles from './SearchIndex.module.css'
@@ -101,8 +101,8 @@ function FailedRow({ failure, said, busy, retry, skip }: RowProps) {
  * doc #, title, matter, reason and when, and Try Again and Skip. As each row holds its own buttons, the list is a plain
  * table, as Background Jobs' is, a page at a time with Show More. Try Again indexes it now and says how it went in its row;
  * Skip asks first, saying it won't be tried again. After either, the list, the counts and the Dashboard are read again; a
- * refusal stays in the row, and when it says the row is out of date the counts are read again, leaving the row to say so
- * until the list is next read. When the row goes, the focus goes to the row that comes to its place. A document with no doc #
+ * refusal stays in the row, and when it says the row is out of date only the counts and the Dashboard are read again, so
+ * the row stays to say so until the list is next read (by its poll, a return to the window or a later change). When the row goes, the focus goes to the row that comes to its place. A document with no doc #
  * can't be named by those routes, so its buttons are greyed out with the reason. While a new read fails, the rows it had
  * stay, with a note (P4-R15).
  */
@@ -120,10 +120,13 @@ export function FailedList({ poll }: { poll: boolean }) {
 
   const say = (failure: A['IndexFailure'], next: Said | undefined) => setSaid((all) => ({ ...all, [failure.document.id]: next ?? {} }))
 
-  /** A refusal said in the row; one that says it's out of date has the counts read again, the row left to say why */
+  /**
+   * A refusal said in the row; one that says it's out of date has the counts and the Dashboard read again, never the list,
+   * which would take the row, and the refusal with it, away at once
+   */
   function refused(failure: A['IndexFailure'], error: unknown) {
     say(failure, { failure: error })
-    if (isOutOfDate(error)) indexChanged(queryClient)
+    if (isOutOfDate(error)) countsStale(queryClient)
   }
 
   async function retry(failure: A['IndexFailure']) {
