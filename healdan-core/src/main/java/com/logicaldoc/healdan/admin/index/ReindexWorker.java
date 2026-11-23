@@ -14,6 +14,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.sql.DataSource;
 
+import org.apache.solr.common.SolrException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -47,8 +48,9 @@ import jakarta.annotation.PreDestroy;
  * <p>
  * Each call of {@link #runOnce()} does one step: it ends a running job that was asked to stop, or one with no
  * documents left, or works through the next {@link #BATCH} of its documents above its saved position, in id order;
- * with none running it begins the oldest waiting one. Beginning a job's run that empties the index first drops the
- * index and marks every document in it to index, Skip kept, so a job waiting never empties the index under another.
+ * with none running it begins the oldest waiting one. A job that empties the index first drops the index and marks
+ * every document in it to index, Skip kept, once its run has begun, so a job waiting never empties the index under
+ * another, and only once, as its row keeps that it did.
  * <p>
  * A batch's documents are indexed through {@code DocumentManager.index} on as many threads as LogicalDOC's Indexer
  * takes ({@code threadpool.IndexerTask.max}). Each is looked at again just before its turn: one no longer live, set to
@@ -58,10 +60,11 @@ import jakarta.annotation.PreDestroy;
  * stays until its new one replaces it, so search goes on finding it. A document's own failure is caught and counted,
  * and it's marked to index again, its old entry kept, so it joins Couldn't Be Indexed and LogicalDOC's Indexer tries
  * it again. The worker writes the history rows itself ({@link IndexEventRows}), as the job's starter:
- * {@code event.indexed}, or {@code event.indexed.error} with the failure's message. A batch's rows, counts and position are saved together once
- * it ends; a batch whose every document tried failed because the search index can't be written, none indexed, is
- * the index's outage: nothing of it is saved, the job notes since when it stalls, and the batch runs again after a
- * wait ({@link #stallWait}).
+ * {@code event.indexed}, or {@code event.indexed.error} with the failure's message. A batch's rows, counts and
+ * position are saved together once it ends. A batch in which nothing was indexed and some document failed because the
+ * search index can't be written (an {@link IndexException} or a {@link SolrException} in its causes) is the index's
+ * outage, whatever else failed beside it: nothing of it is saved, the job notes since when it stalls, and the batch
+ * runs again after a wait ({@link #stallWait}).
  * <p>
  * Its lines name a document by its id and a failure by its class, never a file's name or a failure's message.
  */
@@ -135,6 +138,12 @@ public class ReindexWorker implements HealdanStartListener, HealdanJob {
 	/** How many batches in a row found the index unwritable */
 	private volatile int stalls;
 
+	/** Whether the worker's last turn failed, which the next turn that finds no job running reports as ended */
+	private volatile boolean failedLast;
+
+	/** How many threads a batch takes, 0 for LogicalDOC's Indexer's; tests set it and put it back */
+	volatile int threads;
+
 	@Autowired
 	public ReindexWorker(ReindexJobs jobs, PlatformTransactionManager transactions, DataSource dataSource) {
 		this.jobs = jobs;
@@ -206,26 +215,35 @@ public class ReindexWorker implements HealdanStartListener, HealdanJob {
 		try {
 			await(STARTUP_DELAY_MS);
 			while (!Thread.currentThread().isInterrupted()) {
-				long wait;
-				try {
-					boolean work = runOnce();
-					int stalled = stalls;
-					wait = stalled > 0 ? stallWait(stalled) : work ? 0 : IDLE_MS;
-				} catch (VirtualMachineError e) {
-					throw e;
-				} catch (Throwable t) {
-					// It tries again: a database that doesn't answer, say, comes back
-					log.warn("The reindex worker failed, and tries again in 30 seconds: {}", Texts.causes(t));
-					log.debug("The reindex worker's failure", t);
-					JobStatus.get().failed(JOB, t.getClass().getName(), null);
-					reported = null;
-					wait = FAILURE_WAIT_MS;
-				}
+				long wait = step();
 				if (wait > 0)
 					await(wait);
 			}
 		} catch (InterruptedException e) {
 			Thread.currentThread().interrupt();
+		}
+	}
+
+	/**
+	 * One turn of the thread: {@link #runOnce()}, its failure caught, reported and logged.
+	 *
+	 * @return how long to wait before the next turn
+	 */
+	long step() {
+		try {
+			boolean work = runOnce();
+			int stalled = stalls;
+			return stalled > 0 ? stallWait(stalled) : work ? 0 : IDLE_MS;
+		} catch (VirtualMachineError e) {
+			throw e;
+		} catch (Throwable t) {
+			// It tries again: a database that doesn't answer, say, comes back
+			log.warn("The reindex worker failed, and tries again in 30 seconds: {}", Texts.causes(t));
+			log.debug("The reindex worker's failure", t);
+			JobStatus.get().failed(JOB, t.getClass().getName(), null);
+			failedLast = true;
+			reported = null;
+			return FAILURE_WAIT_MS;
 		}
 	}
 
@@ -259,8 +277,14 @@ public class ReindexWorker implements HealdanStartListener, HealdanJob {
 		ReindexJob job = jobs.oldest(State.RUNNING);
 		if (job == null) {
 			ReindexJob next = jobs.oldest(State.WAITING);
-			if (next == null)
+			if (next == null) {
+				// A failure while idle is over once a turn finds nothing to do
+				if (failedLast) {
+					JobStatus.get().finished(JOB, null);
+					failedLast = false;
+				}
 				return false;
+			}
 			if (!jobs.begin(next.id(), ReindexJobs.now()))
 				// Cancelled meanwhile
 				return true;
@@ -271,10 +295,11 @@ public class ReindexWorker implements HealdanStartListener, HealdanJob {
 		if (!Long.valueOf(job.id()).equals(reported)) {
 			JobStatus.get().started(JOB);
 			reported = job.id();
+			failedLast = false;
 			stalls = 0;
-			if (job.emptyFirst() && jobs.position(job.id()) == 0 && job.done() + job.failed() + job.skipped() == 0)
-				emptyIndex();
 		}
+		if (job.emptyFirst() && !job.cancelling() && !jobs.emptied(job.id()))
+			emptyIndex(job.id());
 		if (job.cancelling()) {
 			end(job, State.CANCELLED);
 			return true;
@@ -297,9 +322,14 @@ public class ReindexWorker implements HealdanStartListener, HealdanJob {
 	}
 
 	/** Ends a running job, and reports it */
-	private void end(ReindexJob job, State as) {
-		boolean ended = Boolean.TRUE.equals(
-				transaction.execute(status -> jobs.end(job.id(), State.RUNNING, as, ReindexJobs.now())));
+	private void end(ReindexJob job, State asked) {
+		State as = asked;
+		boolean ended = ended(job, as);
+		// Asked to stop just as it came to its end, it ends cancelled, as its record says
+		if (!ended && as == State.DONE) {
+			as = State.CANCELLED;
+			ended = ended(job, as);
+		}
 		if (ended) {
 			IndexCounts.get().moved();
 			ReindexJob now = jobs.find(job.id());
@@ -310,16 +340,27 @@ public class ReindexWorker implements HealdanStartListener, HealdanJob {
 		settle();
 	}
 
+	/** @return whether the running job ended so */
+	private boolean ended(ReindexJob job, State as) {
+		return Boolean.TRUE.equals(
+				transaction.execute(status -> jobs.end(job.id(), State.RUNNING, as, ReindexJobs.now())));
+	}
+
 	/**
 	 * Empties the index and marks every document in it to index, Skip kept, as a job that empties the index first
 	 * begins its run (ruling P6-R7).
 	 */
-	private void emptyIndex() {
+	private void emptyIndex(long jobId) {
 		SearchEngine.get().dropIndex();
-		List<Long> marked = jdbc.queryForList("update ld_document set ld_indexed = ? where ld_indexed in (?, ?)"
-				+ " returning ld_id", Long.class, IndexingStatus.TO_INDEX.ordinal(), IndexingStatus.INDEXED.ordinal(),
-				IndexingStatus.TO_INDEX_METADATA.ordinal());
-		CacheEvictor.get().evictDocuments(marked);
+		// Once marked emptied, the job never empties the index again, whatever stops it
+		List<Long> marked = transaction.execute(status -> {
+			List<Long> ids = jdbc.queryForList("update ld_document set ld_indexed = ? where ld_indexed in (?, ?)"
+					+ " returning ld_id", Long.class, IndexingStatus.TO_INDEX.ordinal(),
+					IndexingStatus.INDEXED.ordinal(), IndexingStatus.TO_INDEX_METADATA.ordinal());
+			jobs.markEmptied(jobId);
+			CacheEvictor.get().evictDocumentsAfterCompletion(ids);
+			return ids;
+		});
 		log.info("Reindex emptied the search index and marked {} documents to index", marked.size());
 	}
 
@@ -336,10 +377,13 @@ public class ReindexWorker implements HealdanStartListener, HealdanJob {
 	 */
 	private record Outcome(long docId, Result result, int previous, Throwable failure) {
 
-		/** @return whether it failed as an index that can't be written makes it */
+		/**
+		 * @return whether it failed as an index that can't be written makes it: an {@link IndexException}, or a
+		 *         {@link SolrException}, which the search engine doesn't wrap, in its causes
+		 */
 		boolean indexFault() {
 			for (Throwable cause = failure; cause != null; cause = cause.getCause() == cause ? null : cause.getCause())
-				if (cause instanceof IndexException)
+				if (cause instanceof IndexException || cause instanceof SolrException)
 					return true;
 			return false;
 		}
@@ -367,7 +411,9 @@ public class ReindexWorker implements HealdanStartListener, HealdanJob {
 
 		long indexed = outcomes.stream().filter(o -> o.result() == Result.INDEXED).count();
 		List<Outcome> failed = outcomes.stream().filter(o -> o.result() == Result.FAILED).toList();
-		if (indexed == 0 && !failed.isEmpty() && failed.stream().allMatch(Outcome::indexFault)) {
+		// Nothing indexed and an index fault: the index's outage, whatever else failed beside it (CE parses a file
+		// before it writes its hit, so one that can't be parsed fails without the index even while it's down)
+		if (indexed == 0 && failed.stream().anyMatch(Outcome::indexFault)) {
 			jobs.stalled(job.id(), ReindexJobs.now());
 			if (stalls++ == 0)
 				log.warn("The search index can't be written, so reindex job {} waits and tries again", job.id());
@@ -408,7 +454,8 @@ public class ReindexWorker implements HealdanStartListener, HealdanJob {
 	 * @return what became of each document, in their order; null if the thread was interrupted meanwhile
 	 */
 	private List<Outcome> indexAll(List<Long> ids) {
-		int threads = Math.max(1, Math.min(ids.size(), threads()));
+		int set = this.threads;
+		int threads = Math.max(1, Math.min(ids.size(), set > 0 ? set : threads()));
 		AtomicInteger number = new AtomicInteger();
 		ExecutorService pool = Executors.newFixedThreadPool(threads, work -> {
 			Thread worker = new Thread(work, "healdan-reindex-" + number.incrementAndGet());
@@ -425,15 +472,18 @@ public class ReindexWorker implements HealdanStartListener, HealdanJob {
 				outcomes.add(future.get());
 			return outcomes;
 		} catch (InterruptedException e) {
+			// Stopping: the documents on their way are interrupted
+			pool.shutdownNow();
 			Thread.currentThread().interrupt();
 			return null;
 		} catch (ExecutionException e) {
-			// index() catches all but a VirtualMachineError
+			// index() catches all but a VirtualMachineError and a failure reading the document's row
 			if (e.getCause() instanceof Error error)
 				throw error;
 			throw new IllegalStateException(e.getCause());
 		} finally {
-			pool.shutdownNow();
+			// The documents on their way finish: an interrupt in the middle of the index's file I/O would close it
+			pool.shutdown();
 		}
 	}
 

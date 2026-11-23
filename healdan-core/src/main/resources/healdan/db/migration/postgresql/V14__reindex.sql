@@ -1,6 +1,6 @@
 -- The reindex jobs (Admin app spec, 9.6): a row for each job an administrator started, with what it covers (its kind,
 -- its target and the name shown), who started it, its state (WAITING, RUNNING, DONE or CANCELLED), whether it was
--- asked to stop while running, whether it empties the index first, its counts (the documents it will try, those done,
+-- asked to stop while running, whether it empties the index first and whether it has, its counts (the documents it will try, those done,
 -- failed and skipped at their turn, and those left out when it was started), its saved position, its times, and since
 -- when the index couldn't be written, if it can't.
 create table hd_reindex_job (
@@ -14,6 +14,7 @@ create table hd_reindex_job (
 	hd_state varchar(10) not null,
 	hd_cancel int not null,
 	hd_emptyfirst int not null,
+	hd_emptied int not null,
 	hd_total bigint not null,
 	hd_done bigint not null,
 	hd_failed bigint not null,

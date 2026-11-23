@@ -96,9 +96,9 @@ public class ReindexJobs {
 	long insert(long tenantId, Kind kind, Long targetId, String name, User actor, boolean emptyFirst, Instant created) {
 		return jdbc.query("""
 				insert into hd_reindex_job (hd_tenantid, hd_kind, hd_targetid, hd_name, hd_userid, hd_username,
-				       hd_state, hd_cancel, hd_emptyfirst, hd_total, hd_done, hd_failed, hd_skipped, hd_leftout,
-				       hd_position, hd_created)
-				values (?, ?, ?, ?, ?, ?, ?, 0, ?, 0, 0, 0, 0, 0, 0, ?)
+				       hd_state, hd_cancel, hd_emptyfirst, hd_emptied, hd_total, hd_done, hd_failed, hd_skipped,
+				       hd_leftout, hd_position, hd_created)
+				values (?, ?, ?, ?, ?, ?, ?, 0, ?, 0, 0, 0, 0, 0, 0, 0, ?)
 				returning hd_id""",
 				bind(tenantId, kind.name(), targetId != null ? targetId : NULL_BIGINT, StorableText.cut(name, TEXT_LIMIT),
 						actor.getId(), StorableText.cut(actor.getUsername(), TEXT_LIMIT), State.WAITING.name(),
@@ -124,9 +124,41 @@ public class ReindexJobs {
 		return jdbc.update("insert into hd_reindex_doc (hd_jobid, hd_docid) select ?, d.ld_id " + from, bind(all));
 	}
 
-	/** Sets a job's total and what it left out */
-	void counted(long jobId, long total, long leftOut) {
-		jdbc.update("update hd_reindex_job set hd_total = ?, hd_leftout = ? where hd_id = ?", total, leftOut, jobId);
+	/**
+	 * Sets a job's total, and what it left out: those of the documents a query of {@code ld_document d} finds that the
+	 * job doesn't hold, in the caller's transaction.
+	 *
+	 * @param jobId the job
+	 * @param total how many documents it holds
+	 * @param from the query's {@code from} and {@code where}
+	 * @param params its parameters
+	 */
+	void counted(long jobId, long total, String from, Object[] params) {
+		Object[] all = new Object[params.length + 3];
+		all[0] = total;
+		System.arraycopy(params, 0, all, 1, params.length);
+		all[params.length + 1] = jobId;
+		all[params.length + 2] = jobId;
+		jdbc.update("""
+				update hd_reindex_job set hd_total = ?,
+				       hd_leftout = (select count(*) %s
+				                      and not exists (select 1 from hd_reindex_doc r
+				                                       where r.hd_jobid = ? and r.hd_docid = d.ld_id))
+				 where hd_id = ?""".formatted(from), bind(all));
+	}
+
+	/**
+	 * @return whether a job has emptied the index, as one that empties it first does once
+	 */
+	boolean emptied(long jobId) {
+		List<Integer> emptied = jdbc.queryForList("select hd_emptied from hd_reindex_job where hd_id = ?",
+				Integer.class, jobId);
+		return !emptied.isEmpty() && emptied.get(0) == 1;
+	}
+
+	/** A job has emptied the index, in the caller's transaction */
+	void markEmptied(long jobId) {
+		jdbc.update("update hd_reindex_job set hd_emptied = 1 where hd_id = ?", jobId);
 	}
 
 	/**
@@ -234,14 +266,16 @@ public class ReindexJobs {
 	}
 
 	/**
-	 * Ends a job in one of the states given, and deletes its documents, in the caller's transaction.
+	 * Ends a job in one of the states given, and deletes its documents, in the caller's transaction. It ends
+	 * {@link State#DONE} only while it isn't asked to stop, so its end agrees with a cancel's record.
 	 *
 	 * @param from the state it must be in
 	 * @return whether it was in it, and so has ended
 	 */
 	boolean end(long jobId, State from, State to, Instant at) {
 		if (jdbc.update("update hd_reindex_job set hd_state = ?, hd_ended = ?, hd_stalled = null, hd_cancel = 0"
-				+ " where hd_id = ? and hd_state = ?", to.name(), Timestamp.from(at), jobId, from.name()) == 0)
+				+ " where hd_id = ? and hd_state = ?" + (to == State.DONE ? " and hd_cancel = 0" : ""), to.name(),
+				Timestamp.from(at), jobId, from.name()) == 0)
 			return false;
 		jdbc.update("delete from hd_reindex_doc where hd_jobid = ?", jobId);
 		return true;

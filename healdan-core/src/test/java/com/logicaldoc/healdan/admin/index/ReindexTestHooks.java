@@ -9,7 +9,8 @@ import com.logicaldoc.util.spring.Context;
 
 /**
  * What other packages' and modules' tests change in the reindex worker, through its seams: how it indexes a document
- * (one that fails, an index that can't be written) and how many documents a batch takes, all put back with
+ * (one that fails, an index that can't be written), how many documents a batch takes and on how many threads, all
+ * put back with
  * {@link #reset}.
  */
 public final class ReindexTestHooks {
@@ -79,11 +80,21 @@ public final class ReindexTestHooks {
 	}
 
 	/**
+	 * A batch takes so many threads, so a test that needs one document at a time has it, until {@link #reset}.
+	 *
+	 * @param count how many
+	 */
+	public static void threads(int count) {
+		worker().threads = count;
+	}
+
+	/**
 	 * Puts the worker's seams back.
 	 */
 	public static void reset() {
 		ReindexWorker worker = worker();
 		worker.indexing = ReindexWorker.REAL;
 		worker.batch = ReindexWorker.BATCH;
+		worker.threads = 0;
 	}
 }

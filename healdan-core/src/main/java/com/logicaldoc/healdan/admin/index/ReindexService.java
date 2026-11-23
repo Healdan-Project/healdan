@@ -184,7 +184,6 @@ public class ReindexService {
 			String refusal = refusal(scope, tenantId, counts.eligible());
 			if (refusal != null)
 				throw new HealdanRuleException(refusal);
-			long all = counts.all();
 			job = transaction.execute(status -> {
 				long id = jobs.insert(tenantId, scope.kind(), scope.targetId(), resolved.name(), actor,
 						scope.emptyFirst(), ReindexJobs.now());
@@ -193,7 +192,7 @@ public class ReindexService {
 					status.setRollbackOnly();
 					return null;
 				}
-				jobs.counted(id, total, all - total);
+				jobs.counted(id, total, resolved.from(false), resolved.params(tenantId, false));
 				events.record(new AdminEvent(AdminArea.SEARCH_INDEX, STARTED, resolved.targetKind(),
 						resolved.recordTargetId(), resolved.name(),
 						Map.of("kind", new Change(null, scope.kind().name().toLowerCase(Locale.ROOT)), "documents",
@@ -283,7 +282,7 @@ public class ReindexService {
 	 *         tried {@value #RATE_FROM} documents at least, else {@value #SECONDS_PER_DOCUMENT} seconds a document;
 	 *         null for none
 	 */
-	public Long estimateSeconds(long count) {
+	Long estimateSeconds(long count) {
 		return estimate(count, jobs.secondsPerDocument(RATE_FROM));
 	}
 

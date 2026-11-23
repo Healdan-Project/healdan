@@ -401,9 +401,9 @@ public class ReindexServiceTest extends AbstractReindexTestCase {
 
 	private void job(String state, long done, long failed, Instant started, Instant ended) {
 		jdbc.update("insert into hd_reindex_job (hd_tenantid, hd_kind, hd_name, hd_userid, hd_username, hd_state,"
-				+ " hd_cancel, hd_emptyfirst, hd_total, hd_done, hd_failed, hd_skipped, hd_leftout, hd_position,"
-				+ " hd_created, hd_started, hd_ended) values (1, 'EVERYTHING', 'Everything', 1, 'admin', ?, 0, 0, ?, ?,"
-				+ " ?, 0, 0, 0, ?, ?, ?)", state, done + failed, done, failed, Timestamp.from(started), Timestamp.from(started),
+				+ " hd_cancel, hd_emptyfirst, hd_emptied, hd_total, hd_done, hd_failed, hd_skipped, hd_leftout,"
+				+ " hd_position, hd_created, hd_started, hd_ended) values (1, 'EVERYTHING', 'Everything', 1, 'admin', ?,"
+				+ " 0, 0, 0, ?, ?, ?, 0, 0, 0, ?, ?, ?)", state, done + failed, done, failed, Timestamp.from(started), Timestamp.from(started),
 				Timestamp.from(ended));
 	}
 
