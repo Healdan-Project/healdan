@@ -1441,8 +1441,10 @@ export const adminEnUS = {
   'admin.searchIndex.job.startedBy': 'Started by {name}, {when}',
   'admin.searchIndex.job.documents': 'Documents',
   'admin.searchIndex.job.lessThanAMinute': 'less than a minute left',
+  'admin.searchIndex.outcome.skippedOf': '{skipped} ({unreachable})',
   'admin.searchIndex.job.searchWorks': 'search keeps working while it runs',
   'admin.searchIndex.job.stalled': "waiting for the index, which can't be written to since {when}: it tries again shortly",
+  'admin.searchIndex.job.failing': "making no progress since {when}, as the server can't go on with it: it tries again every 30 seconds, and Background Jobs says why",
   'admin.searchIndex.job.stopping': 'stopping once the documents it has started on are done',
   'admin.searchIndex.job.turn': 'Waiting its turn, as one reindex runs at a time: {documents}.',
   'admin.searchIndex.job.doneOutcome': '{outcome}.',
@@ -1652,6 +1654,7 @@ export const adminPlurals = {
   'admin.searchIndex.outcome.reindexed': { one: '{n} reindexed', other: '{n} reindexed' },
   'admin.searchIndex.outcome.failed': { one: "{n} couldn't be indexed", other: "{n} couldn't be indexed" },
   'admin.searchIndex.outcome.skipped': { one: '{n} skipped', other: '{n} skipped' },
+  'admin.searchIndex.outcome.unreachable': { one: "{n} on storage that couldn't be reached", other: "{n} on storage that couldn't be reached" },
 } as const satisfies Record<`admin.${string}`, PluralForms>
 
 export type AdminStringKey = keyof typeof adminEnUS

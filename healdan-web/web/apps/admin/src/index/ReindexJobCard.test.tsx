@@ -48,6 +48,24 @@ describe("The reindexes' cards", () => {
     expect(within(running).getByText(`212 of 412 documents · waiting for the index, which can't be written to since ${formatDateTime('2026-11-19T10:44:00Z')}: it tries again shortly`)).toBeTruthy()
   })
 
+  it("says it makes no progress while the server's reindex worker fails, with no estimate", async () => {
+    await open({ jobs: [searchIndexJob({ failingSince: '2026-11-19T10:45:00Z', estimateSecondsLeft: null })] })
+    const running = await screen.findByRole('region', { name: 'Reindexing Matter 1001.1 Charter Dispute' })
+    expect(
+      within(running).getByText(`212 of 412 documents · making no progress since ${formatDateTime('2026-11-19T10:45:00Z')}, as the server can't go on with it: it tries again every 30 seconds, and Background Jobs says why`),
+    ).toBeTruthy()
+  })
+
+  it("says how many it skipped on storage that couldn't be reached, while it runs and once it has ended (P6-R23)", async () => {
+    const { fake } = await open({ jobs: [searchIndexJob({ skipped: 5, unreachable: 4 })] })
+    const running = await screen.findByRole('region', { name: 'Reindexing Matter 1001.1 Charter Dispute' })
+    expect(within(running).getByText("215 of 412 documents · 4 on storage that couldn't be reached · about 6 minutes left · search keeps working while it runs")).toBeTruthy()
+    fake.setJob(searchIndexJob({ state: 'done', done: 405, failed: 2, skipped: 5, unreachable: 4, ended: '2026-11-19T10:48:00Z', estimateSecondsLeft: null }))
+    await act(async () => void window.dispatchEvent(new Event('focus')))
+    const ended = await screen.findByRole('region', { name: 'Reindexed Matter 1001.1 Charter Dispute' })
+    expect(within(ended).getByText("405 reindexed, 2 couldn't be indexed, 5 skipped (4 on storage that couldn't be reached). Those that couldn't be indexed are on the Couldn't Be Indexed tab.")).toBeTruthy()
+  })
+
   it('shows none while nothing waits or runs', async () => {
     await open({ jobs: [searchIndexDoneJob] })
     await settle()
