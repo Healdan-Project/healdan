@@ -147,3 +147,17 @@
   flex-wrap: wrap;
   gap: var(--hd-space-3);
 }
+
+/* Reindex's question: what it covers, then how many documents, above its buttons */
+.reindexText {
+  margin-bottom: var(--hd-space-4);
+  overflow-wrap: anywhere;
+}
+
+.reindexText p {
+  margin: 0 0 var(--hd-space-2);
+}
+
+.reindexName {
+  font-weight: var(--hd-weight-bold);
+}

@@ -11,7 +11,8 @@ import { favoriteNameRefusal, hasOwnName, renameFavorite } from '../actions/favo
 import { useFavorite, type Starred } from '../actions/FavoriteStar'
 import { anyDeletable, anyMovable, movingFolder } from '../actions/folders'
 import { useMyMattersChange } from '../actions/myMatters'
-import { favoriteAction, newTabAction, useDocumentActions } from '../actions/useDocumentActions'
+import { favoriteAction, newTabAction, useDocumentActions, type DocumentAction, type LinkAction } from '../actions/useDocumentActions'
+import { useReindex } from '../actions/useReindex'
 import { adminMatterHref, docHref, folderHref } from '../addresses'
 import { placeOf } from '../filing/dropTargets'
 import { mayMakeFolderIn } from '../organising/NewFolder'
@@ -24,19 +25,22 @@ type S = components['schemas']
 // The right-click menus (changed after M6: the owner's dogfooding punch list, 2026-11-14). Each offers what the toolbar,
 // More, a star or the left pane's + and ⋯ offer for the same thing, from the same rules; none is the only way to do
 // anything. Where the item has an address in the app, Open in New Tab ends the menu's first group, as the browser's own
-// menu for a link would have offered it.
+// menu for a link would have offered it. An administrator's own items, which only the menus offer (admin spec 13), are a
+// last group: Reindex on a document's, a selection of documents', a folder's and a matter's, and Manage in Admin on a
+// matter's.
 
 /**
  * A document's row: the toolbar's Open, Preview, Download and Check Out (Check In and Release instead, for the person's
  * own web check-out; Release… for one another of their computers holds), More's Rename, Move To…, Delete and Copy Link,
  * and Favorites. With several selected, Move To… and Delete are enabled, and Release when they're all the person's own
- * check-outs, as on the toolbar.
+ * check-outs, as on the toolbar. For an administrator, Reindex, of the one document or all of them, by doc #.
  */
 export function DocumentMenuItems({ documents }: { documents: S['DocumentView'][] }) {
   const one = documents.length === 1 ? documents[0] : undefined
   const actions = useDocumentActions({ document: one, documents })
   // Only the menu offers these: Favorites is the details' star's change, with one document
   const favorite = favoriteAction(useFavorite(one && { docNumber: one.docNumber }))
+  const reindex = useReindex(documents.length > 0 ? { kind: 'documents', docNumbers: documents.map((each) => each.docNumber) } : undefined)
   return (
     <>
       <ActionItem action={actions.open} />
@@ -59,6 +63,7 @@ export function DocumentMenuItems({ documents }: { documents: S['DocumentView'][
       <MenuSeparator />
       <ActionItem action={actions.copyLink} />
       <ActionItem action={favorite} />
+      <AdminItems actions={[reindex]} />
     </>
   )
 }
@@ -66,8 +71,9 @@ export function DocumentMenuItems({ documents }: { documents: S['DocumentView'][
 /**
  * A folder's row or tree item: Open, New Folder where the toolbar offers it (mayMakeFolderIn: inside a matter, never in a
  * search folder), Rename, Move To… and Delete (each greyed out where the folder's `canRename`, `canMove` or `canDelete`
- * says no: folder rename spec 5.2, folders and Trash spec 7.5), and Favorites, as its star does. `renameIn` is where the
- * field opens.
+ * says no: folder rename spec 5.2, folders and Trash spec 7.5), and Favorites, as its star does; for an administrator,
+ * Reindex, of the folder and every folder in it, but for a search folder, which holds no documents of its own. `renameIn`
+ * is where the field opens.
  */
 export function FolderMenuItems({ folder, renameIn }: { folder: S['FolderView']; renameIn: RenamePlace }) {
   const navigate = useNavigate()
@@ -75,6 +81,7 @@ export function FolderMenuItems({ folder, renameIn }: { folder: S['FolderView'];
   const organising = useOrganising()
   const favorite = useFavorite({ folderId: folder.id })
   const place = placeOf(folder)
+  const reindex = useReindex(folder.kind === 'searchFolder' ? undefined : { kind: 'folder', targetId: folder.id })
   return (
     <>
       <MenuItem id="open" onAction={() => void navigate({ to: '/folders/$id', params: { id: String(folder.id) } })}>
@@ -94,6 +101,7 @@ export function FolderMenuItems({ folder, renameIn }: { folder: S['FolderView'];
       <FolderChangeItems folder={folder} />
       <MenuSeparator />
       <ActionItem action={favoriteAction(favorite)} />
+      <AdminItems actions={[reindex]} />
     </>
   )
 }
@@ -138,9 +146,10 @@ export function SelectionMenuItems({ items }: { items: OrganisingItems }) {
 
 /**
  * A matter (in My Matters, Recent Matters or a search's list): Open, Open in New Tab, Rename greyed out (a matter's own folder
- * takes the matter's name), and Add to or Remove from My Matters, as + and ⋯ do; for an administrator, Manage in Admin, the
- * matter's page in the Admin app (`matterId` is the matter's own id, not its folder's), in a new tab, as Open in New Tab opens
- * it. A matter's own folder whose answer names no matter (`matterId` null) has the rest, and no Manage in Admin.
+ * takes the matter's name), and Add to or Remove from My Matters, as + and ⋯ do; for an administrator, Reindex, of the
+ * matter's workspace, and Manage in Admin, the matter's page in the Admin app (`matterId` is the matter's own id, not its
+ * folder's), in a new tab, as Open in New Tab opens it. A matter's own folder whose answer names no matter (`matterId`
+ * null) has the rest, and neither.
  */
 export function MatterMenuItems({ folderId, matterId }: { folderId: number; matterId: number | null }) {
   const navigate = useNavigate()
@@ -149,6 +158,8 @@ export function MatterMenuItems({ folderId, matterId }: { folderId: number; matt
   const mine = useMyMatters()
   const change = useMyMattersChange()
   const kept = mine.data?.items.some((matter) => matter.folderId === folderId) === true
+  const reindex = useReindex(matterId === null ? undefined : { kind: 'matter', targetId: matterId })
+  const manage = admin && matterId !== null ? { id: 'manageInAdmin', label: t('menu.manageInAdmin'), isDisabled: false, href: adminMatterHref(matterId) } : undefined
   return (
     <>
       <MenuItem id="open" onAction={() => void navigate({ to: '/folders/$id', params: { id: String(folderId) } })}>
@@ -163,12 +174,21 @@ export function MatterMenuItems({ folderId, matterId }: { folderId: number; matt
       <MenuItem id="myMatters" isDisabled={!mine.isSuccess} onAction={() => void change(kept ? 'DELETE' : 'PUT', folderId)}>
         {kept ? t('myMatters.remove') : t('myMatters.addMenu')}
       </MenuItem>
-      {admin && matterId !== null && (
-        <>
-          <MenuSeparator />
-          <ActionItem action={{ id: 'manageInAdmin', label: t('menu.manageInAdmin'), isDisabled: false, href: adminMatterHref(matterId) }} />
-        </>
-      )}
+      <AdminItems actions={[reindex, manage]} />
+    </>
+  )
+}
+
+/** A menu's last group, an administrator's own items, after a separator; nothing when none is offered */
+function AdminItems({ actions }: { actions: (DocumentAction | LinkAction | undefined)[] }) {
+  const offered = actions.filter((action) => action !== undefined)
+  if (offered.length === 0) return null
+  return (
+    <>
+      <MenuSeparator />
+      {offered.map((action) => (
+        <ActionItem key={action.id} action={action} />
+      ))}
     </>
   )
 }
