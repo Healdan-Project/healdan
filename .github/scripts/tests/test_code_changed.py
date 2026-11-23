@@ -143,6 +143,19 @@ class CodeChangedTest(unittest.TestCase):
         self.change("healdan-core/src/main/java/A.java")
         self.assertEqual("web=false", self.web())
 
+    def test_web_docs_are_not_web(self):
+        # healdan-web/CLAUDE.md is guidance for Claude Code, not the apps
+        self.change("healdan-web/CLAUDE.md")
+        self.assertEqual(["code=false", "clients=false"], self.outputs())
+        self.assertEqual("web=false", self.web())
+        self.change("healdan-web/CLAUDE.md", "healdan-web/web/package.json")
+        self.assertEqual("web=true", self.web())
+
+    def test_web_markdown_under_src_is_web(self):
+        # As for code: Markdown under src/ can be something the apps or their tests read
+        self.change("healdan-web/web/apps/user/src/x.md")
+        self.assertEqual("web=true", self.web())
+
     def test_push_is_web(self):
         self.change("site/content/x.md")
         self.assertEqual("web=true", self.web(event="push"))

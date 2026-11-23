@@ -45,6 +45,9 @@ export default defineConfig(({ mode }) => {
       include: ['src/**/*.test.{ts,tsx}'],
       globals: false,
       setupFiles: ['src/test/setup.ts'],
+      // The lists' tests draw a page of 100 rows or more in jsdom and read on through several pages: about 2 s each
+      // alone, and past Vitest's 5 s on CI's runner, where every test file runs at once (AuditView.test.tsx failed so)
+      testTimeout: 15_000,
       css: { include: [/\.css/], modules: { classNameStrategy: 'non-scoped' } },
     },
   }
