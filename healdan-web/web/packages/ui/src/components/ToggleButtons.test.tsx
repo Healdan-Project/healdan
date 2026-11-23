@@ -44,4 +44,25 @@ describe('ToggleButtons', () => {
     await userEvent.keyboard(' ')
     expect(onChange).toHaveBeenCalledWith('everyone')
   })
+
+  it('is one Tab stop, the pressed button, tabbed into from before it or from after it', async () => {
+    render(
+      <>
+        <button type="button">Before</button>
+        <ToggleButtons label="Show" choices={choices} value="everyone" onChange={() => {}} />
+        <button type="button">After</button>
+      </>,
+    )
+    screen.getByRole('button', { name: 'Before' }).focus()
+    await userEvent.tab()
+    expect(document.activeElement?.textContent).toBe("Everyone's")
+    await userEvent.tab()
+    expect(document.activeElement?.textContent).toBe('After')
+    await userEvent.tab({ shift: true })
+    expect(document.activeElement?.textContent).toBe("Everyone's")
+    // The arrows still reach the others, which a click focuses too
+    await userEvent.keyboard('{ArrowLeft}')
+    expect(document.activeElement?.textContent).toBe('Mine')
+    expect(screen.getAllByRole('radio').map((one) => one.tabIndex)).toEqual([-1, 0, -1])
+  })
 })

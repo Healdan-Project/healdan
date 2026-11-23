@@ -17,7 +17,8 @@ export interface ToggleButtonsProps {
 /**
  * A row of joined buttons, one of which is pressed: a switch between views, as the Trash's Mine · Everyone's · Removed. A
  * screen reader hears a group of radio buttons, which the arrow keys move between, as React Aria's ToggleButtonGroup does
- * for a single choice.
+ * for a single choice. As a radio group's, its one Tab stop is the pressed button, from either side: the others are out of
+ * the Tab order (React Aria's group would otherwise take the focus on its first button, whichever is pressed).
  */
 export function ToggleButtons({ label, choices, value, onChange }: ToggleButtonsProps) {
   return (
@@ -33,7 +34,7 @@ export function ToggleButtons({ label, choices, value, onChange }: ToggleButtons
       className={styles.group}
     >
       {choices.map((choice) => (
-        <ToggleButton key={choice.value} id={choice.value} className={styles.button}>
+        <ToggleButton key={choice.value} id={choice.value} className={styles.button} excludeFromTabOrder={choice.value !== value}>
           {choice.label}
         </ToggleButton>
       ))}
