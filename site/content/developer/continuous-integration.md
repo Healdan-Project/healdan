@@ -117,8 +117,8 @@ manifest into its jar. A Markdown file there is still docs. `code` gates the Jav
 build steps. `clients` is true when the pull request changes anything under `clients/`, `clients.yml` itself, or the
 API contract, `healdan-api/src/main/resources/healdan/api/openapi.yaml`, which the helper's contract tests read. The
 admin API's contract beside it, `openapi-admin.yaml`, doesn't count, as the helper's tests don't read it. `clients` gates the
-client test jobs. `web` is true when the pull request changes anything under `healdan-web/`, `web.yml` itself, or
-either contract, which the apps' types are generated from. It gates the `Web` check's app job. A push always gets
+client test jobs. `web` is true when the pull request changes anything under `healdan-web/` but Markdown outside a
+`src/` folder, `web.yml` itself, or either contract, which the apps' types are generated from. It gates the `Web` check's app job. A push always gets
 all three true.
 
 Every workflow still reports its required checks when its steps are skipped, so `master`'s ruleset can require
