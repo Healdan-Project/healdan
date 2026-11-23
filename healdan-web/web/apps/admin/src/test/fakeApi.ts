@@ -1546,6 +1546,217 @@ export function jobRoutes(rows: A['Job'][] = jobRows, options: JobRoutesOptions 
   }
 }
 
+// Search Index (Phase 6): the index's counts, the documents that couldn't be indexed and those waiting, the index's
+// events, and the reindexes, as the Search Index screen reads them. Every name here starts searchIndex.
+
+/** A document as the Search Index names it: # 10412, Witness Statement.pdf, of 1001.1, unless `over` says otherwise */
+export function searchIndexDocument(over: Partial<A['IndexDocument']> = {}): A['IndexDocument'] {
+  return { id: 5412, docNumber: 10412, fileName: 'Witness Statement.pdf', matter: { id: 11, number: '1001.1', name: 'Charter Dispute' }, ...over }
+}
+
+/** The two documents that couldn't be indexed, the latest error first, as the mockup has them */
+export const searchIndexFailures: A['IndexFailure'][] = [
+  { document: searchIndexDocument(), reason: 'The file is encrypted', when: '2026-11-19T08:31:00Z' },
+  {
+    document: searchIndexDocument({ id: 5398, docNumber: 10398, fileName: 'Heads of Terms.pdf', matter: { id: 31, number: '1003.1', name: 'Series A Investment' } }),
+    reason: 'The file is encrypted',
+    when: '2026-11-19T08:30:00Z',
+  },
+]
+
+/** Five documents waiting for the Indexer, in the order they were filed */
+export const searchIndexWaiting: A['IndexWaiting'][] = [10420, 10421, 10422, 10423, 10424].map((docNumber, i) => ({
+  document: searchIndexDocument({ id: 5420 + i, docNumber, fileName: `Exhibit ${i + 1}.pdf` }),
+  lastChanged: `2026-11-19T10:${String(35 + i)}:00Z`,
+}))
+
+/** GET /v1/admin/search-index: 1,277 indexed, 5 waiting and 2 that couldn't be, the Indexer idle and free to run */
+export function searchIndexOf(over: Partial<A['SearchIndex']> = {}): A['SearchIndex'] {
+  return {
+    indexed: 1277,
+    waiting: 5,
+    failed: 2,
+    entries: 1290,
+    bytes: 412 * MB,
+    health: { status: 'attention', detail: '5 waiting, 2 failed' },
+    indexer: { job: jobOf(), runRefusal: null },
+    ...over,
+  }
+}
+
+/** A reindex: Sam's of matter 1001.1, running, 212 of 412 tried, about 6 minutes left, unless `over` says otherwise */
+export function searchIndexJob(over: Partial<A['ReindexJob']> = {}): A['ReindexJob'] {
+  return {
+    id: 7,
+    kind: 'matter',
+    targetId: 11,
+    name: 'Matter 1001.1 Charter Dispute',
+    startedBy: sam,
+    state: 'running',
+    cancelling: false,
+    emptyFirst: false,
+    total: 412,
+    done: 208,
+    failed: 2,
+    skipped: 2,
+    leftOut: 3,
+    created: '2026-11-19T10:42:00Z',
+    started: '2026-11-19T10:42:00Z',
+    ended: null,
+    stalledSince: null,
+    estimateSecondsLeft: 360,
+    ...over,
+  }
+}
+
+/** A reindex waiting its turn: Helen's of the Store Client Work */
+export const searchIndexWaitingJob = searchIndexJob({
+  id: 8,
+  kind: 'store',
+  targetId: 4,
+  name: 'Store Client Work',
+  startedBy: helen,
+  state: 'waiting',
+  total: 1004,
+  done: 0,
+  failed: 0,
+  skipped: 0,
+  created: '2026-11-19T10:50:00Z',
+  started: null,
+  estimateSecondsLeft: 1757,
+})
+
+/** A reindex that ended: Tom's of three documents, last week */
+export const searchIndexDoneJob = searchIndexJob({
+  id: 5,
+  kind: 'documents',
+  targetId: null,
+  name: '3 Documents',
+  startedBy: tom,
+  state: 'done',
+  total: 3,
+  done: 2,
+  failed: 1,
+  skipped: 0,
+  leftOut: 0,
+  created: '2026-11-12T09:00:00Z',
+  started: '2026-11-12T09:00:00Z',
+  ended: '2026-11-12T09:00:06Z',
+  estimateSecondsLeft: null,
+})
+
+/** An event of the index: # 10412 couldn't be indexed by the Indexer at 08:31, unless `over` says otherwise */
+export function searchIndexEvent(over: Partial<A['IndexEvent']> = {}): A['IndexEvent'] {
+  return { id: 9001, when: '2026-11-19T08:31:00Z', event: 'failed', reason: 'The file is encrypted', who: 'System', document: searchIndexDocument(), ...over }
+}
+
+export const searchIndexEvents: A['IndexEvent'][] = [
+  searchIndexEvent({ id: 9003, when: '2026-11-19T10:40:00Z', event: 'indexed', reason: null, who: 'Sam Okafor', document: searchIndexDocument({ id: 5401, docNumber: 10401, fileName: 'Charter Party.pdf' }) }),
+  searchIndexEvent({ id: 9002, when: '2026-11-19T08:32:00Z', reason: 'The file is encrypted', document: searchIndexFailures[1]!.document }),
+  searchIndexEvent(),
+]
+
+/** A page of the index's events: its rows, where the next one starts (none, the end, unless given), and how far back it read */
+export function searchIndexEventPage(items: A['IndexEvent'][], nextCursor: string | null = null, readBackTo = '2026-11-01T00:00:00Z'): A['IndexHistoryPage'] {
+  return { items, nextCursor, readBackTo: nextCursor === null ? null : readBackTo }
+}
+
+/** A page by offset of `rows`, as the Search Index's paged routes answer, its `offset` and `limit` from the query */
+function searchIndexPage<T>(rows: T[], query?: Record<string, unknown>) {
+  const offset = Number(query?.offset ?? 0)
+  const limit = Number(query?.limit ?? 100)
+  return { items: rows.slice(offset, offset + limit), offset, limit, total: rows.length }
+}
+
+export interface SearchIndexRoutesOptions {
+  index?: A['SearchIndex']
+  failures?: A['IndexFailure'][]
+  waiting?: A['IndexWaiting'][]
+  /** Every reindex, the newest first; those waiting or running are the active ones */
+  jobs?: A['ReindexJob'][]
+  events?: A['IndexEvent'][]
+  /** How Try Again goes for a doc #: indexed by default */
+  retry?: (docNumber: number) => A['IndexRetry'] | ApiError
+}
+
+/**
+ * The Search Index's routes, to spread over the defaults, over copies of what `options` give (the mockup's, by default):
+ * Try Again takes an indexed document out of the failures, as the server would, and Skip takes it out too, each answering
+ * a document that isn't there any more `409 refused` and a doc # none has `404`; Run Indexer Now runs the Indexer, or is
+ * refused with its reason; Cancel cancels a waiting reindex at once and asks a running one to stop. The counts follow.
+ */
+export function searchIndexRoutes(options: SearchIndexRoutesOptions = {}) {
+  let index = options.index ?? searchIndexOf()
+  let failures = [...(options.failures ?? searchIndexFailures)]
+  const waiting = [...(options.waiting ?? searchIndexWaiting)]
+  const jobs = new Map((options.jobs ?? [searchIndexWaitingJob, searchIndexJob(), searchIndexDoneJob]).map((job) => [job.id, { ...job }]))
+  const events = options.events ?? searchIndexEvents
+  const refused = (sentence: string) => problem(409, 'refused', sentence)
+  const active = () => [...jobs.values()].filter((job) => job.state === 'waiting' || job.state === 'running')
+  // The failure the path's doc # names, decided on, or the server's refusals
+  function failed(params: string[], decide: (failure: A['IndexFailure']) => unknown): unknown {
+    const docNumber = Number(params[0])
+    const failure = failures.find((one) => one.document.docNumber === docNumber)
+    if (failure !== undefined) return decide(failure)
+    const known = [...searchIndexFailures, ...waiting].some((one) => one.document.docNumber === docNumber)
+    return known ? refused('This document is no longer waiting after an error.') : notFound()
+  }
+  function without(failure: A['IndexFailure']) {
+    failures = failures.filter((one) => one !== failure)
+    index = { ...index, failed: failures.length }
+  }
+  const routes = {
+    'GET /v1/admin/search-index': () => index,
+    'GET /v1/admin/search-index/failed': ({ query }: { query?: Record<string, unknown> }) => searchIndexPage(failures, query) satisfies A['IndexFailureList'],
+    'GET /v1/admin/search-index/waiting': ({ query }: { query?: Record<string, unknown> }) => searchIndexPage(waiting, query) satisfies A['IndexWaitingList'],
+    'GET /v1/admin/search-index/history': () => searchIndexEventPage(events),
+    'POST /v1/admin/search-index/run': () => {
+      if (index.indexer.runRefusal !== null) return refused(index.indexer.runRefusal)
+      const job = { ...index.indexer.job, running: true, canRun: false, canStop: true, lastStart: JOB_RUN_STARTED, lastEnd: null, result: null }
+      index = { ...index, indexer: { job, runRefusal: 'This job is running already.' } }
+      return index.indexer
+    },
+    'POST /v1/admin/search-index/failed/*/retry': ({ params }: { params: string[] }) =>
+      failed(params, (failure) => {
+        const outcome = options.retry?.(failure.document.docNumber ?? -1) ?? ({ outcome: 'indexed', reason: null } satisfies A['IndexRetry'])
+        if (outcome instanceof ApiError) return outcome
+        if (outcome.outcome === 'indexed') without(failure)
+        else failures = failures.map((one) => (one === failure ? { ...one, reason: outcome.reason, when: '2026-11-19T10:45:00Z' } : one))
+        return outcome
+      }),
+    'POST /v1/admin/search-index/failed/*/skip': ({ params }: { params: string[] }) =>
+      failed(params, (failure) => {
+        without(failure)
+        return undefined
+      }),
+    'GET /v1/admin/reindex': ({ query }: { query?: Record<string, unknown> }) => {
+      const rows = query?.active === 'true' ? active() : [...jobs.values()]
+      return searchIndexPage(
+        rows.sort((a, b) => b.id - a.id).map((job) => ({ ...job })),
+        query,
+      ) satisfies A['ReindexJobList']
+    },
+    'GET /v1/admin/reindex/*': ({ params }: { params: string[] }) => {
+      const job = jobs.get(Number(params[0]))
+      return job === undefined ? notFound() : { ...job }
+    },
+    'DELETE /v1/admin/reindex/*': ({ params }: { params: string[] }) => {
+      const job = jobs.get(Number(params[0]))
+      if (job === undefined) return notFound()
+      if (job.state === 'done' || job.state === 'cancelled') return refused('This reindex has ended.')
+      const next: A['ReindexJob'] = job.state === 'waiting' ? { ...job, state: 'cancelled', ended: '2026-11-19T10:51:00Z', estimateSecondsLeft: null } : { ...job, cancelling: true }
+      jobs.set(job.id, next)
+      return { ...next }
+    },
+  }
+  return {
+    routes,
+    /** A reindex, as the server now has it, as when it runs on or ends meanwhile */
+    setJob: (job: A['ReindexJob']) => void jobs.set(job.id, { ...job }),
+    setIndex: (next: A['SearchIndex']) => void (index = next),
+  }
+}
+
 // Reindex dialog (Phase 6): Recent Matters, the documents its doc #s name, what each choice would cover, and the reindex
 // a start answers, each from the fixtures above, so the counts agree with the Matters list's and the Stores'.
 

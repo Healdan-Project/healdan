@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import type { adminComponents } from '@healdan/api'
-import { t } from '../strings'
+import { hasString, t } from '../strings'
 
 type A = adminComponents['schemas']
 
@@ -18,9 +18,13 @@ export function inKindOrder(kinds: readonly string[]): A['AuditKind'][] | undefi
   return ordered.length === 0 ? undefined : ordered
 }
 
-/** A kind of row as the Audit Trail names it: Sign-In, Document, Folder, User or Administration */
+/**
+ * A kind of row as the Audit Trail names it: Sign-In, Document, Folder, User or Administration; a kind the catalogue doesn't
+ * know, as one a newer server adds, as the server names it, so the row is still drawn (P6-R17)
+ */
 export function kindLabel(kind: A['AuditKind']): string {
-  return t(`admin.audit.kind.${kind}`)
+  const key = `admin.audit.kind.${kind}`
+  return hasString(key) ? t(key as `admin.audit.kind.${A['AuditKind']}`) : kind
 }
 
 /**

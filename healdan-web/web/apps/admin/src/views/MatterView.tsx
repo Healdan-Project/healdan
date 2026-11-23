@@ -123,7 +123,7 @@ function Matter({ matter, tab }: { matter: A['Matter']; tab: MatterTab }) {
             </span>
           </Button>
           {/* The Search Index's Reindex dialog, with the matter chosen (P6-R18) */}
-          <ServerLink className={page.linkButton} href={reindexHref({ kind: 'matter', id: matter.id })}>
+          <ServerLink className={page.linkButton} href={reindexHref('matter', matter.id)}>
             <Icon name="refresh" size={14} />
             {t('admin.matter.reindex')}
           </ServerLink>

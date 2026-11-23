@@ -114,7 +114,7 @@ function Editor({ root, kind, matterId, problems }: { root: WorkspaceNode; kind:
   const making = node.kind === 'folder' ? node : (parent ?? root)
 
   // A folder of a matter's workspace is reindexed on the Search Index, its Reindex dialog open on it (P6-R18)
-  const reindexOf = (on: WorkspaceNode) => (matterId === undefined ? undefined : reindexHref({ kind: 'folder', id: on.id, matter: matterId }))
+  const reindexOf = (on: WorkspaceNode) => (matterId === undefined ? undefined : reindexHref('folder', on.id, matterId))
 
   const nodeReindex = node.kind === 'folder' && !isTop ? reindexOf(node) : undefined
 

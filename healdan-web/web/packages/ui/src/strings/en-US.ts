@@ -540,6 +540,13 @@ export const enUS = {
   'problems.not-an-email': "That isn't an email message.",
   'problems.server-error': 'Something went wrong.',
   'problems.unknown': 'Something went wrong.',
+  // Reindex, on an administrator's right-click menus (admin spec 13): the item, the question, which names what the server
+  // says it covers (POST /v1/admin/reindex/preview), and a selection over the server's limit. Its plurals are at the end
+  // of enUSPlurals.
+  'reindex.menu': 'Reindex',
+  'reindex.title': 'Reindex',
+  'reindex.counting': 'Counting the documents…',
+  'reindex.tooMany': 'Reindex at most 1,000 documents at a time.',
 } as const
 
 export type StringKey = keyof typeof enUS
@@ -608,6 +615,14 @@ export const enUSPlurals = {
   'progress.count': { one: '{value} of {n}', other: '{value} of {n}' },
   // Above what a search picker found
   'searchPicker.results': { one: '{n} Result', other: '{n} Results' },
+  // Reindex (admin spec 13): the question's count and its button, and the toast once it's started, whose [View Progress]
+  // opens the Admin app's Search Index in a new tab
+  'reindex.count': {
+    one: '{n} document will be indexed again. Search keeps finding it meanwhile.',
+    other: '{n} documents will be indexed again. Search keeps finding them meanwhile.',
+  },
+  'reindex.confirm': { one: 'Reindex {n} Document', other: 'Reindex {n} Documents' },
+  'reindex.started': { one: 'Reindexing {n} document. [View Progress]', other: 'Reindexing {n} documents. [View Progress]' },
 } as const
 
 export type PluralKey = keyof typeof enUSPlurals
