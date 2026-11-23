@@ -8,7 +8,7 @@ import type { adminComponents } from '@healdan/api'
 import { ErrorPanel, useApi } from '@healdan/shell'
 import { Button, formatCount, formatDateTime, formatSize, Icon, StatusDot, Tabs, toast } from '@healdan/ui'
 import { routes, type IndexTab, type SearchIndexSearch } from '../addresses'
-import { focusLost, useFocusWhenGone } from '../focus'
+import { focusLost } from '../focus'
 import { Problems } from '../forms/Problems'
 import { Refusal } from '../forms/Refusal'
 import { FailedList } from '../index/FailedList'
@@ -26,6 +26,15 @@ type A = adminComponents['schemas']
 /** What a refusal of Run Indexer Now is said against: the Indexer as the heading has it */
 function indexerState(index: A['SearchIndex'] | undefined): string {
   return JSON.stringify(index?.indexer ?? null)
+}
+
+/**
+ * Whether the focus is on nothing, or on a button that's greyed out: WebKit leaves the focus on a button while it's
+ * disabled, where Chromium takes it off the page
+ */
+function focusStranded(): boolean {
+  const focused = document.activeElement
+  return focusLost() || (focused instanceof HTMLButtonElement && focused.disabled)
 }
 
 /** A tab's label, with its count once the heading has it: "Couldn't Be Indexed (2)" */
@@ -142,16 +151,20 @@ export function SearchIndexView({ search }: { search: SearchIndexSearch }) {
   // A refusal goes once a new read shows the Indexer changed since, and while the reason greys the button out it says it
   const failure = refused !== undefined && refused.against === indexerState(data) && refusal === null ? refused.failure : undefined
   // Greyed out under the focus, the button gives the focus to the page's heading: as the reason comes while it's on its way,
-  // once the press is done (a browser drops the focus from a disabled button only later), or as a new read greys it out
+  // once the press is done (a browser drops the focus from a disabled button only later, and WebKit not at all), or as a
+  // new read greys it out
   const wasBusy = useRef(false)
+  const greyed = refusal !== null && !busy
+  const wasGreyed = useRef(greyed)
   useEffect(() => {
     const ended = wasBusy.current && !busy
+    const turned = greyed && !wasGreyed.current
     wasBusy.current = busy
-    if (!ended || refusal === null) return
-    const focused = document.activeElement
-    if (focusLost() || (focused instanceof HTMLButtonElement && focused.disabled)) heading.current?.focus()
-  }, [busy, refusal])
-  useFocusWhenGone(refusal !== null && !busy, heading)
+    wasGreyed.current = greyed
+    if ((ended && refusal !== null) || turned) {
+      if (focusStranded()) heading.current?.focus()
+    }
+  }, [busy, refusal, greyed])
 
   // The dialog closing gives the focus back to what opened it, Reindex…; one a link opened, from a matter's page or the
   // Workspace Editor, had nothing on this page to give it back to, so the focus goes to the page's heading: once React
