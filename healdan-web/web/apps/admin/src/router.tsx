@@ -4,7 +4,7 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { createRootRoute, createRoute, createRouter, type ErrorComponentProps, type RouterHistory } from '@tanstack/react-router'
 import { ErrorPanel, parseSearch, stringifySearch } from '@healdan/shell'
-import { ADMIN_BASE, routes } from './addresses'
+import { ADMIN_BASE, routes, searchIndexSearch } from './addresses'
 import { Frame } from './frame/Frame'
 import { AuditView, auditSearch } from './views/AuditView'
 import { BackendsView } from './views/BackendsView'
@@ -18,6 +18,7 @@ import { GroupView } from './views/GroupView'
 import { JobsView } from './views/JobsView'
 import { MattersView, mattersSearch } from './views/MattersView'
 import { MatterView, matterSearch } from './views/MatterView'
+import { SearchIndexView } from './views/SearchIndexView'
 import { ServerLogView, serverLogSearch } from './views/ServerLogView'
 import { StoresView } from './views/StoresView'
 import { StoreView, storeSearch } from './views/StoreView'
@@ -180,6 +181,17 @@ const auditRoute = createRoute({
 
 const jobsRoute = createRoute({ getParentRoute: () => rootRoute, path: routes.jobs, component: JobsView })
 
+// /search-index: the index's counts, the reindexes running and its tabs, the tab in the address, and the Reindex dialog's
+// choice and what it's chosen on (SearchIndexView, P6-R18)
+const searchIndexRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: routes.searchIndex,
+  validateSearch: searchIndexSearch,
+  component: function SearchIndexRoute() {
+    return <SearchIndexView search={searchIndexRoute.useSearch()} />
+  },
+})
+
 const routeTree = rootRoute.addChildren([
   dashboardRoute,
   clientsRoute,
@@ -200,6 +212,7 @@ const routeTree = rootRoute.addChildren([
   serverLogRoute,
   auditRoute,
   jobsRoute,
+  searchIndexRoute,
 ])
 
 /**

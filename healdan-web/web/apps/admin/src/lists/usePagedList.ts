@@ -4,13 +4,23 @@
 import { keepPreviousData, useInfiniteQuery } from '@tanstack/react-query'
 import { useMemo } from 'react'
 import { ASK_ON_RETURN, useApi } from '@healdan/shell'
-import type { AdminAnswer } from '../queries'
+import { POLL_MS, type AdminAnswer } from '../queries'
 
 /**
  * The lists that come a page at a time: clients and matters, each with when their figures were worked out, people, groups,
- * a group's members, whose route names the group by its `{id}`, and the faults the server logged
+ * a group's members, whose route names the group by its `{id}`, the faults the server logged, and the Search Index's
+ * documents that couldn't be indexed, those waiting, and the reindexes
  */
-export type PagedPath = '/v1/admin/clients' | '/v1/admin/matters' | '/v1/admin/users' | '/v1/admin/groups' | '/v1/admin/groups/{id}/members' | '/v1/admin/errors'
+export type PagedPath =
+  | '/v1/admin/clients'
+  | '/v1/admin/matters'
+  | '/v1/admin/users'
+  | '/v1/admin/groups'
+  | '/v1/admin/groups/{id}/members'
+  | '/v1/admin/errors'
+  | '/v1/admin/search-index/failed'
+  | '/v1/admin/search-index/waiting'
+  | '/v1/admin/reindex'
 
 /** Which way a list's server sorts it */
 export type SortOrder = 'asc' | 'desc'
@@ -56,13 +66,24 @@ function located(path: PagedPath, ids: Readonly<Record<string, number>>): { url:
   }
 }
 
+export interface PagedListOptions {
+  /** Ask again for every page loaded every POLL_MS while the page is visible, as the Search Index's tabs do while a reindex runs */
+  poll?: boolean
+}
+
 /**
  * A list of the Admin app's, paged (spec 7.2, 8.2, 8.3, 8.7): TanStack Query's infinite query over the route, `pageSize` rows
  * at a time from an offset, the last question's rows kept while a new one loads, and asked again on each return to the
  * window, as the User app's lists are. `query` is the list's filters and order; it never holds an offset or a limit. A
  * route whose path names something by its id, as a group's members do, has it in `ids`.
  */
-export function usePagedList<P extends PagedPath>(path: P, query: object, pageSize: number, ids: Readonly<Record<string, number>> = {}): PagedListing<PagedItem<P>> {
+export function usePagedList<P extends PagedPath>(
+  path: P,
+  query: object,
+  pageSize: number,
+  ids: Readonly<Record<string, number>> = {},
+  options: PagedListOptions = {},
+): PagedListing<PagedItem<P>> {
   const api = useApi()
   const { url, key } = located(path, ids)
   const asked = useInfiniteQuery({
@@ -75,6 +96,9 @@ export function usePagedList<P extends PagedPath>(path: P, query: object, pageSi
       return (last.items?.length ?? 0) > 0 && next < (last.total ?? 0) ? next : undefined
     },
     placeholderData: keepPreviousData,
+    // TanStack Query asks on its interval only while its focusManager says the page is visible
+    refetchInterval: options.poll ? POLL_MS : false,
+    refetchIntervalInBackground: false,
     meta: ASK_ON_RETURN,
   })
   const pages = asked.data?.pages
@@ -96,12 +120,19 @@ export function usePagedList<P extends PagedPath>(path: P, query: object, pageSi
   }
 }
 
+/** A row's key: its id, or, for a row that names a document (the Search Index's), the document's */
+type Keyed = { id: number } | { document: { id: number } }
+
+function keyOf(row: Keyed): number {
+  return 'id' in row ? row.id : row.document.id
+}
+
 /** The rows, each once: offset pages shift when rows come or go between them, so a page can repeat the last one's end */
-function distinct<T extends { id: number }>(rows: T[]): T[] {
+function distinct<T extends Keyed>(rows: T[]): T[] {
   const seen = new Set<number>()
   return rows.filter((row) => {
-    if (seen.has(row.id)) return false
-    seen.add(row.id)
+    if (seen.has(keyOf(row))) return false
+    seen.add(keyOf(row))
     return true
   })
 }

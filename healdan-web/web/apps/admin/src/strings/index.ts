@@ -10,6 +10,8 @@ const catalogue = createCatalogue(adminEnUS, adminPlurals)
 export const t = catalogue.t
 /** The Admin app's plural for the key, or else the shared catalogue's, as @healdan/ui's plural() picks and fills it */
 export const plural = catalogue.plural
+/** Whether the Admin app's catalogue, or the shared one, holds a string for the key */
+export const hasString = catalogue.has
 
 /**
  * The messages for the problems the app's own catalogue holds (only those, so the shared catalogue answers the rest), in
