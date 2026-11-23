@@ -27,7 +27,9 @@ import com.logicaldoc.healdan.admin.index.ReindexScope.Kind;
  * @param done those indexed
  * @param failed those it tried that couldn't be indexed
  * @param skipped those no longer to be tried when their turn came: no longer live (in the Trash or destroyed), set
- *        to Skip, archived, or in a running transaction
+ *        to Skip, archived, or in a running transaction; and those whose file's storage couldn't be reached then,
+ *        {@code unreachable} of them
+ * @param unreachable those of {@code skipped} whose file's storage couldn't be reached at their turn (ruling P6-R23)
  * @param leftOut what its scope held when it was started that it doesn't try: shortcuts, and documents set to
  *        Skip, archived or in a running transaction
  * @param created when it was started
@@ -35,13 +37,15 @@ import com.logicaldoc.healdan.admin.index.ReindexScope.Kind;
  * @param ended when it ended, null while it hasn't
  * @param stalledSince since when the search index couldn't be written, so it waits and tries again; null while it
  *        can
+ * @param failingSince while it runs, since when {@link ReindexWorker} has failed at each try, as the worker keeps it
+ *        in memory; null while it doesn't, and in every other state
  * @param estimateSecondsLeft about how many seconds it has left, as {@link ReindexService} works it out; null once it
- *        has ended, while stalled, when nothing is left, or where it wasn't worked out
+ *        has ended, while stalled or failing, when nothing is left, or where it wasn't worked out
  */
 public record ReindexJob(long id, Kind kind, Long targetId, String name, long startedById, String startedByUsername,
 		String startedByName, State state, boolean cancelling, boolean emptyFirst, long total, long done, long failed,
-		long skipped, long leftOut, Instant created, Instant started, Instant ended, Instant stalledSince,
-		Long estimateSecondsLeft) {
+		long skipped, long unreachable, long leftOut, Instant created, Instant started, Instant ended,
+		Instant stalledSince, Instant failingSince, Long estimateSecondsLeft) {
 
 	/** Where a job is */
 	public enum State {
@@ -73,8 +77,18 @@ public record ReindexJob(long id, Kind kind, Long targetId, String name, long st
 	 */
 	public ReindexJob withEstimate(Long estimate) {
 		return new ReindexJob(id, kind, targetId, name, startedById, startedByUsername, startedByName, state,
-				cancelling, emptyFirst, total, done, failed, skipped, leftOut, created, started, ended, stalledSince,
-				estimate);
+				cancelling, emptyFirst, total, done, failed, skipped, unreachable, leftOut, created, started, ended,
+				stalledSince, failingSince, estimate);
+	}
+
+	/**
+	 * @param since since when the worker has failed at each try, null for not
+	 * @return it, failing since then
+	 */
+	public ReindexJob withFailingSince(Instant since) {
+		return new ReindexJob(id, kind, targetId, name, startedById, startedByUsername, startedByName, state,
+				cancelling, emptyFirst, total, done, failed, skipped, unreachable, leftOut, created, started, ended,
+				stalledSince, since, estimateSecondsLeft);
 	}
 
 	/**

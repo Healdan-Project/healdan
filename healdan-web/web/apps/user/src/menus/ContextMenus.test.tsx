@@ -402,22 +402,33 @@ describe('Manage in Admin, on a matter’s menu', () => {
 // separator; what it asks and starts is useReindex.test.tsx's
 describe('Reindex, for an administrator', () => {
   const admin = (over = {}) => ({ ...routes(over).all, 'GET /v1/me': { ...me, admin: true } })
+  // A slow machine (the whole suite beside a Maven build) took over the default second to draw a menu here, so these wait
+  // longer for it, and fire the right-click again while none has opened, as one that lands while the menu before it is
+  // still closing can be lost. What each checks is unchanged.
+  const WAIT = { timeout: 5000 }
+  const openMenu = async (target: () => Promise<HTMLElement> | HTMLElement) => {
+    await waitFor(async () => {
+      if (!screen.queryByRole('menu')) fireEvent.contextMenu(await target())
+      expect(screen.getByRole('menu')).toBeTruthy()
+    }, WAIT)
+    return screen.getByRole('menu')
+  }
   const lastGroup = async () => {
-    const all = Array.from((await menu()).querySelectorAll('[role="menuitem"], [role="separator"]'))
+    const all = Array.from((await screen.findByRole('menu', {}, WAIT)).querySelectorAll('[role="menuitem"], [role="separator"]'))
     const last = all.map((one) => one.getAttribute('role')).lastIndexOf('separator')
     return all.slice(last + 1).map((one) => one.textContent)
   }
 
   it('is a document’s last item, and a selection of documents’, enabled', async () => {
     await renderApp('/folders/7', admin())
-    fireEvent.contextMenu(await row(/Lease/))
+    await openMenu(() => row(/Lease/))
     expect(await names()).toEqual(['Open', 'Preview', 'Open in New Tab', 'Download', 'Check Out', 'Rename', 'Move To…', 'Delete', 'Copy Link', 'Add to Favorites', 'Reindex'])
     expect(await lastGroup()).toEqual(['Reindex'])
     fireEvent.keyDown(await menu(), { key: 'Escape' })
     await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
 
     await select(/Lease/, /Plan/)
-    fireEvent.contextMenu(await row(/Plan/))
+    await openMenu(() => row(/Plan/))
     expect(await screen.findByRole('menu', { name: 'Actions for 2 documents' })).toBeTruthy()
     expect(await enabled()).toEqual(['Move To…', 'Delete', 'Reindex'])
   })
@@ -425,57 +436,57 @@ describe('Reindex, for an administrator', () => {
   it('is a folder row’s last item, and a folder’s in the tree, but not a search folder’s', async () => {
     const recentHere = folder({ id: 9, name: 'Recent Here', kind: 'searchFolder' })
     await renderApp('/folders/7', admin({ 'GET /v1/folders/7/children': () => children([drafts, recentHere, letter]) }))
-    fireEvent.contextMenu(await row(/Drafts/))
+    await openMenu(() => row(/Drafts/))
     expect(await names()).toEqual(['Open', 'Open in New Tab', 'New Folder', 'Rename', 'Move To…', 'Delete', 'Add to Favorites', 'Reindex'])
     expect(await lastGroup()).toEqual(['Reindex'])
     fireEvent.keyDown(await menu(), { key: 'Escape' })
     await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
 
-    fireEvent.contextMenu(await row(/Recent Here/))
+    await openMenu(() => row(/Recent Here/))
     expect(await names()).not.toContain('Reindex')
     fireEvent.keyDown(await menu(), { key: 'Escape' })
     await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
 
     const tree = await screen.findByRole('treegrid', { name: 'My Matters' })
     fireEvent.click(within(tree).getByRole('button', { name: /expand/i }))
-    fireEvent.contextMenu(await within(tree).findByRole('row', { name: /Correspondence/ }))
+    await openMenu(() => within(tree).findByRole('row', { name: /Correspondence/ }))
     expect(await lastGroup()).toEqual(['Reindex'])
   })
 
   it('is on a matter’s menu, before Manage in Admin, in Recent Matters, the tree and a search’s list', async () => {
     await renderApp('/search?scope=matters&q=lease', { ...admin(), 'GET /v1/search': page([matter({ id: 12, folderId: 120, display: '1002.1 – Commercial Lease' })]) })
-    fireEvent.contextMenu(await within(await within(main()).findByRole('grid')).findByRole('row', { name: /1002\.1/ }))
+    await openMenu(async () => within(await within(main()).findByRole('grid')).findByRole('row', { name: /1002\.1/ }))
     expect(await lastGroup()).toEqual(['Reindex', 'Manage in Admin'])
     fireEvent.keyDown(await menu(), { key: 'Escape' })
     await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
 
-    fireEvent.contextMenu(await within(pane()).findByRole('link', { name: /1002\.1/ }))
+    await openMenu(() => within(pane()).findByRole('link', { name: /1002\.1/ }))
     expect(await lastGroup()).toEqual(['Reindex', 'Manage in Admin'])
     fireEvent.keyDown(await menu(), { key: 'Escape' })
     await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
 
     const tree = await screen.findByRole('treegrid', { name: 'My Matters' })
-    fireEvent.contextMenu(within(tree).getByRole('row', { name: /1001\.1/ }))
+    await openMenu(() => within(tree).findByRole('row', { name: /1001\.1/ }))
     expect(await lastGroup()).toEqual(['Reindex', 'Manage in Admin'])
     await expectNoAxeViolations(document.body)
   })
 
   it('is on no menu of a person who isn’t an administrator', async () => {
     await renderApp('/folders/7', routes().all)
-    fireEvent.contextMenu(await row(/Lease/))
+    await openMenu(() => row(/Lease/))
     expect(await names()).not.toContain('Reindex')
     fireEvent.keyDown(await menu(), { key: 'Escape' })
     await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
     await select(/Lease/, /Plan/)
-    fireEvent.contextMenu(await row(/Plan/))
+    await openMenu(() => row(/Plan/))
     expect(await names()).not.toContain('Reindex')
     fireEvent.keyDown(await menu(), { key: 'Escape' })
     await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
-    fireEvent.contextMenu(await row(/Drafts/))
+    await openMenu(() => row(/Drafts/))
     expect(await names()).not.toContain('Reindex')
     fireEvent.keyDown(await menu(), { key: 'Escape' })
     await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
-    fireEvent.contextMenu(await within(pane()).findByRole('link', { name: /1002\.1/ }))
+    await openMenu(() => within(pane()).findByRole('link', { name: /1002\.1/ }))
     expect(await names()).not.toContain('Reindex')
   })
 

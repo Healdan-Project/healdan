@@ -183,6 +183,66 @@ describe('Try Again', () => {
     expect(docNumbers()).toEqual(['# 10412', '# 10398'])
   })
 
+  it("says in its row that the index can't be written just now, in the server's sentence, and the row stays as it was (P6-R29)", async () => {
+    const sentence = "The search index can't be written just now. Try again later."
+    await open({}, { 'POST /v1/admin/search-index/failed/*/retry': problem(409, 'refused', sentence) })
+    await userEvent.click(within(row('# 10412')).getByRole('button', { name: /^Try Again/ }))
+    expect((await within(under('# 10412')).findByRole('alert')).textContent).toBe(sentence)
+    // The list read again still has the row, with its reason, and the line stays under it
+    await act(async () => void window.dispatchEvent(new Event('focus')))
+    await act(() => new Promise((resolve) => setTimeout(resolve, 50)))
+    expect(docNumbers()).toEqual(['# 10412', '# 10398'])
+    expect(cells('# 10412')[2]).toBe('The file is encrypted')
+    expect(within(under('# 10412')).getByRole('alert').textContent).toBe(sentence)
+  })
+
+  it("takes a row's line away once a later run of the Indexer gives the row another reason", async () => {
+    const fake = searchIndexRoutes({ retry: () => ({ outcome: 'failed', reason: 'The file is damaged' }) })
+    const list = fake.routes['GET /v1/admin/search-index/failed']
+    let later = false
+    await renderApp('/search-index', {
+      ...fake.routes,
+      'GET /v1/admin/search-index/failed': (request: { query?: Record<string, unknown> }) => {
+        const page = list(request)
+        return later ? { ...page, items: page.items.map((one) => (one.document.docNumber === 10412 ? { ...one, reason: 'Out of memory', when: '2026-11-19T11:00:00Z' } : one)) } : page
+      },
+    })
+    await within(await screen.findByRole('table', { name: "Couldn't Be Indexed" })).findAllByRole('rowheader')
+    await userEvent.click(within(row('# 10412')).getByRole('button', { name: /^Try Again/ }))
+    expect(await within(under('# 10412')).findByText("Still couldn't be indexed: The file is damaged")).toBeTruthy()
+    await waitFor(() => expect(cells('# 10412')[2]).toBe('The file is damaged'))
+    // Still so after another read that finds the row as Try Again left it
+    await act(async () => void window.dispatchEvent(new Event('focus')))
+    await act(() => new Promise((resolve) => setTimeout(resolve, 50)))
+    expect(within(under('# 10412')).getByText("Still couldn't be indexed: The file is damaged")).toBeTruthy()
+    later = true
+    await act(async () => void window.dispatchEvent(new Event('focus')))
+    await waitFor(() => expect(cells('# 10412')[2]).toBe('Out of memory'))
+    expect(screen.queryByText("Still couldn't be indexed: The file is damaged")).toBeNull()
+  })
+
+  it('reads the list again when Try Again fails with no answer, as the server may have indexed it meanwhile, and the row goes if it has', async () => {
+    const fake = searchIndexRoutes()
+    const list = fake.routes['GET /v1/admin/search-index/failed']
+    let indexed = false
+    const { api } = await renderApp('/search-index', {
+      ...fake.routes,
+      'GET /v1/admin/search-index/failed': (request: { query?: Record<string, unknown> }) => {
+        const page = list(request)
+        return indexed ? { ...page, items: page.items.filter((one) => one.document.docNumber !== 10412), total: page.total - 1 } : page
+      },
+      'POST /v1/admin/search-index/failed/*/retry': () => {
+        indexed = true
+        return new TypeError('Failed to fetch')
+      },
+    })
+    await within(await screen.findByRole('table', { name: "Couldn't Be Indexed" })).findAllByRole('rowheader')
+    const before = api.callsTo('GET /v1/admin/search-index/failed').length
+    await userEvent.click(within(row('# 10412')).getByRole('button', { name: /^Try Again/ }))
+    await waitFor(() => expect(api.callsTo('GET /v1/admin/search-index/failed').length).toBeGreaterThan(before))
+    await waitFor(() => expect(docNumbers()).toEqual(['# 10398']))
+  })
+
   it("says the catalogue's words for any other failure, never the server's text", async () => {
     await open({}, { 'POST /v1/admin/search-index/failed/*/retry': problem(500, 'server-error') })
     await userEvent.click(within(row('# 10412')).getByRole('button', { name: /^Try Again/ }))

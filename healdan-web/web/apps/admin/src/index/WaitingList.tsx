@@ -4,6 +4,7 @@
 import { useRef } from 'react'
 import { ErrorPanel } from '@healdan/shell'
 import { formatDateTime } from '@healdan/ui'
+import { SidewaysBox } from '../lists/SidewaysBox'
 import { StaleNote } from '../people/StaleNote'
 import { t } from '../strings'
 import { useIndexWaiting } from './queries'
@@ -14,7 +15,8 @@ import styles from './SearchIndex.module.css'
 /**
  * The Waiting tab (spec 8.9): each document waiting for LogicalDOC's Indexer, those that couldn't be indexed left out, in
  * the order they were filed, with its doc #, title, matter and when it last changed (the contract's `lastChanged`, not when
- * it began to wait, which nothing records). A plain table, as the other tabs', a page at a time with Show More. While a new
+ * it began to wait, which nothing records). A plain table, as the other tabs', a page at a time with Show More, in a box
+ * that's a Tab stop while it scrolls sideways (SidewaysBox). While a new
  * read fails, the rows it had stay, with a note (P4-R15).
  */
 export function WaitingList({ poll }: { poll: boolean }) {
@@ -26,7 +28,7 @@ export function WaitingList({ poll }: { poll: boolean }) {
   else {
     body = (
       <>
-        <div className={styles.tableBox}>
+        <SidewaysBox name={t('admin.searchIndex.sideways', { name: t('admin.searchIndex.tab.waiting') })} className={styles.tableBox}>
           <table className={styles.table} aria-label={t('admin.searchIndex.tab.waiting')}>
             <thead>
               <tr>
@@ -51,7 +53,7 @@ export function WaitingList({ poll }: { poll: boolean }) {
               ))}
             </tbody>
           </table>
-        </div>
+        </SidewaysBox>
         <ShowMore listing={listing} fallback={about} />
       </>
     )

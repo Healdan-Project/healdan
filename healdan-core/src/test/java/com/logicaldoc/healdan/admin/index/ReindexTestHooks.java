@@ -9,9 +9,8 @@ import com.logicaldoc.util.spring.Context;
 
 /**
  * What other packages' and modules' tests change in the reindex worker, through its seams: how it indexes a document
- * (one that fails, an index that can't be written), how many documents a batch takes and on how many threads, all
- * put back with
- * {@link #reset}.
+ * (one that fails, an index that can't be written), the search index it empties and asks whether it answers, how
+ * many documents a batch takes and on how many threads, all put back with {@link #reset}.
  */
 public final class ReindexTestHooks {
 
@@ -64,10 +63,60 @@ public final class ReindexTestHooks {
 	}
 
 	/**
-	 * Every document fails as an index that can't be written makes it, until {@link #reset}.
+	 * Every document fails as an index that can't be written makes it, and the index doesn't answer when asked, until
+	 * {@link #reset}.
 	 */
 	public static void indexUnwritable() {
 		indexWith(unwritable());
+		indexDown();
+	}
+
+	/**
+	 * The search index doesn't answer when the worker asks it, can't be counted, and is left as it is by a drop, until
+	 * {@link #reset}.
+	 */
+	public static void indexDown() {
+		worker().index = new IndexFaults.Index() {
+
+			@Override
+			public void drop() {
+				// As LogicalDOC's drop, which logs its failure and returns
+			}
+
+			@Override
+			public long entries() throws Exception {
+				throw new IndexException("The index is locked");
+			}
+
+			@Override
+			public void writeCheck() throws Exception {
+				throw new IndexException("The index is locked");
+			}
+		};
+	}
+
+	/**
+	 * A drop of the search index leaves its entries, as LogicalDOC's drop does when it fails, while the index answers
+	 * otherwise, until {@link #reset}.
+	 */
+	public static void dropLeavesEntries() {
+		worker().index = new IndexFaults.Index() {
+
+			@Override
+			public void drop() {
+				// As LogicalDOC's drop, which logs its failure and returns
+			}
+
+			@Override
+			public long entries() throws Exception {
+				return IndexFaults.REAL.entries();
+			}
+
+			@Override
+			public void writeCheck() throws Exception {
+				IndexFaults.REAL.writeCheck();
+			}
+		};
 	}
 
 	/**
@@ -96,5 +145,6 @@ public final class ReindexTestHooks {
 		worker.indexing = ReindexWorker.REAL;
 		worker.batch = ReindexWorker.BATCH;
 		worker.threads = 0;
+		worker.index = IndexFaults.REAL;
 	}
 }

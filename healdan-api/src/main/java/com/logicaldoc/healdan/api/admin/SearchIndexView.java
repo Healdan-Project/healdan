@@ -52,11 +52,25 @@ final class SearchIndexView {
 		}
 	}
 
-	/** {@code IndexDocument}: a document as the Search Index names it */
+	/**
+	 * {@code IndexDocument}: a document as the Search Index names it, in its lists, its history and a reindex's
+	 * matches alike.
+	 *
+	 * @param id its id
+	 * @param docNumber its doc #; null when it has none
+	 * @param fileName its file name
+	 * @param matter the live matter stamped on it; null if none
+	 */
 	record IndexDocument(long id, Long docNumber, String fileName, MatterBrief matter) {
 
+		/** @return a document whose doc # is kept as text, read as a number */
 		static IndexDocument of(long id, String docNumber, String fileName, FailedDocument.Matter matter) {
-			return new IndexDocument(id, SearchIndexView.docNumber(docNumber), fileName,
+			return of(id, SearchIndexView.docNumber(docNumber), fileName, matter);
+		}
+
+		/** @return a document with its doc # */
+		static IndexDocument of(long id, Long docNumber, String fileName, FailedDocument.Matter matter) {
+			return new IndexDocument(id, docNumber, fileName,
 					matter != null ? new MatterBrief(matter.id(), matter.number(), matter.name()) : null);
 		}
 	}

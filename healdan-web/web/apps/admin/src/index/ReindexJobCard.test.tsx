@@ -48,6 +48,24 @@ describe("The reindexes' cards", () => {
     expect(within(running).getByText(`212 of 412 documents · waiting for the index, which can't be written to since ${formatDateTime('2026-11-19T10:44:00Z')}: it tries again shortly`)).toBeTruthy()
   })
 
+  it("says it makes no progress while the server's reindex worker fails, with no estimate", async () => {
+    await open({ jobs: [searchIndexJob({ failingSince: '2026-11-19T10:45:00Z', estimateSecondsLeft: null })] })
+    const running = await screen.findByRole('region', { name: 'Reindexing Matter 1001.1 Charter Dispute' })
+    expect(
+      within(running).getByText(`212 of 412 documents · making no progress since ${formatDateTime('2026-11-19T10:45:00Z')}, as the server can't go on with it: it tries again every 30 seconds, and Background Jobs says why`),
+    ).toBeTruthy()
+  })
+
+  it("says how many it skipped on storage that couldn't be reached, while it runs and once it has ended (P6-R23)", async () => {
+    const { fake } = await open({ jobs: [searchIndexJob({ skipped: 5, unreachable: 4 })] })
+    const running = await screen.findByRole('region', { name: 'Reindexing Matter 1001.1 Charter Dispute' })
+    expect(within(running).getByText("215 of 412 documents · 4 on storage that couldn't be reached · about 6 minutes left · search keeps working while it runs")).toBeTruthy()
+    fake.setJob(searchIndexJob({ state: 'done', done: 405, failed: 2, skipped: 5, unreachable: 4, ended: '2026-11-19T10:48:00Z', estimateSecondsLeft: null }))
+    await act(async () => void window.dispatchEvent(new Event('focus')))
+    const ended = await screen.findByRole('region', { name: 'Reindexed Matter 1001.1 Charter Dispute' })
+    expect(within(ended).getByText("405 reindexed, 2 couldn't be indexed, 5 skipped (4 on storage that couldn't be reached). Those that couldn't be indexed are on the Couldn't Be Indexed tab.")).toBeTruthy()
+  })
+
   it('shows none while nothing waits or runs', async () => {
     await open({ jobs: [searchIndexDoneJob] })
     await settle()
@@ -101,13 +119,16 @@ describe('Cancel', () => {
   })
 
   it("cancels a waiting reindex at once: its card says it was cancelled until it's closed, and Close's focus goes to the next card", async () => {
-    await open()
+    const { api } = await open()
     const waiting = await screen.findByRole('region', { name: 'Waiting to Reindex Store Client Work' })
     await userEvent.click(within(waiting).getByRole('button', { name: /^Cancel/ }))
     const question = await screen.findByRole('alertdialog', { name: 'Cancel the Reindex of Store Client Work?' })
     expect(within(question).getByText("It hasn't started, so nothing in the index changes.")).toBeTruthy()
+    const dashboard = api.callsTo('GET /v1/admin/dashboard').length
     await userEvent.click(within(question).getByRole('button', { name: 'Cancel Reindex' }))
     const ended = await screen.findByRole('region', { name: 'Cancelled Reindexing Store Client Work' })
+    // The Dashboard's answer, which the left pane's counts are, is asked for again, as it shows the reindex job
+    await waitFor(() => expect(api.callsTo('GET /v1/admin/dashboard').length).toBeGreaterThan(dashboard))
     expect(within(ended).getByText('Cancelled before it started, so nothing in the index changed.')).toBeTruthy()
     // It keeps its place, after the running one
     expect(card('Reindexing Matter 1001.1 Charter Dispute').compareDocumentPosition(ended) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()

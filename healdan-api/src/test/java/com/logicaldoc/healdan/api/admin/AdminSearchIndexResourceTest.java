@@ -27,6 +27,7 @@ import com.logicaldoc.core.document.DocumentHistoryDAO;
 import com.logicaldoc.core.document.IndexingStatus;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
+import com.logicaldoc.core.searchengine.IndexException;
 import com.logicaldoc.core.searchengine.SearchEngine;
 import com.logicaldoc.core.searchengine.indexer.IndexerTask;
 import com.logicaldoc.core.security.Tenant;
@@ -330,6 +331,28 @@ public class AdminSearchIndexResourceTest extends ApiTestCase {
 		assertEquals(StorageUnreachableException.message("Cloud", true), retry.json().path("detail").textValue());
 		assertEquals(rows, (int) jdbc().queryForObject("select count(*) from ld_history where ld_docid = ?",
 				Integer.class, document.getId()));
+		assertEquals(List.of(), records());
+	}
+
+	// The search index itself can't be written: 409 refused with its sentence, nothing written, set to Skip or
+	// recorded (ruling P6-R29)
+	@Test
+	public void testTryAgainWhileTheIndexCantBeWritten() throws Exception {
+		Document document = failed("locked.pdf");
+		int rows = jdbc().queryForObject("select count(*) from ld_history where ld_docid = ?", Integer.class,
+				document.getId());
+		IndexTestHooks.failIndexing(new IndexException("The index is locked"));
+		IndexTestHooks.indexDown();
+
+		ApiResponse retry = post(INDEX + "/failed/" + docNumber(document) + "/retry").webSession(web).send();
+
+		assertEquals(retry.toString(), 409, retry.status());
+		assertEquals("refused", retry.code());
+		assertEquals(IndexReview.INDEX_UNWRITABLE, retry.json().path("detail").textValue());
+		assertEquals(rows, (int) jdbc().queryForObject("select count(*) from ld_history where ld_docid = ?",
+				Integer.class, document.getId()));
+		assertEquals(IndexingStatus.TO_INDEX.ordinal(), (int) jdbc().queryForObject(
+				"select ld_indexed from ld_document where ld_id = ?", Integer.class, document.getId()));
 		assertEquals(List.of(), records());
 	}
 

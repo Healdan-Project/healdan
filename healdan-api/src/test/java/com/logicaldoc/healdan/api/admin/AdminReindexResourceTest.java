@@ -147,7 +147,9 @@ public class AdminReindexResourceTest extends ApiTestCase {
 		assertEquals(2, ended.path("done").asLong());
 		assertEquals(0, ended.path("failed").asLong());
 		assertEquals(0, ended.path("skipped").asLong());
+		assertEquals(0, ended.path("unreachable").asLong());
 		assertEquals(1, ended.path("leftOut").asLong());
+		assertTrue(ended.path("failingSince").isNull());
 		assertFalse(ended.path("started").isNull());
 		assertFalse(ended.path("ended").isNull());
 		assertTrue(ended.path("estimateSecondsLeft").isNull());

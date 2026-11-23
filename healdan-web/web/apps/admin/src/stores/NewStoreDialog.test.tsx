@@ -209,6 +209,21 @@ describe('New Store', () => {
     expect(seeing()).toEqual(['Trainees'])
   })
 
+  it('makes no Store on Enter in the group search, with a name typed and nothing on the arrow keys', async () => {
+    const { api, onClose } = renderDialog()
+    await waitFor(() => expect(offered()).toHaveLength(3))
+    await userEvent.type(name(), 'Litigation')
+    await waitFor(() => expect(isDisabled(create())).toBe(false))
+    await userEvent.type(within(dialog()).getByRole('textbox', { name: 'Add a Group' }), 'train')
+    await pause()
+    await waitFor(() => expect(offered()).toEqual(['Trainees Trainee solicitors']))
+    await userEvent.keyboard('{Enter}')
+    await pause()
+    expect(api.callsTo('POST /v1/admin/stores')).toEqual([])
+    expect(onClose).not.toHaveBeenCalled()
+    expect(seeing()).toEqual([])
+  })
+
   it("says what's wrong with the name before Create Store", async () => {
     renderDialog()
     for (const typed of ['North/South', 'North\\South']) {

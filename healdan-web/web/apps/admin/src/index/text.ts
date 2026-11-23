@@ -53,14 +53,23 @@ export function jobTitle(job: A['ReindexJob']): string {
   }
 }
 
+/** How many of a reindex's documents were on storage that couldn't be reached at their turn, or nothing for none (P6-R23) */
+export function unreachableWords(job: A['ReindexJob']): string | undefined {
+  return job.unreachable > 0 ? plural('admin.searchIndex.outcome.unreachable', job.unreachable) : undefined
+}
+
 /**
  * How a reindex went, or has gone so far: how many it reindexed, then how many couldn't be indexed and how many it skipped,
- * each only when there are any
+ * each only when there are any, the skipped with how many of them were on storage that couldn't be reached (P6-R23)
  */
 export function outcomeWords(job: A['ReindexJob']): string {
   const parts = [plural('admin.searchIndex.outcome.reindexed', job.done)]
   if (job.failed > 0) parts.push(plural('admin.searchIndex.outcome.failed', job.failed))
-  if (job.skipped > 0) parts.push(plural('admin.searchIndex.outcome.skipped', job.skipped))
+  if (job.skipped > 0) {
+    const skipped = plural('admin.searchIndex.outcome.skipped', job.skipped)
+    const unreachable = unreachableWords(job)
+    parts.push(unreachable === undefined ? skipped : t('admin.searchIndex.outcome.skippedOf', { skipped, unreachable }))
+  }
   return parts.join(', ')
 }
 

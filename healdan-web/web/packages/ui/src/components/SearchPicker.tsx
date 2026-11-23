@@ -139,7 +139,8 @@ type Answer<T> = { q: string; items: T[] } | { q: string; failed: true }
 /**
  * A search field over a list of rows to pick from, as the Move To… picker's matters are: the starting rows while nothing is
  * typed (Recent Matters), then what the server finds once the typing pauses, with the words marked. The focus stays in the
- * field: the arrow keys move through the rows, and Enter picks one (React Aria's Autocomplete). An answer to an older
+ * field: the arrow keys move through the rows, and Enter picks one (React Aria's Autocomplete), never submitting a form the
+ * picker is in. An answer to an older
  * question is dropped, and the last answer stays until the next, so the list doesn't blink while typing.
  */
 export function SearchPicker<T>({ label, placeholder, hint, initialHeading, initial, search, id, render, onPick, selectedId, leaveOut, inputRef, minLength = SEARCH_MIN, isDisabled = false }: SearchPickerProps<T>) {
@@ -193,7 +194,16 @@ export function SearchPicker<T>({ label, placeholder, hint, initialHeading, init
           <Label id={labelId} className={fieldStyles.label}>
             {label}
           </Label>
-          <Input ref={inputRef} className={fieldStyles.input} placeholder={placeholder} />
+          <Input
+            ref={inputRef}
+            className={fieldStyles.input}
+            placeholder={placeholder}
+            // Enter in the field picks the row the arrow keys are on, or does nothing: never the browser's submit of a form
+            // the picker is in, which would send what was chosen before the words typed
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && !event.nativeEvent.isComposing) event.preventDefault()
+            }}
+          />
           {hint && (
             <Text slot="description" className={styles.hint}>
               {hint}

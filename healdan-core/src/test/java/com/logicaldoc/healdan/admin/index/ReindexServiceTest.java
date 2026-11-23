@@ -375,36 +375,38 @@ public class ReindexServiceTest extends AbstractReindexTestCase {
 		Instant now = Instant.now();
 		// Running, past 20 tried: its own rate, about 2 seconds over 30 tried, for the 20 left
 		ReindexJob running = new ReindexJob(1, Kind.EVERYTHING, null, "Everything", 1, "admin", "Admin Admin",
-				State.RUNNING, false, false, 50, 20, 10, 0, 0, now, now.minusSeconds(60), null, null, null);
+				State.RUNNING, false, false, 50, 20, 10, 0, 0, 0, now, now.minusSeconds(60), null, null, null, null);
 		long left = ReindexService.withEstimate(running, 9.0).estimateSecondsLeft();
 		assertTrue(String.valueOf(left), left >= 40 && left <= 41);
 		// Before 20 tried, as a preview at the rate given, or 1.75 seconds each
 		ReindexJob early = new ReindexJob(1, Kind.EVERYTHING, null, "Everything", 1, "admin", "Admin Admin",
-				State.RUNNING, false, false, 50, 5, 0, 5, 0, now, now.minusSeconds(60), null, null, null);
+				State.RUNNING, false, false, 50, 5, 0, 5, 0, 0, now, now.minusSeconds(60), null, null, null, null);
 		assertEquals(Long.valueOf(80), ReindexService.withEstimate(early, 2.0).estimateSecondsLeft());
 		assertEquals(Long.valueOf(70), ReindexService.withEstimate(early, null).estimateSecondsLeft());
 		// Waiting: its total
 		ReindexJob waiting = new ReindexJob(1, Kind.EVERYTHING, null, "Everything", 1, "admin", "Admin Admin",
-				State.WAITING, false, false, 4, 0, 0, 0, 0, now, null, null, null, null);
+				State.WAITING, false, false, 4, 0, 0, 0, 0, 0, now, null, null, null, null, null);
 		assertEquals(Long.valueOf(7), ReindexService.withEstimate(waiting, null).estimateSecondsLeft());
-		// None while stalled, with nothing left, or once ended
+		// None while stalled, failing, with nothing left, or once ended
 		ReindexJob stalled = new ReindexJob(1, Kind.EVERYTHING, null, "Everything", 1, "admin", "Admin Admin",
-				State.RUNNING, false, false, 50, 5, 0, 5, 0, now, now.minusSeconds(60), null, now, null);
+				State.RUNNING, false, false, 50, 5, 0, 5, 0, 0, now, now.minusSeconds(60), null, now, null, null);
 		assertNull(ReindexService.withEstimate(stalled, null).estimateSecondsLeft());
+		// Nor while the worker fails at each try
+		assertNull(ReindexService.withEstimate(early.withFailingSince(now), null).estimateSecondsLeft());
 		ReindexJob finished = new ReindexJob(1, Kind.EVERYTHING, null, "Everything", 1, "admin", "Admin Admin",
-				State.RUNNING, false, false, 50, 50, 0, 0, 0, now, now.minusSeconds(60), null, null, null);
+				State.RUNNING, false, false, 50, 50, 0, 0, 0, 0, now, now.minusSeconds(60), null, null, null, null);
 		assertNull(ReindexService.withEstimate(finished, null).estimateSecondsLeft());
 		ReindexJob done = new ReindexJob(1, Kind.EVERYTHING, null, "Everything", 1, "admin", "Admin Admin",
-				State.DONE, false, false, 50, 40, 0, 0, 0, now, now.minusSeconds(60), now, null, 5L);
+				State.DONE, false, false, 50, 40, 0, 0, 0, 0, now, now.minusSeconds(60), now, null, null, 5L);
 		assertNull(ReindexService.withEstimate(done, null).estimateSecondsLeft());
 	}
 
 	private void job(String state, long done, long failed, Instant started, Instant ended) {
 		jdbc.update("insert into hd_reindex_job (hd_tenantid, hd_kind, hd_name, hd_userid, hd_username, hd_state,"
-				+ " hd_cancel, hd_emptyfirst, hd_emptied, hd_total, hd_done, hd_failed, hd_skipped, hd_leftout,"
-				+ " hd_position, hd_created, hd_started, hd_ended) values (1, 'EVERYTHING', 'Everything', 1, 'admin', ?,"
-				+ " 0, 0, 0, ?, ?, ?, 0, 0, 0, ?, ?, ?)", state, done + failed, done, failed, Timestamp.from(started), Timestamp.from(started),
-				Timestamp.from(ended));
+				+ " hd_cancel, hd_emptyfirst, hd_emptied, hd_total, hd_done, hd_failed, hd_skipped, hd_unreachable,"
+				+ " hd_leftout, hd_position, hd_created, hd_started, hd_ended)"
+				+ " values (1, 'EVERYTHING', 'Everything', 1, 'admin', ?, 0, 0, 0, ?, ?, ?, 0, 0, 0, 0, ?, ?, ?)", state,
+				done + failed, done, failed, Timestamp.from(started), Timestamp.from(started), Timestamp.from(ended));
 	}
 
 	private List<Long> documentsOf(ReindexJob job) {
