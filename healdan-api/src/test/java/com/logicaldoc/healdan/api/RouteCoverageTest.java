@@ -54,13 +54,7 @@ public class RouteCoverageTest extends AbstractHealdanTestCase {
 			"GET /v1/admin/search-index/history",
 			"POST /v1/admin/search-index/run",
 			"POST /v1/admin/search-index/failed/{docNumber}/retry",
-			"POST /v1/admin/search-index/failed/{docNumber}/skip",
-			// Reindexing
-			"POST /v1/admin/reindex/preview",
-			"GET /v1/admin/reindex",
-			"POST /v1/admin/reindex",
-			"GET /v1/admin/reindex/{id}",
-			"DELETE /v1/admin/reindex/{id}");
+			"POST /v1/admin/search-index/failed/{docNumber}/skip");
 
 	@Test
 	public void testEveryRouteIsDescribed() {
