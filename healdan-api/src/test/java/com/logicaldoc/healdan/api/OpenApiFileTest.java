@@ -155,7 +155,7 @@ public class OpenApiFileTest {
 		assertEquals(List.of("code", "detail", "fields", "sealed", "status", "title", "type"),
 				names(problem.path("properties")));
 		assertEquals(List.of("web-session-only", "admins-only", "not-found", "refused", "validation",
-				"secret-key-missing", "storage-unavailable"),
+				"secret-key-missing", "storage-unavailable", "storage-unreachable"),
 				texts(problem.path("properties").path("code").path("examples")));
 	}
 

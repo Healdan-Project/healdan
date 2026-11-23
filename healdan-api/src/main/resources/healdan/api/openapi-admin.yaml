@@ -249,6 +249,9 @@ tags:
         counted in none of the three.
       - A document is named by its doc #, as in the public API, and by
         LogicalDOC's internal id, which only tells documents apart here.
+      - **Try Again** on a document whose file's storage can't be reached
+        right now is `503 storage-unreachable`, as in the public API: the
+        one admin route that answers it.
       - A reindex runs on the server, straight through, one at a time,
         replacing each document's entry as it's done, so search keeps
         finding its documents while it runs (spec section 9.6). It's
@@ -5220,7 +5223,9 @@ paths:
         document now, while the request waits, as LogicalDOC's Indexer would,
         and answers how that went, `200` either way. Indexed, it leaves
         **Couldn't Be Indexed**. Not, it stays there with the new reason,
-        and the Indexer goes on trying it on its schedule. Either way the
+        and the Indexer goes on trying it on its schedule, unless the
+        server is set to stop trying a document once it can't be indexed,
+        which sets it to Skip, so it leaves the list. Either way the
         History tab has a row for it, naming the caller. A large or slow
         file holds the request while it's read. Takes no body.
 
@@ -5230,6 +5235,12 @@ paths:
           be indexed, as when it has been indexed or set to Skip meanwhile,
           with the sentence
           `This document is no longer waiting after an error.`
+        - `503 storage-unreachable` when the storage that keeps the
+          document's file can't be reached right now, as the public API
+          answers it: its `detail` names the Store, and is meant to be
+          shown as it is. The document stays as it was, among those that
+          couldn't be indexed, the History tab gets no row, and nothing is
+          recorded: ask again later.
 
         Recorded as `index.retried`, straight after it, aimed at the
         document (`document`, its id), named by its doc # and file name, as
@@ -5252,6 +5263,8 @@ paths:
         '404':
           $ref: '#/components/responses/Problem'
         '409':
+          $ref: '#/components/responses/Problem'
+        '503':
           $ref: '#/components/responses/Problem'
         default:
           $ref: '#/components/responses/Problem'
@@ -5395,8 +5408,11 @@ paths:
           done, so search keeps finding it throughout. A document that has
           gone by its turn (deleted, in the Trash or destroyed), or has been
           set to Skip, archived, or is being changed at that moment, is
-          counted `skipped`; one moved or given a new version is indexed as
-          it is then. A document it couldn't index joins
+          counted `skipped`, and so is one whose file's storage can't be
+          reached then, which keeps its entry and stays indexed, waiting or
+          failed as it was, with no row in the History tab: a reindex once
+          the storage is back covers it. One moved or given a new version
+          is indexed as it is then. A document it couldn't index joins
           **Couldn't Be Indexed**, keeping the entry it had. A reindex that
           ends `done` has `done`, `failed` and `skipped` adding up to
           `total`.
@@ -5831,7 +5847,7 @@ components:
           type: string
           description: What clients switch on.
           examples: [web-session-only, admins-only, not-found, refused, validation, secret-key-missing,
-            storage-unavailable]
+            storage-unavailable, storage-unreachable]
         fields:
           type: array
           items:
@@ -9364,9 +9380,12 @@ components:
           description: |
             The sentence `POST /v1/admin/search-index/run` would refuse with
             now, which the screen can show beside the greyed-out button:
-            the Indexer disabled, scheduled tasks switched off on the
-            server, or the Indexer running already. Null when `job.canRun`
-            is true
+            the Indexer running already, scheduled tasks switched off on
+            the server, or the Indexer disabled. Null when
+            **Run Indexer Now** would run it now. Just after a Run Now this
+            already says the Indexer is running while `job.canRun`, as
+            Background Jobs gives it, may still be true for a moment, until
+            the run shows: the button follows this
           examples: [This job is running already.]
     IndexDocument:
       type: object
@@ -9460,7 +9479,9 @@ components:
         when:
           type: string
           format: date-time
-          description: When it was done
+          description: |
+            When it was done: the row's date, or, for a row that keeps none,
+            when the row was written, as the Audit Trail's `when` is
         event:
           type: string
           description: '`indexed`, its entry in the index written; `failed`, it couldn''t be indexed'
@@ -9545,9 +9566,11 @@ components:
 
         - `400 bad-request` for a body that isn't a JSON object, a member
           this doesn't list, a member of the wrong type, a doc # that isn't
-          a whole number from 0 up, and, for a `kind` of the five, a
-          `targetId` with `documents` or `everything`, or `docNumbers`
-          with any other kind.
+          a whole number from 0 up, more than 10,000 numbers in
+          `docNumbers`, repeats included, an `emptyFirst` that isn't `true`
+          or `false`, null included, and, for a `kind` of the five, a
+          `targetId` with `documents` or `everything`, or `docNumbers` with
+          any other kind.
         - `422 validation` as `POST /v1/admin/reindex` says.
       additionalProperties: false
       required: [kind]
@@ -9576,6 +9599,7 @@ components:
             For `documents`, the doc #s, as typed or pasted, 1 to 1,000
             different ones; a number given more than once counts once. None
             for the other kinds
+          maxItems: 10000
           items:
             type: integer
             format: int64
@@ -9602,7 +9626,7 @@ components:
           minimum: 0
           description: |
             How many documents it would try: the scope's live documents, less
-            those `skipped` counts
+            those set to Skip, archived or being changed at that moment
         skipped:
           type: integer
           format: int64
@@ -9694,7 +9718,8 @@ components:
             characters: `Matter 1001.1 Charter Dispute`; `Store Client Work`;
             `Folder Pleadings`, followed by ` in 1001.1 Charter Dispute` when
             the folder is in a matter; `3 Documents`, or `1 Document`,
-            counting the doc #s found; `Everything`
+            counting the doc #s that name a live document, those left out
+            included; `Everything`
           examples: [Matter 1001.1 Charter Dispute, Folder Pleadings in 1001.1 Charter Dispute, 3 Documents]
         startedBy:
           description: |
@@ -9740,7 +9765,8 @@ components:
           description: |
             How many it skipped at their turn, as they had gone (deleted, in
             the Trash or destroyed), or were set to Skip, archived or being
-            changed at that moment
+            changed at that moment, or the storage that keeps their file
+            couldn't be reached then, each keeping its entry and its status
         leftOut:
           type: integer
           format: int64
