@@ -341,6 +341,26 @@ public class ErrorStoreTest extends AbstractHealdanTestCase {
 	}
 
 	@Test
+	public void testTheWordsNeverMatchAUrlsCredentials() {
+		Instant now = Instant.now().truncatedTo(ChronoUnit.MILLIS);
+		String reach = "Can't reach jdbc:postgresql://healdan:Hunter2@db/healdan";
+		String list = "Can't read amqp://u:Secret9@h1,amqp://v:Other7@h2/queue";
+		store.add(error(now.minus(Duration.ofMinutes(10)), STORAGE, reach, null));
+		store.add(error(now.minus(Duration.ofMinutes(5)), SERVER, list, null));
+
+		// The user part of each URL's authority, password and all, isn't what the words are compared with
+		for (String hidden : List.of("hunter2", "healdan:", "secret9", "other7", "v:"))
+			assertEquals(hidden, List.of(), messages(new ErrorQuery(Window.DAY, hidden, null, false, 0, 50), now));
+		// What the screen shows of them is
+		assertEquals(List.of(reach), messages(new ErrorQuery(Window.DAY, "postgresql://db/", null, false, 0, 50), now));
+		assertEquals(List.of(list), messages(new ErrorQuery(Window.DAY, "amqp://h1,amqp://h2", null, false, 0, 50), now));
+		// An @ outside a URL's authority is the message's own
+		store.add(error(now, SERVER, "Mail to ops@example.com failed", null));
+		assertEquals(List.of("Mail to ops@example.com failed"),
+				messages(new ErrorQuery(Window.DAY, "ops@example", null, false, 0, 50), now));
+	}
+
+	@Test
 	public void testListCountsTheErrorsOfEveryPage() {
 		Instant now = Instant.now().truncatedTo(ChronoUnit.MILLIS);
 		store.add(error(now.minus(Duration.ofHours(3)), PREVIEWS, "The preview of document 5 failed", null));

@@ -8,6 +8,7 @@ import { detailsRoutes } from '../test/details'
 import { children, document, folder, matter, page, type Routes } from '../test/fakeApi'
 import { pdf, resetPdf } from '../test/fakePdf'
 import { pdfResponse } from '../test/renderPreview'
+import { PANE_SETTLE_MS } from './ReadingPane'
 import { renderApp } from '../test/renderApp'
 
 vi.mock('./pdfEngine', () => import('../test/fakePdf'))
@@ -60,6 +61,20 @@ describe('ReadingPane', () => {
     fireEvent.keyDown(alpha, { key: 'ArrowDown' })
     fireEvent.keyUp(alpha, { key: 'ArrowDown' })
     await waitFor(() => expect(within(screen.getByRole('region', { name: 'Preview' })).getByRole('heading', { name: 'Bravo.pdf' })).toBeTruthy())
+  })
+
+  it('asks nothing of a row the selection only passes, so no view of it is recorded, and previews the row it stays on', async () => {
+    const { api } = await renderApp('/folders/7?sel=10388', routes())
+    await dock()
+    const bravo = await rowOf('Bravo.pdf')
+    const charlie = await rowOf('Charlie.pdf')
+    // Bravo, then Charlie, quicker than the pane settles, as arrowing past a row does
+    fireEvent.click(bravo)
+    await new Promise((resolve) => setTimeout(resolve, PANE_SETTLE_MS - 100))
+    fireEvent.click(charlie)
+    await waitFor(() => expect(api.callsTo('GET /v1/documents/10390/preview')).toHaveLength(1))
+    expect(api.callsTo('GET /v1/documents/10389/preview')).toHaveLength(0)
+    expect(within(screen.getByRole('region', { name: 'Preview' })).getByRole('heading', { name: 'Charlie.pdf' })).toBeTruthy()
   })
 
   it('gives way to Filters at the funnel until the next click on a row, which brings the pane back', async () => {

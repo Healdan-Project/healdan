@@ -973,7 +973,9 @@ see [Building from Source](../building-from-source/#running-the-war-outside-dock
       within 10 seconds after it is left out: the storage record gives only the Classic Interface Storage tab's.
     - **The cursor** (`AuditCursor`) holds each source's place, the id below which its rows are still to come, as
       base64url of `d<n>.f<n>.u<n>.a<n>.s<n>`, parsed only in the spelling `text()` writes. Rows written meanwhile take
-      higher ids, so they never repeat or skip one on a later page: they're on a fresh first page. The sources are
+      higher ids, so they never repeat one on a later page: they're on a fresh first page. An id is given at the
+      insert, not the commit, so a row whose transaction commits after a page has passed its id isn't on a later page
+      of that cursor, nor in an export under way, only on a fresh first page. The sources are
       merged by date in Java, ties in the sources' order, and a row is given only once every source that could still
       hold a newer one has been read that far, so the order holds across short reads.
     - **Reading.** None of the tables has an index on its date, and Healdan adds none to LogicalDOC's, so each source

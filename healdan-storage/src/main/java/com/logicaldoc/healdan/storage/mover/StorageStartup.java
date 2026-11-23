@@ -103,7 +103,7 @@ public class StorageStartup implements HealdanStartListener {
 	private final Map<String, JobRuns> runs = Map.of(RETEST_JOB, new JobRuns(RETEST_JOB), PURGE_JOB,
 			new JobRuns(PURGE_JOB), NIGHTLY_JOB, new JobRuns(NIGHTLY_JOB));
 
-	/** Runs the start, the purge, the alert and the nightly check */
+	/** Runs the start, the purge, the alert and the nightly check, on three threads */
 	private volatile ScheduledExecutorService scheduler;
 
 	/** Runs the backends' retests, and nothing else */
@@ -161,7 +161,9 @@ public class StorageStartup implements HealdanStartListener {
 		purge.setInTransfer(mover::moving);
 
 		ZonedDateTime start = ZonedDateTime.now();
-		ScheduledExecutorService running = Executors.newScheduledThreadPool(2, threads("healdan-storage-start-"));
+		// A thread for each of the purge, the alert and the nightly check: a scheduled purge or nightly check waits on its
+		// thread for a Run Now of it to end (JobRuns), and the alert, which never runs now, must still find one free
+		ScheduledExecutorService running = Executors.newScheduledThreadPool(3, threads("healdan-storage-start-"));
 		scheduler = running;
 		ScheduledExecutorService retesting = Executors
 				.newSingleThreadScheduledExecutor(threads("healdan-storage-retest-"));

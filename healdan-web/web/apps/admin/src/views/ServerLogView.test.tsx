@@ -908,6 +908,34 @@ describe('Earlier lines', () => {
     expect(screen.queryByText('Following paused, so the earlier lines stay. Follow goes back to the newest.')).toBeNull()
   })
 
+  it('read the newest lines afresh on Follow when the first dropped is in an older file, and say no roll-over', async () => {
+    const all = fakeLog(manyEntries(1200))
+    const { api } = await openLog('/server-log', {
+      'GET /v1/admin/logs/*/lines': (request: Request) => {
+        // The first entry dropped is in the file the log rolled over to before: the server reads the current one's top
+        if (request.query?.after === `p${MAX_KEPT}`)
+          return { lines: [logLine('n0', { message: "The current file's top" })], before: 'n0', after: 'n1', atStart: false, atEnd: false, rolled: true } satisfies A['LogLines']
+        return all(request)
+      },
+    })
+    for (let press = 0; press < 5; press++) {
+      fireEvent.click(within(box()).getByRole('button', { name: 'Show Earlier' }))
+      await settle()
+    }
+    expect(screen.getByText('Paused')).toBeTruthy()
+    const firstReads = reads(api).filter((query) => query?.after === undefined && query?.before === undefined).length
+
+    fireEvent.click(screen.getByRole('button', { name: 'Follow' }))
+    await settle()
+    expect(follows(api)).toEqual([{ after: `p${MAX_KEPT}`, level: 'all' }])
+    // The newest again, as when the log opened, following, with no note that the log rolled over
+    expect(reads(api).filter((query) => query?.after === undefined && query?.before === undefined)).toHaveLength(firstReads + 1)
+    expect(shown().at(-1)).toBe('Entry 1199')
+    expect(shown()).not.toContain("The current file's top")
+    expect(screen.queryByText(ROLLED)).toBeNull()
+    expect(screen.getByText('Following Live')).toBeTruthy()
+  })
+
   it('follow again once the log or a filter changes, after a pause that only kept the earlier lines', async () => {
     const { api } = await openLog('/server-log', logRoutes(manyEntries(1200)))
     for (let press = 0; press < 5; press++) {

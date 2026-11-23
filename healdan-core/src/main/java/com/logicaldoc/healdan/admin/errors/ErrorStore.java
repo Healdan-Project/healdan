@@ -72,6 +72,13 @@ public class ErrorStore {
 	/** The most characters a level holds */
 	private static final int LEVEL_LIMIT = 10;
 
+	/**
+	 * A URL's scheme and its {@code ://}, then the user part of its authority, to its last {@code @} before the
+	 * authority ends: {@link com.logicaldoc.healdan.admin.UrlCredentials#cut}'s rule, as a PostgreSQL regular
+	 * expression, which the text filter compares the message through
+	 */
+	static final String URL_USER_PART = "([A-Za-z][A-Za-z0-9+.-]*://)[^/?#[:space:]\"'<>]*@";
+
 	/*
 	 * MariaDB assigns from left to right, each assignment seeing the ones
 	 * before it, and PostgreSQL all at once from the row as it was: each column
@@ -203,9 +210,11 @@ public class ErrorStore {
 			params.addValue("area", query.area());
 		}
 		if (query.text() != null) {
-			where.append(" and (lower(e.hd_message) like :text %1$s or lower(e.hd_logger) like :text %1$s)"
-					.formatted(ListingSql.LIKE_ESCAPE));
+			// The message as the screen shows it, with each URL's user part cut, so the words never match a password
+			where.append((" and (lower(regexp_replace(e.hd_message, :userPart, :keepScheme, 'g')) like :text %1$s"
+					+ " or lower(e.hd_logger) like :text %1$s)").formatted(ListingSql.LIKE_ESCAPE));
 			params.addValue("text", ListingSql.containing(query.text().toLowerCase(Locale.ROOT)));
+			params.addValue("userPart", URL_USER_PART).addValue("keepScheme", "\\1");
 		}
 		String times = "(select coalesce(sum(h.hd_count), 0) from hd_error_hour h"
 				+ " where h.hd_errorid = e.hd_id and h.hd_hour >= :hour)";

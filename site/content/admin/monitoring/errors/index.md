@@ -44,8 +44,9 @@ include errors up to two hours old.
 The filters above the list all apply together:
 
 - **Message or Logger** keeps the faults whose latest message, or the name of the logger it was logged through, holds
-  what you type, in any case. It compares the message as Healdan keeps it, before a URL's user name and password are
-  taken out, where the Server Log's search finds what shows. The list follows once you pause typing.
+  what you type, in any case. It compares the message as the list shows it, with a URL's user name and password taken
+  out, as the Server Log's search does, so it never finds a fault by its password. The list follows once you pause
+  typing.
 - **Area** keeps one area's faults: **Previews**, **Storage**, **Search Index** (reading documents' text included),
   **Email**, **Sign-In**, **Background Jobs**, or **Server** for anything else. **Every Area** keeps them all.
 - **Unresolved Only** keeps the faults nobody has marked resolved since they last happened.

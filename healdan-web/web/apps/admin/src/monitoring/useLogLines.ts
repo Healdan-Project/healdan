@@ -131,6 +131,8 @@ function openSession(api: Api, name: string, level: LogLevel, q: string | undefi
   let failures = 0
   // The reader is further up than the box's end
   let up = false
+  // `after` is an entry Show Earlier dropped (prepend), which may be in an older file, until a follow reads from it
+  let fromDropped = false
 
   const show = () => {
     if (!stopped) publish({ ...view })
@@ -206,8 +208,10 @@ function openSession(api: Api, name: string, level: LogLevel, q: string | undefi
     // The lines read back reach before the new file's top, where the note said they started
     view.rolled = false
     if (entries.length > MAX_KEPT) {
-      // A follow reads them again, from the first dropped, once Follow is pressed
+      // A follow reads them again, from the first dropped, once Follow is pressed. That entry may be in a file the log
+      // rolled over to before, which the server answers as `rolled`: the follow then reads the newest lines afresh
       after = entries[MAX_KEPT]!.position
+      fromDropped = true
       view.entries = entries.slice(0, MAX_KEPT)
       pauseToKeep()
     } else view.entries = entries
@@ -223,6 +227,12 @@ function openSession(api: Api, name: string, level: LogLevel, q: string | undefi
         if (stopped || call !== followCall) return
         followCall = undefined
         failures = 0
+        if (answer.rolled && fromDropped) {
+          // Read from an entry Show Earlier dropped, in an older file all along: no roll-over, so the newest lines
+          restart()
+          return
+        }
+        fromDropped = false
         append(answer)
         view.pollFailed = false
         show()
@@ -327,6 +337,7 @@ function openSession(api: Api, name: string, level: LogLevel, q: string | undefi
     Object.assign(view, viewOf(true))
     before = undefined
     after = undefined
+    fromDropped = false
     failures = 0
     show()
     first()

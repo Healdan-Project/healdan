@@ -4224,7 +4224,9 @@ paths:
         - name: q
           in: query
           required: false
-          description: Part of a fault's latest message, or of its logger's name
+          description: >-
+            Part of a fault's latest message as it's answered, with each
+            URL's user name and password taken out, or of its logger's name
           schema:
             type: string
         - name: area
@@ -4608,7 +4610,10 @@ paths:
         hold fewer, or none, and still have a `nextCursor`. Send
         `nextCursor` back as `cursor`, with the same filters, for the rows
         after it. It holds each source's place, so rows written meanwhile
-        never repeat or skip one on a later page. There's no total.
+        never repeat one on a later page; they're on a fresh first page. A
+        row whose transaction commits after a page has passed its id
+        isn't on a later page either, only on a fresh first page. There's
+        no total.
         `nextCursor` is null only once every source has been read to its
         end. `readBackTo` says how far back the page's reading reached, so
         a page with few rows, or none, can say nothing more was found back

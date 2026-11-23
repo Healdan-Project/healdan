@@ -11,7 +11,9 @@ import java.util.regex.Pattern;
 /**
  * Where the Audit Trail's next page starts: each source's place, the id below which its rows are still to come
  * ({@code id < place}). {@link Long#MAX_VALUE} is a source not read yet, and 0 one read to its end. It holds places
- * only, never a filter, so rows written meanwhile, which take higher ids, never repeat or skip one on a later page.
+ * only, never a filter, so a row written meanwhile with a higher id never repeats one on a later page, and shows on a
+ * fresh first page. An id is given at the insert, not the commit, so a row whose transaction commits after a page has
+ * passed its id never comes on a later page of that cursor, nor in an export under way: only a fresh first page has it.
  * <p>
  * Its text, which the API hands out as {@code nextCursor}, is {@code d<n>.f<n>.u<n>.a<n>.s<n>} (the document,
  * folder, account, administration and storage sources' places, in decimal with no leading zero) in base64url with no

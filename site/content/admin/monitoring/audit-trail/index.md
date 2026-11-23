@@ -136,7 +136,7 @@ app:
 
 | Recorded | How |
 |---|---|
-| Quick Look and the reading pane, where you can turn the pages | a view, as the preview is shown |
+| Quick Look and the reading pane, where you can turn the pages | a view, as the preview is shown; the reading pane shows a row once it has stayed selected for a moment, so a row the arrow keys pass over isn't viewed |
 | Reading a filed email, or previewing one of its attachments | a view of the email |
 | Downloading | a download, as before |
 | Opening in Word, Excel, LibreOffice or CoffeePDF | Healdan Helper's check-out, and its download of the file |
