@@ -15,7 +15,9 @@ import { ADMIN_PASSWORD, ADMIN_USERNAME, escape, escaped, signIn, tabTo } from '
 // is cancelled. The Audit Trail has `reindex.started` for the folder, by admin. It changes nothing global: it never ticks
 // Empty the Index First, reindexes Everything or a Store, presses Run Indexer Now (the Indexer's 5 seconds are the smoke
 // test's step 9's) or tries again or skips a document, and its reindexes cover only its own documents, whose entries stay
-// in the index while they're replaced. Its API calls go through the admin's web session in the page, as the apps' do: a
+// in the index while they're replaced. A reindex of three documents ends in a fraction of a second, so the search made
+// "between the start and the end", straight after the start's answer, in fact lands after the end: no browser test can
+// search inside so short a run. Its API calls go through the admin's web session in the page, as the apps' do: a
 // device token's sign-in from a client LogicalDOC hasn't seen sends the account a new-device email, which a stack with no
 // mail server logs as an error. Nothing it asks of the server is logged as an error. Each browser runs it, so its names
 // carry the project's.
@@ -158,7 +160,10 @@ const card = (name: string) => main(page).getByRole('region', { name: new RegExp
 
 test("reindexes the run's folder from the Search Index's Reindex dialog, by the keyboard alone, search finding its documents throughout", async () => {
   test.setTimeout(150_000)
-  await page.goto('/admin/search-index')
+  // From the Dashboard, by the left pane, so the page before the Search Index is known
+  await page.goto('/admin/')
+  await expect(main(page).getByRole('heading', { level: 1, name: 'Dashboard' })).toBeVisible()
+  await page.getByRole('navigation', { name: 'Navigation' }).getByRole('link', { name: /^Search Index(,|$)/ }).click()
   const heading = main(page).getByRole('heading', { level: 1, name: 'Search Index' })
   await expect(heading).toBeVisible()
   await expect(main(page).getByText('Loading…')).toHaveCount(0)
@@ -175,11 +180,12 @@ test("reindexes the run's folder from the Search Index's Reindex dialog, by the 
   const folder = choices.getByRole('radio', { name: 'Folder' })
   await expect(matter).toBeChecked()
 
-  // The dialog opens with the focus on itself; Tab goes into the choices, the arrows to Folder, and Space picks it
+  // The dialog opens with the focus on itself; Tab goes into the choices on the one chosen, Matter, as into a radio group;
+  // ArrowLeft goes to Folder, and Space picks it
   await expect(dialog).toBeFocused()
   await page.keyboard.press('Tab')
-  expect(await choices.evaluate((group) => group.contains(document.activeElement)), 'Tab goes into the choices').toBe(true)
-  for (let i = 0; i < 5 && !(await folder.evaluate((radio) => radio === document.activeElement)); i++) await page.keyboard.press('ArrowRight')
+  await expect(matter, 'Tab goes into the choices on the one chosen').toBeFocused()
+  await page.keyboard.press('ArrowLeft')
   await expect(folder).toBeFocused()
   await page.keyboard.press('Space')
   await expect(folder).toBeChecked()
@@ -204,7 +210,8 @@ test("reindexes the run's folder from the Search Index's Reindex dialog, by the 
   // The count is the run's documents, the folder inside included
   const button = dialog.getByRole('button', { name: `Reindex ${FILED} Documents` })
   await expect(button).toBeEnabled()
-  // Enter in the filter picks, and never starts the reindex: only the button does
+  // Enter in the filter picks, and never starts the reindex: only the button does. Had it started one, the button would go
+  // pending and the dialog close, and the server would hold a reindex of the folder
   await expect(filter).toBeFocused()
   const sent: string[] = []
   const noted = (request: { method(): string; url(): string }) => {
@@ -213,17 +220,23 @@ test("reindexes the run's folder from the Search Index's Reindex dialog, by the 
   page.on('request', noted)
   try {
     await page.keyboard.press('Enter')
-    // Two frames on, a submit would have sent its request, which the page's protocol reports before this answer
-    await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))))
-    await expect(button).not.toHaveAttribute('data-pending', 'true')
-    await expect(dialog).toBeVisible()
+    // For a second and more, the dialog stays open with its button ready, and nothing is sent
+    for (let i = 0; i < 5; i++) {
+      await expect(dialog).toBeVisible()
+      await expect(button).toBeEnabled()
+      await expect(button).not.toHaveAttribute('data-pending', 'true')
+      await page.evaluate(() => new Promise((done) => setTimeout(done, 250)))
+    }
   } finally {
     page.off('request', noted)
   }
-  expect(sent, 'Enter in the filter started nothing').toEqual([])
+  expect(sent, 'Enter in the filter sent no start').toEqual([])
+  const jobs = await apiCall<{ items: { name: string }[] }>('GET', '/admin/reindex?limit=200')
+  expect(jobs.items.filter((one) => one.name === folderJob()), 'no reindex of the folder exists yet').toEqual([])
   await tabTo(page, button)
   const job = await startedBy(page, () => page.keyboard.press('Enter'))
   await expect(dialog).toBeHidden()
+  // Reindex… opened it, so the start stepped back: the address is the Search Index's own
   await expect(page).toHaveURL(/\/admin\/search-index$/)
 
   // Its card at once, as the start answered; search still finds the documents while it runs
@@ -240,6 +253,11 @@ test("reindexes the run's folder from the Search Index's Reindex dialog, by the 
   await main(page).getByRole('tab', { name: 'History' }).click()
   const history = main(page).getByRole('table', { name: 'Reindexes' })
   await expect(history.getByRole('row').filter({ has: page.getByRole('rowheader', { name: folderJob(), exact: true }) })).toContainText(`Done: ${FILED} reindexed`)
+
+  // The start stepped back over the dialog's own address, so Back goes to the page before the Search Index, the Dashboard
+  await page.goBack()
+  await expect(main(page).getByRole('heading', { level: 1, name: 'Dashboard' })).toBeVisible()
+  await expect(page).toHaveURL(/\/admin\/$/)
 })
 
 test("reindexes the folder inside it from a right-click in the User app, whose toast's View Progress opens the Search Index in a new tab", async () => {
