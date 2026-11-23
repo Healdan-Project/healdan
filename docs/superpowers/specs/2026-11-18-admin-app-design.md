@@ -179,7 +179,7 @@ A list (Number, Name, Matters, Documents, Last Activity) with **New Client**, th
 
 **New Matter** is a dialog with Client (a search, with **New Client…**), Number (the next free one, editable), Store (a menu, with **New Store…**), Name, Description, Owner (a search) and Template. It shows what the matter will contain. It runs the server's checks as the form changes (`POST /matters/check`), so a Store a template's groups can't read is reported before **Create Matter**, with **Let {group} Read the Store** to fix it there.
 
-**A matter's page** has the title, the client, Store, owner, template and totals, and **Edit**, **Move to Another Store**, **Open in Healdan**, **Reindex** and **Delete**. Tabs:
+**A matter's page** has the title, the client, Store, owner, template and totals, and **Edit**, **Move to Another Store**, **Open in Healdan**, **Reindex** and **Delete** (changed in the build: **Reindex** before **Open in Healdan**). Tabs:
 
 - **Overview:** the description, the facts, what's stuck or failing in the matter.
 - **Workspace** (§8.4).
@@ -303,12 +303,12 @@ A view is recorded once per person, per document, per half hour (owner), so arro
 
 ### 9.6 Reindexing (owner: straight through; call on how)
 
-- **`ReindexWorker` indexes each document itself** through `DocumentManager.index`, the call CE's Indexer makes, on as many threads as `threadpool.IndexerTask.max`. It doesn't mark documents or relaunch `IndexerTask`. So nothing waits for the Indexer's 500-per-30-minutes pace, each document is tried exactly once per job, and an unreadable file can't hold the job up or send it round again.
+- **`ReindexWorker` indexes each document itself** through `DocumentManager.index`, the call CE's Indexer makes, on as many threads as `threadpool.IndexerTask.max`. It doesn't mark documents or relaunch `IndexerTask`. So nothing waits for the Indexer's 500-per-30-minutes pace, each document is tried exactly once per job, and an unreadable file can't hold the job up or send it round again. (changed in the build: a batch runs again while the index can't be written, and a document whose save collides with another write is tried once more; the plan's decision log has why.)
 - **What a job covers** is its scope's live documents, taken in `ld_id` order from a saved position. Aliases, documents marked Skip and documents in a running CE transaction are left out, and the answer says how many were skipped. (changed in the build: archived documents are left out too, as the Indexer leaves them; the documents a job will try are fixed as it's started, in `hd_reindex_doc`, and one of them gone, set to Skip, archived or busy by its turn, or whose storage can't be reached then, is counted skipped, so done, failed and skipped add up to its total; the plan's decision log has why.) Folder trees are walked by parent through `StoredRows`, never through `ld_path`, which can be stale. A document filed during the job is the Indexer's, as usual.
 - **`hd_reindex_job`** keeps the scope, the name shown, who started it, its times, its total, done and failed counts, its saved position and its state: `RUNNING`, `DONE` or `CANCELLED`. A job runs one at a time, and others wait their turn. If the index can't be written, the worker waits and tries again, and the screen says so. (changed in the build: a job waiting its turn is `WAITING`; the job keeps whether it was asked to stop and whether it has emptied the index, and those it left out at the start; a batch is the index's outage when nothing in it was indexed and a document failed with an index fault, and then nothing of it is saved, the job notes since when, and the batch runs again after a wait, once the index has failed a write check; the documents skipped as their storage couldn't be reached are counted apart too, and a job says since when the worker has failed at each try; the plan's decision log has why.)
 - **Nothing is removed from the index,** unless **Empty the index first** was ticked, which also marks every document to index, so one job's failure doesn't leave them out.
 - **A restart** resumes a running job from its saved position.
-- **Failed versus waiting:** a document has failed when `ld_indexed = 0` and its latest `event.indexed` or `event.indexed.error` row is the error, with the reason in its comment. `DocumentManager.index` writes those rows. CE's Indexer goes on retrying such a document on its schedule, as it does today. **Try Again** indexes it now. **Skip** sets it to not indexable, so the Indexer stops. (changed in the build: the worker and Try Again call `DocumentManager.index` with no history and write the history rows themselves, as CE writes an error row whenever it's given one, a storage outage's included; a document a job couldn't index is set to `TO_INDEX`, so it joins Couldn't Be Indexed; the plan's decision log has why.)
+- **Failed versus waiting:** a document has failed when `ld_indexed = 0` and its latest `event.indexed` or `event.indexed.error` row is the error, with the reason in its comment. `DocumentManager.index` writes those rows. CE's Indexer goes on retrying such a document on its schedule, as it does today. **Try Again** indexes it now. **Skip** sets it to not indexable, so the Indexer stops. (changed in the build: the worker and Try Again call `DocumentManager.index` with no history and write the history rows themselves, as CE writes an error row whenever it's given one, a storage outage's included; a document a job couldn't index is set to `TO_INDEX`, so it joins Couldn't Be Indexed, or to Skip where `index.skiponerror` is on; Try Again while the index can't be written answers `409 refused` and changes nothing; the plan's decision log has why.)
 
 ### 9.7 Storage (call)
 
@@ -320,7 +320,7 @@ A view is recorded once per person, per document, per half hour (owner), so arro
 |---|---|---|
 | `hd_admin_event` | 1 | §9.3 |
 | `hd_error`, `hd_error_hour` | 1 | §9.4 |
-| `hd_reindex_job` | 6 | §9.6 |
+| `hd_reindex_job`, `hd_reindex_doc` | 6 | §9.6 |
 
 No `ld_` table changes (roadmap §6).
 

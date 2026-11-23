@@ -239,9 +239,12 @@ weight: 13
   - thumbnails show as broken images.
 - **A reindex over a backend that can't be reached adds to Errors.** A
   [reindex](../../admin/system/search-and-indexing/#reindex) skips each document whose file it can't read while its
-  backend can't be reached, and says so in its count of those skipped, but LogicalDOC's reader logs an error for each,
-  so **Errors** shows a fault seen as many times as there were such documents. **Try Again** on one does the same once.
-  Mark it resolved once the backend is back, and reindex what was skipped.
+  backend can't be reached, and says so in its count of those skipped, but LogicalDOC's reader logs two errors for
+  each: one naming the file, and one with the outage's sentence. **Errors** groups faults by their message with its
+  numbers and quoted names left aside, so the outage is one fault, seen once per document, and each file name is a
+  fault of its own, naming the file. The left pane's Errors count and the Dashboard's unresolved errors rise by about
+  as many as there were such documents, and each fault is marked resolved on its own. **Try Again** on one adds two
+  faults. Reindex what was skipped once the backend is back.
 - **LogicalDOC's Stores screen is hidden,** under **Administration → Settings**, and its Folders tab with it. So
   Original's folder (`store.1.dir`) and LogicalDOC's six other folders (`conf.dbdir`, `conf.exportdir`,
   `conf.importdir`, `conf.logdir`, `conf.plugindir` and `conf.userdir`) are set only in the configuration volume's

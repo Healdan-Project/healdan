@@ -60,17 +60,17 @@ already or is disabled, and while the server is set not to run scheduled tasks.
 A reindex that's running, or waiting its turn, shows above the tabs, in the order they were started.
 
 - **Running,** as "Reindexing Matter 1001.1 Charter Dispute": who started it and when, a bar of how far it has got,
-  and under it a line such as "212 of 412 documents · about 6 minutes left · search keeps working while it runs",
-  with how many it skipped because their storage couldn't be reached, as "9 on storage that couldn't be reached",
-  when there are any. While the index can't be written, the line says it's waiting for the index, since when, and
-  that it tries again shortly (see [While It Runs](#while-it-runs)). While Healdan itself can't go on with it, the
-  line says it's making no progress, since when, that it tries again every 30 seconds, and that
-  [Background Jobs](../../monitoring/background-jobs/) says why. One that has been asked to stop says it's stopping
-  once the documents it has started on are done, and has no **Cancel**.
+  and under it a line such as "212 of 412 documents · about 6 minutes left · search keeps working while it runs", with
+  how many it skipped because their storage couldn't be reached, as "9 on storage that couldn't be reached", when
+  there are any. While the index can't be written, the line says it's waiting for the index, since when, and that it
+  tries again shortly (see [While It Runs](#while-it-runs)). While Healdan itself can't go on with it, the line says
+  it's making no progress, since when, and that it tries again every 30 seconds, and [Background
+  Jobs](../../monitoring/background-jobs/) shows the error. One that has been asked to stop says it's stopping once
+  the documents it has started on are done, and has no **Cancel**.
 - **Waiting,** as "Waiting to Reindex Store Client Work": who started it and when, and how many documents it will try
   once its turn comes.
 
-Each has **Cancel** (see [Cancel](#cancel)). A reindex that ends while the page is open stays where it was, as
+The rest have **Cancel** (see [Cancel](#cancel)). A reindex that ends while the page is open stays where it was, as
 "Reindexed …" or "Cancelled Reindexing …", saying how it went, as in "408 reindexed, 3 couldn't be indexed, 12
 skipped (9 on storage that couldn't be reached).", with **Close**.
 
@@ -93,8 +93,9 @@ matter, the **Reason** and **When** it was last tried.
   [storage backend](../../storage-backends/) that keeps its file can't be reached just then, Healdan says so, naming the
   Store, and changes nothing, and so it does while the index itself can't be written: "The search index can't be
   written just now. Try again later." Either way the document stays as it was, with no row on the **History** tab,
-  and nothing is recorded. For the storage, LogicalDOC's reader still logs that it couldn't read the file, which
-  [Errors](../../monitoring/errors/) shows. Try again once the backend, or the index, is back.
+  and nothing is recorded. For the storage, LogicalDOC's reader still logs two errors, which
+  [Errors](../../monitoring/errors/) shows as two faults (see [While It Runs](#while-it-runs)). Try again once the
+  backend, or the index, is back.
 - **Skip** asks first, then sets the document not to be indexed, so the Indexer stops trying it, and it leaves the
   list. It's then counted in none of the three. Its entry in the index, if it has one, stays, and every reindex leaves
   it out from then on. Skip lasts until someone chooses **Mark indexable** for it on the Classic Interface's
@@ -142,9 +143,10 @@ Its dialog opens on **Matter**. Choose what to reindex:
 
 A folder has no entry of its own in the index, so reindexing one means reindexing the documents in it. The dialog
 shows how many documents the reindex will try, on its button, as in **Reindex 412 Documents** (**Reindex Everything**
-for Everything), and about how long it will take once it runs, as in "About 12 minutes for 412 documents.": as long a
-time each as the documents took in the latest reindex that ran to its end having tried 20 or more, or 1.75 seconds
-each until one has, not counting any reindex that runs before it.
+for Everything), and about how long it will take once it runs, as in "About 12 minutes for 412 documents. Search keeps
+working meanwhile." It reckons each document to take as long as one took in the latest reindex that ran to its end
+having tried 20 or more, or 1.75 seconds until one has, not counting any reindex that runs before it. A running
+reindex that has tried 20 or more reckons what it has left at its own pace.
 
 **What's left out** isn't on the button, and the dialog says how many, as in "3 more are left out: shortcuts, and
 documents set to Skip, archived or being changed.". Shortcuts are left out as the Indexer indexes each again once the
@@ -162,13 +164,17 @@ picks the row the arrow keys are on, and never starts the reindex.
   search finds it throughout. A document filed meanwhile is the Indexer's, as usual.
 - **One reindex runs at a time,** across the server. One started while another waits or runs waits its turn, oldest
   first, and shows above the tabs as waiting.
-- **It always reaches its end.** The documents it tries are fixed as it's started, and each is tried once, in the order
+- **It always reaches its end.** The documents it tries are fixed as it's started, and each is tried in the order
   they were filed in. A document deleted, in the Trash or destroyed by its turn, or set to Skip, archived or being
   changed at that moment, is skipped. A document moved or given a new version since is indexed as it is then.
 - **A document whose file's storage can't be reached** at its turn is skipped too, keeping its entry and staying as it
   was, with no row on the **History** tab: a reindex once the [storage backend](../../storage-backends/) is back covers
-  it. LogicalDOC's reader still logs an error for each such document, so [Errors](../../monitoring/errors/) shows a
-  fault seen as many times as there were, which can be marked resolved once the backend is back.
+  it. LogicalDOC's reader still logs two errors for each such document: one naming its file, as "Cannot parse
+  document Witness Statement.pdf (…)", and one with the outage's sentence, which names the Store.
+  [Errors](../../monitoring/errors/) groups faults by their message with its numbers and quoted names left aside, so
+  the second is one fault, seen once for each document, and the first is a fault of its own for each file name, each
+  naming its file. The left pane's Errors count and the Dashboard's unresolved errors rise by about as many as there
+  were such documents, and each fault is marked resolved on its own.
 - **A document it couldn't index** joins **Couldn't Be Indexed**, keeping the entry it had, and the Indexer goes on
   trying it at each run, unless **On error, mark unindexable** is on, which sets it to Skip, as **Try Again** does. A
   document whose save met another's at that moment, as when the Indexer took it too, is tried once more at the end of

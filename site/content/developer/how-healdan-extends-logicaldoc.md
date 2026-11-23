@@ -864,7 +864,8 @@ see [Building from Source](../building-from-source/#running-the-war-outside-dock
     for documents), both checked under one lock so two starts at once can't both pass; it writes the reindex, its
     documents and its record (`reindex.started`) in one transaction, `WAITING`, and wakes the worker. A cancel ends a
     waiting reindex at once and asks a running one to stop. The estimate is the count times the seconds a document
-    took in the latest reindex that ended `DONE` having tried 20 or more, or 1.75 s each.
+    took in the latest reindex that ended `DONE` having tried 20 or more, or 1.75 s each; a running reindex that has
+    tried 20 or more gives what it has left at its own rate so far.
   - **`ReindexWorker`** (`admin.index`) is a `HealdanStartListener` and a `HealdanJob`, `reindex`, labelled Reindex,
     which can't be run now. It runs the reindexes one at a time, oldest first, on its thread, `healdan-reindex`, from a
     minute after the start, woken by a start or a cancel. Each turn ends a running reindex asked to stop, or one with
