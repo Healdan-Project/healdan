@@ -98,7 +98,9 @@ under `/api/v1/admin` (see the [API](../api/#the-admin-apps-routes)).
 - **Its components** are `@healdan/ui`'s, which has some the User app doesn't use: `ProgressBar` (React Aria's, whose
   count, such as "212 of 412", is what a screen reader hears), `StatusDot` (a status always said in words, the dot only
   decoration), `GroupChip`, and `SearchPicker`, a field with rows under it: starting rows, then the server's answer once
-  the typing pauses, from two characters, with the words it matched marked as text and an older answer dropped. The
+  the typing pauses, from two characters (`minLength` sets fewer, as the Reindex dialog's matter search and folder
+  filter take one), with the words it matched marked as text and an older answer dropped; `isDisabled` disables the
+  field and every row, as a dialog holds while its change is on its way. The
   arrow keys in its field reach every row, as the focus stays there, and while the rows hold more than their box shows,
   the box is a stop of its own, which Tab reaches after the field and the arrow keys scroll, so what it holds below
   isn't for a pointer alone (axe's `scrollable-region-focusable`); while it's a stop, and only then, it's a region named
@@ -118,6 +120,13 @@ server nothing, at a secure address or not.
 The way in is the User app's person menu (`apps/user/src/frame/PersonMenu.tsx`): **Admin**, a link to `/admin/` just
 before **Classic Interface**, offered when `useMe()` says `admin`. It's a link and no more, so none of the Admin app's
 code is in the User app's build, and only the server decides who gets in.
+
+An administrator's **Reindex**, on the User app's right-click menus, is the one place the User app calls admin routes
+(`apps/user/src/actions/useReindex.tsx`, from `ReindexProvider` in `Frame`, as the menu that asked closes): the
+preview, then the start, through the User app's own client and web session (`apps/user/src/adminApi.ts`'s
+`adminPost`, typed from `adminPaths`). Only the admin contract's types come in, which the build drops, so
+`check-dist.mjs` still finds none of the Admin app's catalogue in the User app's build. Its strings are the shared
+catalogue's (`reindex.*`), and its toast's **View Progress** opens `/admin/search-index` in a new tab.
 
 ### The Frame
 
@@ -146,9 +155,9 @@ takes Esc first).
 `NAV`, in `frame/LeftPane.tsx`, is the left pane: the Dashboard, then the spec's groups in its order (Firm, People,
 Storage, Search and Monitoring), each a heading from the catalogue and its `NavItem`s. A group with no items isn't
 drawn, so the pane shows only the groups a shipped screen is in: Firm, with Clients, Matters and Workspace Templates;
-People, with Users and Groups; Storage, with Stores and Backends; and Monitoring, with Errors, Server Log, Audit Trail
-and Background Jobs, so far. **Classic Interface** is at the pane's foot, apart from `NAV`. A screen joins when its
-phase ships:
+People, with Users and Groups; Storage, with Stores and Backends; Search, with Search Index; and Monitoring, with
+Errors, Server Log, Audit Trail and Background Jobs, so far. **Classic Interface** is at the pane's foot, apart from
+`NAV`. A screen joins when its phase ships:
 
 1. Write the view in `views/`. Take its data through `useAdminQuery` (below), and its pieces from `@healdan/ui`.
 2. Give it a route in `router.tsx`, a child of the root, at its path in `addresses.ts`' `routes`.
@@ -416,6 +425,45 @@ What the screens from Phase 2 on share (the spec's section 7.2):
     tabs, and one for Background Jobs, each under a comment naming it, with each screen's routes in a function of its
     own (`errorRoutes`, `logRoutes`, `auditRoutes`, `jobRoutes`) that its tests spread, never in `defaultRoutes()`, so
     screens built side by side merge without a conflict.
+- **The Search Index** is `views/SearchIndexView.tsx` and `index/`, at `/admin/search-index`, the open tab
+  (`?tab=waiting` or `?tab=history`; Couldn't Be Indexed without one) and the Reindex dialog in the address's search
+  (`SearchIndexSearch`, `searchIndexSearch` in `addresses.ts`).
+  - **The heading** (`useSearchIndex`) draws the counts, the health and the Indexer's runs. **Run Indexer Now**
+    follows the server's `runRefusal`, not the job's `canRun`, greyed out with the sentence as its description, and
+    its answer goes into the heading (`indexerAnswered`) before the counts, the tabs, the Dashboard and Background
+    Jobs' list are read again; a refusal is said only while a new read shows the Indexer as it was.
+  - **The reindexes** (`ReindexJobCard.tsx`): a card for each one waiting or running, from `useActiveReindexes`
+    (`GET /v1/admin/reindex?active=true`, every `REINDEX_POLL_MS`, 5 seconds, while there's one and the page is
+    visible), and for each that ended while the page was open (`useReindexEnds`), with **Close**, all by id, so a
+    card keeps its place. While there's one, the heading and the open tab are asked every 30 seconds (`POLL_MS`);
+    `usePagedList` and `useCursorList` take a `{ poll }` for it. A reindex's end, Try Again, Skip and Run Indexer Now
+    call `indexChanged`, which asks for the heading, the tabs, the reindexes and the Dashboard's query again. Cancel
+    asks first (`dialogs/Confirm`), and `reindexChanged` puts its answer, or a start's, in the active list.
+  - **Couldn't Be Indexed** (`FailedList.tsx`) is a plain table, as each row has buttons, through `usePagedList`
+    (which now takes the three lists' paths and drops a row a later page repeats by `id` or `document.id`). Try Again
+    holds its button and says the outcome in the row and a toast; Skip asks first. A `409` or `404` calls
+    `countsStale`, which asks for the heading and the Dashboard only, so the row and the refusal said in it stay
+    until the list's next read; a `503 storage-unreachable` shows the server's `detail`, which names the Store. A row
+    with no doc # has both buttons greyed out, described by why. `useKeptFocus` takes `{ attribute, name, toNextRow }`,
+    so the focus goes to the row that took a removed row's place. **Waiting** (`WaitingList.tsx`) and **History**
+    (`IndexHistory.tsx`: the reindexes by offset, then the index's events through `useCursorList`) follow.
+  - **The Reindex dialog** (`ReindexDialog.tsx`, `ReindexChoices.tsx`, `reindexQueries.ts`, `reindexText.ts`) is drawn
+    by the page while the address has `reindex` (`documents`, `folder`, `matter`, `store` or `everything`), with `id`
+    and, for a folder, `matter`, and keyed by them, so another address opens it afresh. `reindexHref(kind, id?,
+    matter?)` writes the address for the openers: **Reindex** on a matter's page and, in a matter's Workspace Editor,
+    on a folder below the top (`FolderAction` `'reindex'`), each a `ServerLink`, so opening it is a push and Back
+    leaves it; **Reindex…** on the page pushes `reindex=matter`. Cancel, Esc and a start take the dialog's parameters
+    out in place (`replace`). Its choices are `ToggleButtons`; Matter and Folder search with `SearchPicker`, Folder
+    over the matter's tree (`GET /v1/admin/workspaces/{folderId}/tree`) with no count per folder; Documents parses
+    what's typed itself and sends only whole numbers, at most 1,000. `useReindexPreview` asks
+    `POST /v1/admin/reindex/preview` once a choice is complete, after a pause in typing, under
+    `['admin', 'reindex-preview', scope]`, outside the reindexes' prefix, so a start's invalidation never asks a
+    preview again; the last answer stays while the next comes, for the same choice only. The button follows the
+    preview's `count` and `refusal`. While the start is on its way the dialog holds, its choices in a disabled
+    fieldset and its search rows disabled.
+  - **Their words and fixtures** are the `// Search Index` and `// Reindex dialog` sections of the catalogue and of
+    `test/fakeApi.ts`, with `searchIndexRoutes` and `reindexRoutes`. `kindLabel` (`monitoring/text.ts`) gives a kind
+    the catalogue lacks as the kind itself, so a new action never breaks the Audit Trail.
 - **The last good answer stays.** The Users and Groups lists, a person's page, a group's page and the panels on them,
   and the Monitoring screens and the Activity tabs, keep their last answer while a new read fails, with
   `people/StaleNote.tsx`, "Couldn't refresh this, so it shows what was read last." and **Try Again**, in place of the

@@ -547,7 +547,41 @@ start them; `DashboardServiceTest` calls `forget()`, which drops what the Dashbo
   `Task.run` as any task is, which waits until the test releases it (`release`), so a test can see it running and stop
   it, and which can hold the thread that runs it before its run begins (`holdTheStart`, `letStart`), so the task stays
   idle; it's enabled, every hour, in memory only. `JobsTestHooks.list(task)` lists it after LogicalDOC's tasks through
-  `Jobs`' seam, and `reset()` puts the list back.
+  `Jobs`' seam, `JobsTestHooks.instead(task)` puts it in place of LogicalDOC's task of the same name (a held Indexer,
+  through `HeldTask(String name)`), and `reset()` puts the list back.
+- **The Search Index's tests.** `IndexCountsTest` checks the three counts, the latest of many tries and tries at
+  the same moment, the failed and waiting lists with their matters, one document's failure and its Skip, and
+  `moved()` moving the changes on. `IndexOverviewTest` checks the heading, entries and a size that can't be read
+  (their warnings pinned), the lists with their totals, and a non-administrator refused. `IndexHistoryTest` checks
+  the events newest first, a page looking through a window by key and short pages with a cursor, the cursor's one
+  spelling, and, as `AuditFeedTest` does, every statement's bound under a custom plan and under
+  `plan_cache_mode = force_generic_plan` (`testEveryStatementKeepsItsBoundUnderACustomPlanAndAGenericOne`).
+  `IndexReviewTest` checks Try Again as the actor, one that fails again with its reason, one on a file whose storage
+  can't be reached writing, counting and recording nothing, one that fails with `index.skiponerror` on setting Skip
+  (`testTryAgainThatFailsWithSkipOnErrorSetsItToSkip`, with the document in the second-level cache first), Skip, only
+  a failed document and only an administrator, a document by its doc #, and the record's name. `IndexEventRowsTest`
+  checks both rows. `IndexTestHooks`, in `healdan-core`'s test-jar, makes Try Again's index fail as LogicalDOC's does
+  (`failIndexing(cause)`, wrapped in a `ParsingException`) and puts it back (`reset()`). `AdminSearchIndexResourceTest`,
+  in `healdan-api`, checks the routes: the heading as `IndexCounts` counts, the lists and their paging, the history,
+  Run Indexer Now refused while it runs, Try Again and Skip with the row's user and the web session's address, a
+  `503` on storage that can't be reached, a doc # no live document has, and administrators on the web session only.
+- **The reindex's tests** extend `AbstractReindexTestCase`, whose layout is two Stores, three matters with their
+  folders and an empty index, the reindex seams put back after each test. `ReindexServiceTest` checks each scope's
+  live documents and what it leaves out, targets that aren't live, the scope's shape, `emptyFirst` for Everything
+  only, a start recorded and waiting its turn, the start's refusals, a waiting reindex cancelled, the list newest
+  first, and the estimates. `ReindexWorkerTest` checks a reindex in id order to `DONE`, one unreadable document, a
+  cancel before and during a batch, one at a time oldest first, a restart resuming from its position, documents
+  deleted, moved, checked out, replaced, set to Skip, destroyed, archived or busy after the start
+  (`testDocumentsChangedAfterTheStart`, the counts adding up), the scope's folder deleted mid-run, an index that can't
+  be written and its waits, an index fault beside a document indexed (that document's failure) and beside a
+  document's own failure (the outage), a Solr fault, a document on storage that can't be reached skipped, the index
+  emptied once as the run begins, a reindex asked to stop never ending `DONE`, a failure while idle, and the worker as
+  a background job that runs by itself. `ReindexTestHooks`, in `healdan-core`'s test-jar, sets the worker's seams:
+  how it indexes (`real()`, `unwritable()`, `indexWith`, `fail(id, reason)`, `indexUnwritable()`), its batch
+  (`batch(n)`) and its threads (`threads(n)`, one making a test's order fixed), and `reset()` puts them back.
+  `AdminReindexResourceTest`, in `healdan-api`, checks a preview's count as the started reindex's total, each kind,
+  targets that aren't live, an empty set refused, the fields' `422`s and the body's `400`s, the refusals' order,
+  the list, a reindex and its cancel, and administrators on the web session only.
 
 ### The Storage Tests
 

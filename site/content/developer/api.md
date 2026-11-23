@@ -1086,7 +1086,8 @@ A change is checked in one order, and a refusal changes nothing:
 
 Beside `401` and the two `403`s above, these are the only problems the admin routes answer, but for the Storage
 routes' two (see [Storage](#storage)): `503 storage-unavailable`, on a server without Healdan's storage module, after a
-body that isn't the JSON expected and before anything else, and `409 secret-key-missing`. A create that loses a
+body that isn't the JSON expected and before anything else, and `409 secret-key-missing`; and Try Again's
+`503 storage-unreachable` (see [Search Index](#search-index)). A create that loses a
 race for its number, of two creates of one client number, or of one number in one client's matters, at the same
 moment, is answered as a number already used, `409 refused` with the same sentence: the database's unique index
 refuses the second, and the server asks the number's check again once the first has committed.
@@ -1732,6 +1733,73 @@ changes nothing, and anything that only reads, a log's download and the export i
   at the job by its name. The Dashboard's jobs, and so the Admin app's left pane, follow each of them at their next
   read, and so do a run of one of Healdan's jobs that ends otherwise than the one before and a task's run that Run Now
   started; a task's scheduled run shows within the Dashboard's minute or two.
+
+### Search Index
+
+The Search Index area's routes, for the Search Index screen, its Reindex dialog and the User app's **Reindex**. The
+documents counted are the live ones, not shortcuts and not in the Trash: indexed once its entry has been written,
+until it's marked to be indexed again; waiting while it's marked to be indexed, its file or its properties alone, and
+isn't archived; and couldn't be indexed while it's marked to have its file indexed, isn't archived, and its last try
+failed, counted apart from those waiting. One set to Skip is in none of the three. A document is named by its doc #,
+as in the public API (`IndexDocument`: `id`, `docNumber`, `fileName` and `matter`, with the matter's `number`).
+
+- **`GET /v1/admin/search-index`** is the screen's heading (`SearchIndex`): `indexed`, `waiting` and `failed`, counted
+  at the request; `entries`, the index's entries, documents' and shortcuts' alike, and `bytes`, the size of its
+  folder, each null where it can't be read; `health`, as the Dashboard's Search Index tile gives it (`ok` or
+  `attention`, with its `detail`); and `indexer`, LogicalDOC's Indexer as `GET /v1/admin/jobs` gives it, with
+  `runRefusal`, the sentence `POST /v1/admin/search-index/run` would refuse with now, or null.
+- **`GET /v1/admin/search-index/failed`** and **`/waiting`** are pages (`offset`, `limit`, `total`) of the documents
+  that couldn't be indexed, the latest error first, each with its `reason` and `when`, and of those waiting, by id,
+  the order they were filed in, each with `lastChanged`, when the document last changed, which a bulk mark to index
+  doesn't move.
+- **`GET /v1/admin/search-index/history`** is a page of the index's events (`IndexHistoryPage`: `items`,
+  `nextCursor` and `readBackTo`), newest first: each `event.indexed` (`indexed`) and `event.indexed.error` (`failed`)
+  row of LogicalDOC's document history, whoever wrote it, with the document, the `reason` for `failed` only (an
+  indexed row's comment, which LogicalDOC fills with the start of the document's text, is never answered), and `who`,
+  named as the Audit Trail names a row's person. A page looks through only so many rows of the history, of every
+  kind, so it can hold fewer than `limit`, or none, and still have a `nextCursor`, as the Audit Trail's can.
+- **`POST /v1/admin/search-index/run`** is **Run Indexer Now**: Background Jobs' Run Now of `IndexerTask`, with its
+  refusals (`409 refused`) and its record (`job.run-requested`, in the Monitoring area), answering the Indexer.
+- **`POST /v1/admin/search-index/failed/{docNumber}/retry`** is **Try Again**: it indexes the document while the
+  request waits and answers `IndexRetry`, `outcome` `indexed` or `failed` with the `reason`, `200` either way, then
+  writes the History tab's row as the caller. With LogicalDOC's `index.skiponerror` on, a document that fails again
+  is set to Skip, as the Indexer sets it. **`/skip`** sets the document to Skip and answers `204`. A doc # no live
+  document of the caller's tenant has is `404`, and a document that isn't among those that couldn't be indexed is
+  `409 refused`, "This document is no longer waiting after an error.". When the storage that keeps the document's
+  file can't be reached, Try Again is `503 storage-unreachable`, as the public API answers it, its `detail` naming the
+  Store; nothing is written, counted or recorded, and the document stays as it was. It's the one admin route that
+  answers that problem.
+- **`POST /v1/admin/reindex/preview`** takes the body `POST /v1/admin/reindex` takes (`ReindexScope`), checks it as
+  that route does, and changes nothing. It answers `ReindexPreview`: the `name` the reindex would have, as
+  `Matter 1001.1 Charter Dispute`, `Folder Pleadings in 1001.1 Charter Dispute`, `Store Client Work`,
+  `412 Documents` or `Everything`; `count`, the documents it would try; `skipped`, those of its scope it would leave
+  out (shortcuts, and documents set to Skip, archived or being changed); `estimateSeconds`; for `documents`, each doc
+  # given, once, in the order given (`ReindexMatch`: `found`, `left-out` or `not-found`, with the document); and
+  `refusal`, the sentence a start would be refused with now, or null.
+- **`POST /v1/admin/reindex`** starts a reindex and answers `201` with it (`ReindexJob`), its address in `Location`.
+  `ReindexScope` is `{ "kind", "targetId", "docNumbers", "emptyFirst" }`: `kind` is `documents` (with `docNumbers`,
+  doc #s), `folder` (a folder's id), `matter` (the matter's id, not its folder's), `store` (the Store's folder id) or
+  `everything`, and `emptyFirst`, for `everything` alone, empties the index as its run begins. A member for another
+  kind, a doc # that isn't a whole number from 0 up, more than 10,000 numbers, and an `emptyFirst` that isn't a
+  boolean, null included, are `400`; a target that isn't live is `404`; `kind` missing (`required`) or not one of the
+  five (`invalid`), a missing target or empty `docNumbers` (`required`), more than 1,000 different doc #s
+  (`too-many`), and `emptyFirst` off `everything` (`invalid`) are `422 validation`; and `409 refused` is "There's
+  nothing here to reindex." for a scope with nothing to try and "This is already being reindexed." for a folder,
+  matter, Store or everything a waiting or running reindex covers already, never for `documents`. The documents it
+  tries are fixed as it's started.
+- **`GET /v1/admin/reindex`** is a page of the reindexes, newest first, and with `active=true` only those waiting or
+  running. **`GET /v1/admin/reindex/{id}`** is one. A `ReindexJob` has its `state` (`waiting`, `running`, `done` or
+  `cancelled`), `cancelling` for a running one asked to stop, `total`, `done`, `failed` and `skipped` (which add up to
+  `total` once it's `done`), `leftOut`, `created`, `started` and `ended`, `stalledSince` while the index can't be
+  written, `startedBy` and `estimateSecondsLeft`.
+- **`DELETE /v1/admin/reindex/{id}`** cancels a reindex: one waiting at once, one running at the end of the batch it's
+  indexing, answering it `running` with `cancelling` meanwhile. A second cancel is answered as it is. One that has
+  ended is `409 refused`, "This reindex has ended.", and an id no reindex of the caller's tenant has is `404`.
+- **What's recorded:** `reindex.started` in the start's transaction, aimed at the matter, folder or Store by its id,
+  or at `documents` or `everything` with none, named by the reindex's name, with `kind`, `documents` (its total) and
+  `emptyFirst`; `reindex.cancelled`, `index.retried` (with its `outcome`) and `index.skipped` straight after each,
+  the last two aimed at the document, named as `# 10412 Witness Statement.pdf`. The Dashboard's index counts, and so
+  the Admin app's left pane, follow Try Again, Skip and a reindex's end at their next read.
 
 ## Healdan's Own Client
 
