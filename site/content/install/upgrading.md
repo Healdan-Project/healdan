@@ -281,7 +281,7 @@ isn't in the index at all. After the upgrade, rebuild the index once:
    replaces its old.
 
 From a version with the Admin app's Search Index, steps 2 and 4 can be one reindex instead: choose **Reindex…** there,
-then **Everything**, and leave **Empty the index first** unticked. It indexes every document again straight through,
+then **Everything**, and leave **Empty the Index First** unticked. It indexes every document again straight through,
 without waiting for the Indexer's runs, while searches keep working. Do step 3 first, as a reindex leaves out the
 documents set not to be indexed. See [Reindex](../../admin/system/search-and-indexing/#reindex).
 

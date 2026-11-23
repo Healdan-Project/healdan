@@ -46,7 +46,9 @@ At the top of the page are **Run Indexer Now** and **Reindex…**, then the thre
   be indexed, as in "5 waiting, 2 failed";
 - **the Indexer's runs:** when it last ran and when it runs next, or that it's running and since when.
 
-The tabs carry their counts, as in "Couldn't Be Indexed (2)", and the tab that's open is in the page's address.
+The tabs carry their counts, as in "Couldn't Be Indexed (2)", and the tab that's open is in the page's address. The
+server keeps one count of the three for up to 10 seconds, shared by the page and its lists, and counts again at once
+after **Try Again**, **Skip**, a reindex's end or a waiting one cancelled.
 
 **Run Indexer Now** runs the Indexer at once, as **Run Now** on [Background Jobs](../../monitoring/background-jobs/)
 does, and says "Asked the Indexer to run now". The run takes the next documents waiting, as many as one run takes,
@@ -58,20 +60,26 @@ already or is disabled, and while the server is set not to run scheduled tasks.
 A reindex that's running, or waiting its turn, shows above the tabs, in the order they were started.
 
 - **Running,** as "Reindexing Matter 1001.1 Charter Dispute": who started it and when, a bar of how far it has got,
-  and under it a line such as "212 of 412 documents · about 6 minutes left · search keeps working while it runs".
-  While the index can't be written, the line says it's waiting for the index, since when, and that it tries again
-  shortly (see [While It Runs](#while-it-runs)). One that has been asked to stop says it's stopping once the documents
-  it has started on are done, and has no **Cancel**.
+  and under it a line such as "212 of 412 documents · about 6 minutes left · search keeps working while it runs",
+  with how many it skipped because their storage couldn't be reached, as "9 on storage that couldn't be reached",
+  when there are any. While the index can't be written, the line says it's waiting for the index, since when, and
+  that it tries again shortly (see [While It Runs](#while-it-runs)). While Healdan itself can't go on with it, the
+  line says it's making no progress, since when, that it tries again every 30 seconds, and that
+  [Background Jobs](../../monitoring/background-jobs/) says why. One that has been asked to stop says it's stopping
+  once the documents it has started on are done, and has no **Cancel**.
 - **Waiting,** as "Waiting to Reindex Store Client Work": who started it and when, and how many documents it will try
   once its turn comes.
 
 Each has **Cancel** (see [Cancel](#cancel)). A reindex that ends while the page is open stays where it was, as
-"Reindexed …" or "Cancelled Reindexing …", saying how it went, as in "408 reindexed, 3 couldn't be indexed, 1
-skipped.", with **Close**.
+"Reindexed …" or "Cancelled Reindexing …", saying how it went, as in "408 reindexed, 3 couldn't be indexed, 12
+skipped (9 on storage that couldn't be reached).", with **Close**.
 
 While a reindex waits or runs, the page asks again every 5 seconds for its progress, and every 30 seconds for the
-counts and the open tab, while the page is showing. It asks again each time you come back to its window too. When a
-reindex ends, the counts, the tabs and the left pane's count are asked for again at once.
+counts and the open tab, while the page is showing. While the Indexer runs, it asks for the heading every 5 seconds,
+and once 2 seconds after **Run Indexer Now**, so the button is ready again once the run ends, when the open tab and
+the left pane's count are asked for again. It asks again each time you come back to its window too. When a reindex
+ends, the counts, the tabs and the left pane's count are asked for again at once. **History**'s events are asked for
+again on the timer only until **Show More** has been pressed.
 
 ### Couldn't Be Indexed
 
@@ -83,9 +91,10 @@ matter, the **Reason** and **When** it was last tried.
   the new reason, and the Indexer goes on trying it, unless **On error, mark unindexable** is on (see
   [The Settings](#the-settings)), which sets it to Skip, so it leaves the list. When the
   [storage backend](../../storage-backends/) that keeps its file can't be reached just then, Healdan says so, naming the
-  Store, and changes nothing: the document stays as it was, with no row on the **History** tab, and nothing is
-  recorded, though LogicalDOC's reader still logs that it couldn't read the file, which [Errors](../../monitoring/errors/)
-  shows. Try again once the backend is back.
+  Store, and changes nothing, and so it does while the index itself can't be written: "The search index can't be
+  written just now. Try again later." Either way the document stays as it was, with no row on the **History** tab,
+  and nothing is recorded. For the storage, LogicalDOC's reader still logs that it couldn't read the file, which
+  [Errors](../../monitoring/errors/) shows. Try again once the backend, or the index, is back.
 - **Skip** asks first, then sets the document not to be indexed, so the Indexer stops trying it, and it leaves the
   list. It's then counted in none of the three. Its entry in the index, if it has one, stays, and every reindex leaves
   it out from then on. Skip lasts until someone chooses **Mark indexable** for it on the Classic Interface's
@@ -115,6 +124,9 @@ Two lists:
   stretch at a time, with **Show More**, so a page can hold few rows, or none, while there's more to read. A document
   destroyed for good takes its rows with it.
 
+In a window too narrow for them, **Waiting**'s list and **History**'s two scroll sideways, and each is then a stop of
+its own, which Tab reaches and the arrow keys scroll.
+
 ## Reindex
 
 **Reindex…**, at the top of the Search Index, indexes again the documents you choose, straight through, on the server.
@@ -122,7 +134,7 @@ Its dialog opens on **Matter**. Choose what to reindex:
 
 | Choice | What it covers |
 |---|---|
-| **Documents** | the documents whose doc #s you type or paste, with commas, spaces or new lines between them, up to 1,000. Each is listed under **Doc #s Given**: found, with its file name and matter; "Left out: it's set to Skip, archived or being changed"; or "No such document" |
+| **Documents** | the documents whose doc #s you type or paste, with commas, spaces or new lines between them, up to 1,000; a doc # with its version, as `10388.2`, is read as the document's. Each is listed under **Doc #s Given**, the first 1,000 and then how many more, found, with its file name and matter; "Left out: it's set to Skip, archived or being changed"; or "No such document" |
 | **Folder** | find the matter, then choose one of its folders, listed as they nest and filtered by what you type: the documents in that folder and in every folder inside it, at every level. **Choose Another Matter** goes back to the search. The matter's own folder isn't listed: choose **Matter** for that |
 | **Matter** | a search that starts from your Recent Matters and finds a matter by its number, its name or its client's name: the documents of the matter's whole workspace |
 | **Store** | a plain list of the Stores, each with its documents: the documents of every matter in the Store |
@@ -141,7 +153,8 @@ document it leads to is done, and archived documents as the Indexer leaves them 
 Healdan says before the button when it won't start one, and greys the button out: "There's nothing here to reindex."
 for a choice with no documents to try, and "This is already being reindexed." for a folder, matter, Store or
 Everything that a waiting or running reindex covers already. Documents chosen by doc # are never refused as already
-being reindexed. More than 1,000 different doc #s at once are refused.
+being reindexed. More than 1,000 different doc #s at once are refused. Enter in the matter search or the folder filter
+picks the row the arrow keys are on, and never starts the reindex.
 
 ### While It Runs
 
@@ -157,10 +170,15 @@ being reindexed. More than 1,000 different doc #s at once are refused.
   it. LogicalDOC's reader still logs an error for each such document, so [Errors](../../monitoring/errors/) shows a
   fault seen as many times as there were, which can be marked resolved once the backend is back.
 - **A document it couldn't index** joins **Couldn't Be Indexed**, keeping the entry it had, and the Indexer goes on
-  trying it at each run.
-- **When the index can't be written,** so that nothing in a stretch of documents could be indexed, the reindex waits
-  and tries that stretch again, counting nothing meanwhile, not even a document that failed for its own reason beside
-  them, and its card says it's waiting for the index.
+  trying it at each run, unless **On error, mark unindexable** is on, which sets it to Skip, as **Try Again** does. A
+  document whose save met another's at that moment, as when the Indexer took it too, is tried once more at the end of
+  its stretch before it counts as one it couldn't index.
+- **When the index can't be written,** so that nothing in a stretch of documents could be indexed and the index
+  doesn't answer a check, the reindex waits and tries that stretch again, counting nothing meanwhile, not even a
+  document that failed for its own reason beside them, and its card says it's waiting for the index. While the index
+  answers, a document it refuses is that document's failure, so one such document never holds a reindex up.
+- **When Healdan itself fails** part way, the reindex stays running, its card saying it's making no progress, and
+  Healdan tries again every 30 seconds.
 - **A restart** of the server lets the running reindex go on from where it was, and the waiting ones wait their turn
   as before.
 
@@ -176,11 +194,14 @@ they were. A reindex that has ended can't be cancelled: "This reindex has ended.
 
 ### Empty the Index First
 
-**Empty the index first**, a tick box shown only under **Everything**, beneath its warning and unticked, is for a
-damaged index. As the reindex's run begins, not as it's started, so no other reindex is running then, it empties the
-index and marks every document to be indexed. Search then misses documents until each is done again, and the Indexer
-takes any the reindex doesn't cover, such as those filed meanwhile. A document set to Skip loses its entry, and stays
-set to Skip. Without the tick, nothing is taken out of the index.
+**Empty the Index First**, a tick box shown only under **Everything**, beneath its warning and unticked, is for a
+damaged index; ticked, the button reads **Empty the Index and Reindex Everything**. As the reindex's run begins, not
+as it's started, so no other reindex is running then, it marks every document to be indexed, then empties the index
+and checks that it's empty. An index that couldn't be emptied is waited for, as one that can't be written is, and
+emptied again; a reindex cancelled meanwhile leaves the documents marked, with their entries, for the Indexer. Once
+it's empty, search misses documents until each is done again, and the Indexer takes any the reindex doesn't cover,
+such as those filed meanwhile. A document set to Skip loses its entry, and stays set to Skip. Without the tick,
+nothing is taken out of the index.
 
 ### Reindex from Elsewhere
 

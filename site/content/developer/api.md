@@ -1743,11 +1743,12 @@ isn't archived; and couldn't be indexed while it's marked to have its file index
 failed, counted apart from those waiting. One set to Skip is in none of the three. A document is named by its doc #,
 as in the public API (`IndexDocument`: `id`, `docNumber`, `fileName` and `matter`, with the matter's `number`).
 
-- **`GET /v1/admin/search-index`** is the screen's heading (`SearchIndex`): `indexed`, `waiting` and `failed`, counted
-  at the request; `entries`, the index's entries, documents' and shortcuts' alike, and `bytes`, the size of its
-  folder, each null where it can't be read; `health`, as the Dashboard's Search Index tile gives it (`ok` or
-  `attention`, with its `detail`); and `indexer`, LogicalDOC's Indexer as `GET /v1/admin/jobs` gives it, with
-  `runRefusal`, the sentence `POST /v1/admin/search-index/run` would refuse with now, or null.
+- **`GET /v1/admin/search-index`** is the screen's heading (`SearchIndex`): `indexed`, `waiting` and `failed`, one count
+  the server keeps for up to 10 seconds, which the two lists' totals share, counted again at once after Try Again, Skip,
+  a reindex's end and a waiting reindex's cancel; `entries`, the index's entries, documents' and shortcuts' alike, and
+  `bytes`, the size of its folder, each null where it can't be read; `health`, as the Dashboard's Search Index tile
+  gives it (`ok` or `attention`, with its `detail`); and `indexer`, LogicalDOC's Indexer as `GET /v1/admin/jobs` gives
+  it, with `runRefusal`, the sentence `POST /v1/admin/search-index/run` would refuse with now, or null.
 - **`GET /v1/admin/search-index/failed`** and **`/waiting`** are pages (`offset`, `limit`, `total`) of the documents
   that couldn't be indexed, the latest error first, each with its `reason` and `when`, and of those waiting, by id,
   the order they were filed in, each with `lastChanged`, when the document last changed, which a bulk mark to index
@@ -1767,8 +1768,10 @@ as in the public API (`IndexDocument`: `id`, `docNumber`, `fileName` and `matter
   document of the caller's tenant has is `404`, and a document that isn't among those that couldn't be indexed is
   `409 refused`, "This document is no longer waiting after an error.". When the storage that keeps the document's
   file can't be reached, Try Again is `503 storage-unreachable`, as the public API answers it, its `detail` naming the
-  Store; nothing is written, counted or recorded, and the document stays as it was. It's the one admin route that
-  answers that problem.
+  Store, the one admin route that answers that problem; and when the index can't be written (an index fault, and the
+  index doesn't answer a write check), it's `409 refused`, "The search index can't be written just now. Try again
+  later.". Either way nothing is written, set to Skip, counted or recorded, and the document stays as it was. Any other
+  failure is the document's own, `failed`, never a `500`.
 - **`POST /v1/admin/reindex/preview`** takes the body `POST /v1/admin/reindex` takes (`ReindexScope`), checks it as
   that route does, and changes nothing. It answers `ReindexPreview`: the `name` the reindex would have, as
   `Matter 1001.1 Charter Dispute`, `Folder Pleadings in 1001.1 Charter Dispute`, `Store Client Work`,
@@ -1786,12 +1789,18 @@ as in the public API (`IndexDocument`: `id`, `docNumber`, `fileName` and `matter
   (`too-many`), and `emptyFirst` off `everything` (`invalid`) are `422 validation`; and `409 refused` is "There's
   nothing here to reindex." for a scope with nothing to try and "This is already being reindexed." for a folder,
   matter, Store or everything a waiting or running reindex covers already, never for `documents`. The documents it
-  tries are fixed as it's started.
+  tries are fixed as it's started. A document it can't index is set to Skip where `index.skiponerror` is on, as Try
+  Again does, and one whose save collides with another write is tried once more at its batch's end. A batch is
+  stalled for the index only when nothing in it was indexed, a document met an index fault, and the index doesn't
+  answer a write check. `emptyFirst` marks the documents to index, then empties the index and counts it, and waits,
+  as for an index that can't be written, while it isn't empty.
 - **`GET /v1/admin/reindex`** is a page of the reindexes, newest first, and with `active=true` only those waiting or
   running. **`GET /v1/admin/reindex/{id}`** is one. A `ReindexJob` has its `state` (`waiting`, `running`, `done` or
   `cancelled`), `cancelling` for a running one asked to stop, `total`, `done`, `failed` and `skipped` (which add up to
-  `total` once it's `done`), `leftOut`, `created`, `started` and `ended`, `stalledSince` while the index can't be
-  written, `startedBy` and `estimateSecondsLeft`.
+  `total` once it's `done`), `unreachable`, the part of `skipped` whose storage couldn't be reached, `leftOut`,
+  `created`, `started` and `ended`, `stalledSince` while the index can't be written, `failingSince` while the worker
+  itself fails at each try (kept in memory, so null after a restart), `startedBy` and `estimateSecondsLeft`, null while
+  either is set.
 - **`DELETE /v1/admin/reindex/{id}`** cancels a reindex: one waiting at once, one running at the end of the batch it's
   indexing, answering it `running` with `cancelling` meanwhile. A second cancel is answered as it is. One that has
   ended is `409 refused`, "This reindex has ended.", and an id no reindex of the caller's tenant has is `404`.

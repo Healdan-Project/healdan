@@ -100,7 +100,8 @@ under `/api/v1/admin` (see the [API](../api/#the-admin-apps-routes)).
   decoration), `GroupChip`, and `SearchPicker`, a field with rows under it: starting rows, then the server's answer once
   the typing pauses, from two characters (`minLength` sets fewer, as the Reindex dialog's matter search and folder
   filter take one), with the words it matched marked as text and an older answer dropped; `isDisabled` disables the
-  field and every row, as a dialog holds while its change is on its way. The
+  field and every row, as a dialog holds while its change is on its way; and Enter in its field picks the row the
+  arrow keys are on, or does nothing, never submitting a form around it. The
   arrow keys in its field reach every row, as the focus stays there, and while the rows hold more than their box shows,
   the box is a stop of its own, which Tab reaches after the field and the arrow keys scroll, so what it holds below
   isn't for a pointer alone (axe's `scrollable-region-focusable`); while it's a stop, and only then, it's a region named
@@ -428,42 +429,56 @@ What the screens from Phase 2 on share (the spec's section 7.2):
 - **The Search Index** is `views/SearchIndexView.tsx` and `index/`, at `/admin/search-index`, the open tab
   (`?tab=waiting` or `?tab=history`; Couldn't Be Indexed without one) and the Reindex dialog in the address's search
   (`SearchIndexSearch`, `searchIndexSearch` in `addresses.ts`).
-  - **The heading** (`useSearchIndex`) draws the counts, the health and the Indexer's runs. **Run Indexer Now**
-    follows the server's `runRefusal`, not the job's `canRun`, greyed out with the sentence as its description, and
-    its answer goes into the heading (`indexerAnswered`) before the counts, the tabs, the Dashboard and Background
-    Jobs' list are read again; a refusal is said only while a new read shows the Indexer as it was.
-  - **The reindexes** (`ReindexJobCard.tsx`): a card for each one waiting or running, from `useActiveReindexes`
-    (`GET /v1/admin/reindex?active=true`, every `REINDEX_POLL_MS`, 5 seconds, while there's one and the page is
-    visible), and for each that ended while the page was open (`useReindexEnds`), with **Close**, all by id, so a
-    card keeps its place. While there's one, the heading and the open tab are asked every 30 seconds (`POLL_MS`);
-    `usePagedList` and `useCursorList` take a `{ poll }` for it. A reindex's end, Try Again, Skip and Run Indexer Now
-    call `indexChanged`, which asks for the heading, the tabs, the reindexes and the Dashboard's query again. Cancel
-    asks first (`dialogs/Confirm`), and `reindexChanged` puts its answer, or a start's, in the active list.
-  - **Couldn't Be Indexed** (`FailedList.tsx`) is a plain table, as each row has buttons, through `usePagedList`
-    (which now takes the three lists' paths and drops a row a later page repeats by `id` or `document.id`). Try Again
-    holds its button and says the outcome in the row and a toast; Skip asks first. A `409` or `404` calls
-    `countsStale`, which asks for the heading and the Dashboard only, so the row and the refusal said in it stay
-    until the list's next read; a `503 storage-unreachable` shows the server's `detail`, which names the Store. A row
-    with no doc # has both buttons greyed out, described by why. `useKeptFocus` takes `{ attribute, name, toNextRow }`,
-    so the focus goes to the row that took a removed row's place. **Waiting** (`WaitingList.tsx`) and **History**
-    (`IndexHistory.tsx`: the reindexes by offset, then the index's events through `useCursorList`) follow.
+  - **The heading** (`useSearchIndex(poll, askedAt)`) draws the counts, the health and the Indexer's runs. It's asked
+    every `INDEXER_POLL_MS` (5 seconds) while the Indexer runs (`indexerRunning`: `job.running`, or `runRefusal` set
+    while `job.canRun` still says it could, the moment after a Run Now), once `SOON_MS` (2 seconds) after Run Indexer
+    Now is answered, and every 30 seconds while a reindex is active, the page visible; as a run ends, `indexerEnded`
+    asks for the tabs and the Dashboard. **Run Indexer Now** follows the server's `runRefusal`, not the job's `canRun`,
+    greyed out with the sentence as its description, and its answer goes into the heading (`indexerAnswered`) before the
+    counts, the tabs, the Dashboard and Background Jobs' list are read again; a refusal is said only while a new read
+    shows the Indexer as it was.
+  - **The reindexes** (`ReindexJobCard.tsx`): a card for each one waiting or running, from `useActiveReindexes` (`GET
+    /v1/admin/reindex?active=true`, every `REINDEX_POLL_MS`, 5 seconds, while there's one and the page is visible), and
+    for each that ended while the page was open (`useReindexEnds`), with **Close**, all by id, so a card keeps its
+    place. A card says a reindex's `unreachable` ("9 on storage that couldn't be reached") and, while `failingSince` is
+    set, that it makes no progress; `reindexChanged` also asks for Background Jobs' list and the Dashboard again. While
+    there's one, the heading and the open tab are asked every 30 seconds (`POLL_MS`); `usePagedList` and `useCursorList`
+    take a `{ poll }` for it. A reindex's end, Try Again, Skip and Run Indexer Now call `indexChanged`, which asks for
+    the heading, the tabs, the reindexes and the Dashboard's query again. Cancel asks first (`dialogs/Confirm`), and
+    `reindexChanged` puts its answer, or a start's, in the active list.
+  - **Couldn't Be Indexed** (`FailedList.tsx`) is a plain table, as each row has buttons, through `usePagedList` (which
+    now takes the three lists' paths and drops a row a later page repeats by `id` or `document.id`). Try Again holds its
+    button and says the outcome in the row and a toast; Skip asks first. A `409` or `404` calls `countsStale`, which
+    asks for the heading and the Dashboard only, so the row and the refusal said in it stay until the list's next read;
+    a `503 storage-unreachable` shows the server's `detail`, which names the Store. A row with no doc # has both buttons
+    greyed out, described by why. `useKeptFocus` takes `{ attribute, name, toNextRow }`, so the focus goes to the row
+    that took a removed row's place. **Waiting** (`WaitingList.tsx`) and **History** (`IndexHistory.tsx`: the reindexes
+    by offset, then the index's events through `useCursorList`, which polls only until Show More is pressed) follow. A
+    table wider than its box is in a `lists/SidewaysBox`, which while it scrolls sideways is a named region and a Tab
+    stop ("Waiting (Scrolls Sideways)"), checked after each render and through a `ResizeObserver`, the vertical rule
+    `SearchPicker` follows turned sideways. Each Couldn't Be Indexed row's line keeps the row as it was when its button
+    was pressed, so it goes once a later read gives the row another reason or time.
   - **The Reindex dialog** (`ReindexDialog.tsx`, `ReindexChoices.tsx`, `reindexQueries.ts`, `reindexText.ts`) is drawn
     by the page while the address has `reindex` (`documents`, `folder`, `matter`, `store` or `everything`), with `id`
     and, for a folder, `matter`, and keyed by them, so another address opens it afresh. `reindexHref(kind, id?,
-    matter?)` writes the address for the openers: **Reindex** on a matter's page and, in a matter's Workspace Editor,
-    on a folder below the top (`FolderAction` `'reindex'`), each a `ServerLink`, so opening it is a push and Back
-    leaves it; **Reindex…** on the page pushes `reindex=matter`. Cancel, Esc and a start take the dialog's parameters
-    out in place (`replace`). Its choices are `ToggleButtons`; Matter and Folder search with `SearchPicker`, Folder
-    over the matter's tree (`GET /v1/admin/workspaces/{folderId}/tree`) with no count per folder; Documents parses
-    what's typed itself and sends only whole numbers, at most 1,000. `useReindexPreview` asks
-    `POST /v1/admin/reindex/preview` once a choice is complete, after a pause in typing, under
-    `['admin', 'reindex-preview', scope]`, outside the reindexes' prefix, so a start's invalidation never asks a
-    preview again; the last answer stays while the next comes, for the same choice only. The button follows the
-    preview's `count` and `refusal`. While the start is on its way the dialog holds, its choices in a disabled
-    fieldset and its search rows disabled.
+    matter?)` writes the address for the openers: **Reindex** on a matter's page and, in a matter's Workspace Editor, on
+    a folder below the top (`FolderAction` `'reindex'`), each a `ServerLink`, so opening it is a push and Back leaves
+    it; **Reindex…** on the page pushes `reindex=matter`. Cancel, Esc and a start take the dialog's parameters out in
+    place (`replace`), but for one the page's own **Reindex…** opened, which closes by stepping back
+    (`router.history.back()`), so Back leaves no second Search Index behind; a dialog a link opened gives the focus,
+    once it has closed, to the page's heading. Its choices are `ToggleButtons`; Matter and Folder search with
+    `SearchPicker`, Folder over the matter's tree (`GET /v1/admin/workspaces/{folderId}/tree`) with no count per folder;
+    Documents parses what's typed itself (a doc # with its version, `10388.2`, as the document's) and sends only whole
+    numbers, at most 1,000, drawing the first 1,000 and "… and N more"; its too-many sentence is `reindex.tooMany`, the
+    shared catalogue's, for its own check and the server's `too-many` alike, as the shared `fields.too-many` is general.
+    `useReindexPreview` asks `POST /v1/admin/reindex/preview` once a choice is complete, after a pause in typing, under
+    `['admin', 'reindex-preview', scope]`, outside the reindexes' prefix, so a start's invalidation never asks a preview
+    again; the last answer stays while the next comes, for the same choice only. The button follows the preview's
+    `count` and `refusal`. While the start is on its way the dialog holds, its choices in a disabled fieldset and its
+    search rows disabled.
   - **Their words and fixtures** are the `// Search Index` and `// Reindex dialog` sections of the catalogue and of
-    `test/fakeApi.ts`, with `searchIndexRoutes` and `reindexRoutes`. `kindLabel` (`monitoring/text.ts`) gives a kind
-    the catalogue lacks as the kind itself, so a new action never breaks the Audit Trail.
+    `test/fakeApi.ts`, with `searchIndexRoutes` and `reindexRoutes`. `kindLabel` (`monitoring/text.ts`) gives a kind the
+    catalogue lacks as the kind itself, so a new action never breaks the Audit Trail.
 - **The last good answer stays.** The Users and Groups lists, a person's page, a group's page and the panels on them,
   and the Monitoring screens and the Activity tabs, keep their last answer while a new read fails, with
   `people/StaleNote.tsx`, "Couldn't refresh this, so it shows what was read last." and **Try Again**, in place of the

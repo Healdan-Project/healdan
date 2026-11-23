@@ -818,25 +818,29 @@ see [Building from Source](../building-from-source/#running-the-war-outside-dock
     `changes()` moves on (`moved()`) after Try Again, Skip, a waiting reindex cancelled and a reindex's end, and the
     Dashboard's index source reads afresh after it moves, so the left pane's Search Index count follows at its next
     read.
-  - **The Search Index's reads and two actions** (`admin.index`, Admin app spec §8.9). `IndexOverview` gives the
-    heading, the counts read at the request rather than the Dashboard's: the index's entries, asked of Solr directly
-    (LogicalDOC's own count logs an error and answers 0 when it fails), and its folder's size, each null, logged at
-    warn by class, when it can't be read; the health, the Dashboard's own tile (`DashboardService.searchIndexTile`);
-    and the Indexer, `Jobs.one("IndexerTask")` with `JobControl.runRefusal`, a read-only check made of Run Now's own
-    checks in its order, which Run Now itself uses, so the greyed-out button and a `409` never disagree.
-    `IndexHistory` pages `ld_history`'s `event.indexed` and `event.indexed.error` rows newest first by a cursor
-    (`IndexHistoryCursor`): no index serves a newest-first read by event, so each page looks through at most 100,000
-    of the tenant's rows by the key (`SCAN`), as the Audit Trail reads a source no index serves, with the event's
-    condition written `ld_event || ''`, so neither a custom plan nor a generic one reads the event's index; an
-    indexed row's comment, the start of the document's text, is never read out. `IndexReview` is Try Again and Skip,
-    for a live document of the caller's tenant that couldn't be indexed only (`NOT_FAILED` otherwise). Try Again calls
-    `DocumentManager.index(id, null, null)` on the request's thread, with no history, so LogicalDOC writes no row and
-    applies none of its settings, then writes the row itself through `IndexEventRows` and, with `index.skiponerror`
-    on, sets a document that failed again to Skip, as LogicalDOC's Indexer would. A failure with a
-    `StorageUnreachableException` among its causes writes, counts and records nothing, and goes up as the route's
-    `503`. Skip sets Skip in one statement that holds only while the document still couldn't be indexed, and evicts
-    the document from the second-level cache. Both are recorded with `recordAfter`, `index.retried` with its
-    `outcome` and `index.skipped`, aimed at `document` by its id and named `# 10412 Witness Statement.pdf`.
+  - **The Search Index's reads and two actions** (`admin.index`, Admin app spec §8.9). `IndexOverview` gives the heading
+    and both lists' totals from one count of its own, never the Dashboard's, kept for up to 10 seconds
+    (`COUNTS_KEPT_MS`) and dropped as soon as `IndexCounts.changes()` moves: the index's entries, asked of Solr directly
+    (LogicalDOC's own count logs an error and answers 0 when it fails), and its folder's size, each null, logged at warn
+    by class, when it can't be read; the health, the Dashboard's own tile (`DashboardService.searchIndexTile`); and the
+    Indexer, `Jobs.one("IndexerTask")` with `JobControl.runRefusal`, a read-only check made of Run Now's own checks in
+    its order, which Run Now itself uses, so the greyed-out button and a `409` never disagree. `IndexHistory` pages
+    `ld_history`'s `event.indexed` and `event.indexed.error` rows newest first by a cursor (`IndexHistoryCursor`): no
+    index serves a newest-first read by event, so each page looks through at most 100,000 of the tenant's rows by the
+    key (`SCAN`), as the Audit Trail reads a source no index serves, with the event's condition written `ld_event ||
+    ''`, so neither a custom plan nor a generic one reads the event's index; an indexed row's comment, the start of the
+    document's text, is never read out. `IndexReview` is Try Again and Skip, for a live document of the caller's tenant
+    that couldn't be indexed only (`NOT_FAILED` otherwise). Try Again calls `DocumentManager.index(id, null, null)` on
+    the request's thread, with no history, so LogicalDOC writes no row and applies none of its settings, then writes the
+    row itself through `IndexEventRows` and, with `index.skiponerror` on, sets a document that failed again to Skip, as
+    LogicalDOC's Indexer would. A failure with a `StorageUnreachableException` among its causes writes, counts and
+    records nothing, and goes up as the route's `503`; an index fault while the index doesn't answer a write check
+    (`IndexFaults.answers`) does the same as `409 refused`, `INDEX_UNWRITABLE`; any other failure, an `Error` but the
+    virtual machine's included, is the document's own, its reason the message or the class's simple name
+    (`IndexFaults.reason`), which the worker gives too. Skip sets Skip in one statement that holds only while the
+    document still couldn't be indexed, and evicts the document from the second-level cache. Both are recorded with
+    `recordAfter`, `index.retried` with its `outcome` and `index.skipped`, aimed at `document` by its id and named `#
+    10412 Witness Statement.pdf`.
   - **`IndexEventRows`** writes `event.indexed` and `event.indexed.error` (with the failure's message as its
     comment) as `DocumentManager.recordIndexingError` writes its own row, with the folder's path, in the caller's
     transaction, and, for a session this node has open, its address and device; a document that no longer exists gets
@@ -862,22 +866,30 @@ see [Building from Source](../building-from-source/#running-the-war-outside-dock
     waiting reindex at once and asks a running one to stop. The estimate is the count times the seconds a document
     took in the latest reindex that ended `DONE` having tried 20 or more, or 1.75 s each.
   - **`ReindexWorker`** (`admin.index`) is a `HealdanStartListener` and a `HealdanJob`, `reindex`, labelled Reindex,
-    which can't be run now. It runs the reindexes one at a time, oldest first, on its thread, `healdan-reindex`, from
-    a minute after the start, woken by a start or a cancel. Each turn ends a running reindex asked to stop, or one
-    with nothing left, or works through its next 100 documents above its position, in id order, on as many threads as
-    LogicalDOC's Indexer takes (`threadpool.IndexerTask.max`); with none running, it begins the oldest waiting one,
-    and a reindex that empties the index first drops the index and marks every document indexed, or waiting for its
-    properties alone, `TO_INDEX`, Skip kept, the second-level cache evicted, once (`hd_emptied`), as its run begins.
-    Each document is looked at again just before its turn: one no longer live, set to Skip, archived or in a running
-    transaction is skipped, and so is one whose file's storage can't be reached, its entry, status and history as
-    they were. It's indexed through `DocumentManager.index(id, null, null)`, its old entry kept
-    until the new one replaces it, so search goes on finding it; a document's own failure writes its error row, as
-    the reindex's starter, and marks it `TO_INDEX`, so it joins Couldn't Be Indexed and LogicalDOC's Indexer tries it
-    again. A batch's rows, counts and position are saved together once it ends. A batch in which nothing was indexed
-    and a document failed because the index can't be written (an `IndexException` or a `SolrException` among its
-    causes) is the index's outage: nothing of it is saved, `hd_stalled` says since when, and the batch runs again
-    after 5 seconds, doubling to a minute. It reports to `JobStatus` as a reindex's run begins and ends, and as the
-    worker itself fails, which it tries again 30 seconds later.
+    which can't be run now. It runs the reindexes one at a time, oldest first, on its thread, `healdan-reindex`, from a
+    minute after the start, woken by a start or a cancel. Each turn ends a running reindex asked to stop, or one with
+    nothing left, or works through its next 100 documents above its position, in id order, on as many threads as
+    LogicalDOC's Indexer takes (`threadpool.IndexerTask.max`); with none running, it begins the oldest waiting one, and
+    a reindex that empties the index first, as its run begins, marks the tenant's documents indexed, or waiting for
+    their properties alone, `TO_INDEX`, Skip kept, and commits, then drops the index and counts it, and only once it's
+    empty sets `hd_emptied`; LogicalDOC's drop swallows its failures, so one that leaves entries stalls the reindex as
+    an outage does, and the next turn marks, drops and counts again. Each document is looked at again just before its
+    turn: one no longer live, set to Skip, archived or in a running transaction is skipped, and so is one whose file's
+    storage can't be reached, its entry, status and history as they were. It's indexed through
+    `DocumentManager.index(id, null, null)`, its old entry kept until the new one replaces it, so search goes on finding
+    it; a document's own failure writes its error row, as the reindex's starter, and marks it `TO_INDEX`, so it joins
+    Couldn't Be Indexed and LogicalDOC's Indexer tries it again, or Skip where `index.skiponerror` is on. A failure
+    that's a collision with another write (a stale row or an optimistic lock failure among its causes) is tried once
+    more after the batch's threads are done. A batch's rows, counts and position are saved together once it ends. A
+    batch in which nothing was indexed and a document failed because the index can't be written (an `IndexException` or
+    a `SolrException` among its causes) is the index's outage, once the index fails a write check
+    (`IndexFaults.answers`: a count, and a committed delete of a key no entry has); while it answers, those faults are
+    the documents' own failures. In an outage nothing of the batch is saved, `hd_stalled` says since when, and the batch
+    runs again after 5 seconds, doubling to a minute. Documents skipped as their storage couldn't be reached are also
+    counted in `hd_unreachable`, with a warn line per batch that met one, giving counts only. It reports to `JobStatus`
+    as a reindex's run begins and ends, and as the worker itself fails, which it tries again 30 seconds later: its loop
+    catches every `Throwable`, an `Error` too, and only an interrupt as it stops ends it, and `failingSince`, in memory,
+    says since when it has failed at each try with a reindex running.
   - **What the background jobs last did** (`com.logicaldoc.healdan.admin.jobs`, Admin app spec §9.5). Each of
     Healdan's jobs is a `HealdanJob` bean, with a name, a label and whether it can run now, and reports to
     `JobStatus` under its name: `started` before a run, `finished` or `failed` after it, each with its next run, and
