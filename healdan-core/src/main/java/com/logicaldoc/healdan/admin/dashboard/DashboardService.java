@@ -140,7 +140,7 @@ public class DashboardService {
 	 * The screens the Dashboard links to (spec section 8.1): the Admin app's address once a screen has shipped, and
 	 * the Classic Interface until then. Each phase that ships a screen changes its row; Phase 2 shipped Clients, Matters
 	 * and Workspace Templates, Phase 3 Stores and Backends, Phase 4 Users, and Phase 5 Errors, the Server Log, the
-	 * Audit Trail and Background Jobs (ruling P5-R19). The unresolved errors' item opens Errors with Unresolved Only
+	 * Audit Trail and Background Jobs (ruling P5-R19), and Phase 6 the Search Index (ruling P6-R15). The unresolved errors' item opens Errors with Unresolved Only
 	 * set, as the Errors screen's address takes it, since it counts those alone (ruling P5-R37).
 	 */
 	enum Screen {
@@ -157,7 +157,7 @@ public class DashboardService {
 		SERVER_LOG("/admin/server-log"),
 		AUDIT_TRAIL("/admin/audit"),
 		BACKGROUND_JOBS("/admin/jobs"),
-		SEARCH_INDEX(Landing.CLASSIC);
+		SEARCH_INDEX("/admin/search-index");
 
 		final String link;
 
@@ -311,7 +311,8 @@ public class DashboardService {
 		this.providerClient = providerClient;
 		Supplier<Instant> now = () -> clock.instant();
 		storage = new Cached<>("the storage backends", MAX_AGE, this::readStorage, now);
-		indexCounts = new Cached<>("the search index's counts", MAX_AGE, index::counts, now);
+		// So does a document tried again or set to Skip, or a reindex job's end, as the Search Index asks again then
+		indexCounts = new Cached<>("the search index's counts", MAX_AGE, index::counts, now, index::changes);
 		previewCounts = new Cached<>("the previews' counts", MAX_AGE,
 				() -> new Previews(previews.countWaiting(), previews.countGivenUp()), now);
 		// A fault marked resolved or unresolved again counts at the next read, as the Errors screen asks again then
@@ -830,6 +831,16 @@ public class DashboardService {
 			detail.append(", ").append(Words.number(unchecked)).append(" not checked yet");
 		detail.append(", ").append(stuck == 0 ? "no files stuck" : Words.count(stuck, "file", "files") + " stuck");
 		return line(down > 0 || stuck > 0 ? HealthTile.ATTENTION : HealthTile.OK, detail.toString());
+	}
+
+	/**
+	 * The Search Index tile as the Dashboard makes it, for the Search Index's own page (ruling P6-R14).
+	 *
+	 * @param counts the index's counts
+	 * @return the tile, with its name and link
+	 */
+	public static HealthTile searchIndexTile(IndexCounts.Counts counts) {
+		return tile(HealthTile.SEARCH_INDEX, Screen.SEARCH_INDEX, null, () -> indexTile(counts));
 	}
 
 	private static HealthTile indexTile(IndexCounts.Counts counts) {
