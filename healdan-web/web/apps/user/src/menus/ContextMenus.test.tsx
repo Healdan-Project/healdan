@@ -347,10 +347,10 @@ describe('the other lists', () => {
 describe('Manage in Admin, on a matter’s menu', () => {
   const admin = { ...routes().all, 'GET /v1/me': { ...me, admin: true } }
 
-  it('is an administrator’s last item, and opens the matter’s Admin page in a new tab', async () => {
+  it('is an administrator’s last item, after Reindex, and opens the matter’s Admin page in a new tab', async () => {
     await renderApp('/folders/7', admin)
     fireEvent.contextMenu(await within(pane()).findByRole('link', { name: /1002\.1/ }))
-    expect(await names()).toEqual(['Open', 'Open in New Tab', 'Rename', 'Add to My Matters', 'Manage in Admin'])
+    expect(await names()).toEqual(['Open', 'Open in New Tab', 'Rename', 'Add to My Matters', 'Reindex', 'Manage in Admin'])
     const manage = await item('Manage in Admin')
     expect(manage.getAttribute('href')).toBe('/admin/matters/12')
     expect(manage.getAttribute('target')).toBe('_blank')
@@ -374,11 +374,11 @@ describe('Manage in Admin, on a matter’s menu', () => {
     await renderApp('/recent/folders', { ...admin, 'GET /v1/folders/recent': page([matterTop]) })
     fireEvent.contextMenu(await within(await within(main()).findByRole('grid')).findByRole('row', { name: /Charter Dispute/ }))
     // 1001.1 is in My Matters
-    expect(await names()).toEqual(['Open', 'Open in New Tab', 'Rename', 'Remove from My Matters', 'Manage in Admin'])
+    expect(await names()).toEqual(['Open', 'Open in New Tab', 'Rename', 'Remove from My Matters', 'Reindex', 'Manage in Admin'])
     expect((await item('Manage in Admin')).getAttribute('href')).toBe('/admin/matters/11')
   })
 
-  it('keeps a matter’s own folder on the matter’s menu without it when the server names no matter, so Rename stays greyed out', async () => {
+  it('keeps a matter’s own folder on the matter’s menu without it or Reindex when the server names no matter, so Rename stays greyed out', async () => {
     await renderApp('/recent/folders', { ...admin, 'GET /v1/folders/recent': page([{ ...matterTop, matter: null }]) })
     fireEvent.contextMenu(await within(await within(main()).findByRole('grid')).findByRole('row', { name: /Charter Dispute/ }))
     expect(await names()).toEqual(['Open', 'Open in New Tab', 'Rename', 'Remove from My Matters'])
@@ -395,5 +395,96 @@ describe('Manage in Admin, on a matter’s menu', () => {
     fireEvent.click(within(tree).getByRole('button', { name: /expand/i }))
     fireEvent.contextMenu(await within(tree).findByRole('row', { name: /Correspondence/ }))
     expect(await names()).not.toContain('Manage in Admin')
+  })
+})
+
+// Reindex (admin spec 13): only an administrator's menus offer it, the documents', a folder's and a matter's, last, after a
+// separator; what it asks and starts is useReindex.test.tsx's
+describe('Reindex, for an administrator', () => {
+  const admin = (over = {}) => ({ ...routes(over).all, 'GET /v1/me': { ...me, admin: true } })
+  const lastGroup = async () => {
+    const all = Array.from((await menu()).querySelectorAll('[role="menuitem"], [role="separator"]'))
+    const last = all.map((one) => one.getAttribute('role')).lastIndexOf('separator')
+    return all.slice(last + 1).map((one) => one.textContent)
+  }
+
+  it('is a document’s last item, and a selection of documents’, enabled', async () => {
+    await renderApp('/folders/7', admin())
+    fireEvent.contextMenu(await row(/Lease/))
+    expect(await names()).toEqual(['Open', 'Preview', 'Open in New Tab', 'Download', 'Check Out', 'Rename', 'Move To…', 'Delete', 'Copy Link', 'Add to Favorites', 'Reindex'])
+    expect(await lastGroup()).toEqual(['Reindex'])
+    fireEvent.keyDown(await menu(), { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
+
+    await select(/Lease/, /Plan/)
+    fireEvent.contextMenu(await row(/Plan/))
+    expect(await screen.findByRole('menu', { name: 'Actions for 2 documents' })).toBeTruthy()
+    expect(await enabled()).toEqual(['Move To…', 'Delete', 'Reindex'])
+  })
+
+  it('is a folder row’s last item, and a folder’s in the tree, but not a search folder’s', async () => {
+    const recentHere = folder({ id: 9, name: 'Recent Here', kind: 'searchFolder' })
+    await renderApp('/folders/7', admin({ 'GET /v1/folders/7/children': () => children([drafts, recentHere, letter]) }))
+    fireEvent.contextMenu(await row(/Drafts/))
+    expect(await names()).toEqual(['Open', 'Open in New Tab', 'New Folder', 'Rename', 'Move To…', 'Delete', 'Add to Favorites', 'Reindex'])
+    expect(await lastGroup()).toEqual(['Reindex'])
+    fireEvent.keyDown(await menu(), { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
+
+    fireEvent.contextMenu(await row(/Recent Here/))
+    expect(await names()).not.toContain('Reindex')
+    fireEvent.keyDown(await menu(), { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
+
+    const tree = await screen.findByRole('treegrid', { name: 'My Matters' })
+    fireEvent.click(within(tree).getByRole('button', { name: /expand/i }))
+    fireEvent.contextMenu(await within(tree).findByRole('row', { name: /Correspondence/ }))
+    expect(await lastGroup()).toEqual(['Reindex'])
+  })
+
+  it('is on a matter’s menu, before Manage in Admin, in Recent Matters, the tree and a search’s list', async () => {
+    await renderApp('/search?scope=matters&q=lease', { ...admin(), 'GET /v1/search': page([matter({ id: 12, folderId: 120, display: '1002.1 – Commercial Lease' })]) })
+    fireEvent.contextMenu(await within(await within(main()).findByRole('grid')).findByRole('row', { name: /1002\.1/ }))
+    expect(await lastGroup()).toEqual(['Reindex', 'Manage in Admin'])
+    fireEvent.keyDown(await menu(), { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
+
+    fireEvent.contextMenu(await within(pane()).findByRole('link', { name: /1002\.1/ }))
+    expect(await lastGroup()).toEqual(['Reindex', 'Manage in Admin'])
+    fireEvent.keyDown(await menu(), { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
+
+    const tree = await screen.findByRole('treegrid', { name: 'My Matters' })
+    fireEvent.contextMenu(within(tree).getByRole('row', { name: /1001\.1/ }))
+    expect(await lastGroup()).toEqual(['Reindex', 'Manage in Admin'])
+    await expectNoAxeViolations(document.body)
+  })
+
+  it('is on no menu of a person who isn’t an administrator', async () => {
+    await renderApp('/folders/7', routes().all)
+    fireEvent.contextMenu(await row(/Lease/))
+    expect(await names()).not.toContain('Reindex')
+    fireEvent.keyDown(await menu(), { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
+    await select(/Lease/, /Plan/)
+    fireEvent.contextMenu(await row(/Plan/))
+    expect(await names()).not.toContain('Reindex')
+    fireEvent.keyDown(await menu(), { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
+    fireEvent.contextMenu(await row(/Drafts/))
+    expect(await names()).not.toContain('Reindex')
+    fireEvent.keyDown(await menu(), { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
+    fireEvent.contextMenu(await within(pane()).findByRole('link', { name: /1002\.1/ }))
+    expect(await names()).not.toContain('Reindex')
+  })
+
+  it('isn’t offered for a Store, which has no menu', async () => {
+    const shelf = folder({ id: 3, name: 'Archive Store', kind: 'store' })
+    await renderApp('/folders/7', admin({ 'GET /v1/folders/7/children': () => children([shelf, letter]) }))
+    const target = await row(/Archive Store/)
+    // The browser keeps its own menu: there's none of the app's
+    expect(fireEvent.contextMenu(target)).toBe(true)
+    expect(screen.queryByRole('menu')).toBeNull()
   })
 })
