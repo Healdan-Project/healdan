@@ -97,18 +97,15 @@ greyed out: reindex its folder to try it again.
 
 ### Waiting
 
-Each document waiting for the Indexer, those that couldn't be indexed left out, in the order they were filed in. That
-isn't the order the Indexer takes them in, which isn't fixed. **Last Changed** is when the document last changed: for
-documents marked to be indexed all at once, as by **Reschedule all for indexing** or a reindex that empties the index
-first, it isn't when they began to wait.
+Each document waiting for the Indexer, those that couldn't be indexed left out, in the order they were filed in.
+**Last Changed** is when the document last changed, which needn't be when it began to wait.
 
 <!-- P6 docs pass 2 -->
 
 ### History
 
 The reindexes, the newest first, those waiting and running and those that ended; then each time a document was indexed
-or couldn't be, newest first, with the reason when it couldn't, who did it and when, whether that was the Indexer, a
-reindex, **Try Again** or the Classic Interface. The events read back as the
+or couldn't be, newest first, with the reason when it couldn't, and who did it and when. The events read back as the
 [Audit Trail](../../monitoring/audit-trail/#reading-further-back) does, a stretch at a time, with **Show More**, so a
 page can hold few rows, or none, while there's more to read. A document destroyed for good takes its rows with it.
 
@@ -121,7 +118,7 @@ Choose what to reindex:
 
 | Choice | What it covers |
 |---|---|
-| **Documents** | the documents whose doc #s you type or paste, up to 1,000. Each shows as found, with its file name and matter, or as not found |
+| **Documents** | the documents whose doc #s you type or paste, up to 1,000. Each shows as found, with its file name and matter; as found but left out, with why (see below); or as not found |
 | **Folder** | find the matter, then choose one of its folders: the documents in that folder and in every folder inside it, at every level |
 | **Matter** | a search that starts from your Recent Matters and finds a matter by its number, its name or its client's name: the documents of the matter's whole workspace |
 | **Store** | a plain list of the Stores: the documents of every matter in the Store |
@@ -143,7 +140,7 @@ that moment.
 Healdan says before the button when it won't start one: "There's nothing here to reindex." for a choice with no
 documents to try, and "This is already being reindexed." for a folder, matter, Store or Everything that a waiting or
 running reindex covers already. Documents chosen by doc # are never refused as already being reindexed. More than 1,000
-doc #s at once are refused with "Reindex at most 1,000 documents at a time."
+different doc #s at once are refused.
 
 ### While It Runs
 
