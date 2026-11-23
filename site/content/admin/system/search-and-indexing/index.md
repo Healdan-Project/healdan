@@ -94,8 +94,8 @@ matter, the **Reason** and **When** it was last tried.
   Store, and changes nothing, and so it does while the index itself can't be written: "The search index can't be
   written just now. Try again later." Either way the document stays as it was, with no row on the **History** tab,
   and nothing is recorded. For the storage, LogicalDOC's reader still logs two errors, which
-  [Errors](../../monitoring/errors/) shows as two faults (see [While It Runs](#while-it-runs)). Try again once the
-  backend, or the index, is back.
+  [Errors](../../monitoring/errors/) counts under two faults, made the first time and seen again after (see
+  [While It Runs](#while-it-runs)). Try again once the backend, or the index, is back.
 - **Skip** asks first, then sets the document not to be indexed, so the Indexer stops trying it, and it leaves the
   list. It's then counted in none of the three. Its entry in the index, if it has one, stays, and every reindex leaves
   it out from then on. Skip lasts until someone chooses **Mark indexable** for it on the Classic Interface's

@@ -243,8 +243,9 @@ weight: 13
   each: one naming the file, and one with the outage's sentence. **Errors** groups faults by their message with its
   numbers and quoted names left aside, so the outage is one fault, seen once per document, and each file name is a
   fault of its own, naming the file. The left pane's Errors count and the Dashboard's unresolved errors rise by about
-  as many as there were such documents, and each fault is marked resolved on its own. **Try Again** on one adds two
-  faults. Reindex what was skipped once the backend is back.
+  as many as there were such documents, and each fault is marked resolved on its own. **Try Again** on one logs the
+  same two: the first time they're two faults, unless the reindex made them already, and after that each Try Again
+  counts them again, reopening one that was marked resolved. Reindex what was skipped once the backend is back.
 - **LogicalDOC's Stores screen is hidden,** under **Administration → Settings**, and its Folders tab with it. So
   Original's folder (`store.1.dir`) and LogicalDOC's six other folders (`conf.dbdir`, `conf.exportdir`,
   `conf.importdir`, `conf.logdir`, `conf.plugindir` and `conf.userdir`) are set only in the configuration volume's
