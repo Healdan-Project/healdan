@@ -13,7 +13,7 @@ import { Problems } from '../forms/Problems'
 import { Refusal } from '../forms/Refusal'
 import { FailedList } from '../index/FailedList'
 import { IndexHistory } from '../index/IndexHistory'
-import { indexChanged, indexerAnswered, indexKeys, isOutOfDate, runIndexer, useActiveReindexes, useReindexEnds, useSearchIndex } from '../index/queries'
+import { indexChanged, indexerAnswered, indexerEnded, indexerRunning, indexKeys, isOutOfDate, runIndexer, useActiveReindexes, useReindexEnds, useSearchIndex } from '../index/queries'
 import { ReindexDialog } from '../index/ReindexDialog'
 import { ReindexJobs } from '../index/ReindexJobCard'
 import { WaitingList } from '../index/WaitingList'
@@ -82,9 +82,10 @@ function Figures({ index }: { index: A['SearchIndex'] }) {
  * with the server's reason while it can't run (P6-R12); Reindex…, which opens the Reindex dialog by the address (P6-R18);
  * the reindexes waiting or running, and those that ended while the page was open, above the tabs; and the tabs, Couldn't Be
  * Indexed, Waiting and History, the one open in the address. While a reindex waits or runs, the reindexes are asked for
- * every 5 seconds and the counts and the open tab every 30, while the page is visible; otherwise at each return to the
- * window (P6-R19). A reindex's end, Try Again, Skip and Run Indexer Now ask for the counts, the tabs and the Dashboard
- * again at once. Each part keeps its last answer while a new read fails, with a note (P4-R15).
+ * every 5 seconds and the counts and the open tab every 30, while the page is visible; while the Indexer runs, the
+ * heading every 5, and once 2 seconds after Run Indexer Now; otherwise at each return to the window (P6-R19, amended). A
+ * reindex's end, the Indexer's, Try Again, Skip and Run Indexer Now ask for the counts, the tabs and the Dashboard again
+ * at once. Each part keeps its last answer while a new read fails, with a note (P4-R15).
  */
 export function SearchIndexView({ search }: { search: SearchIndexSearch }) {
   const api = useApi()
@@ -95,7 +96,9 @@ export function SearchIndexView({ search }: { search: SearchIndexSearch }) {
   const active = useActiveReindexes()
   const running = (active.data?.length ?? 0) > 0
   const ends = useReindexEnds(active.data)
-  const index = useSearchIndex(running)
+  // When Run Indexer Now was last answered, so the heading asks again soon after (P6-R19, amended)
+  const [askedAt, setAskedAt] = useState<number>()
+  const index = useSearchIndex(running, askedAt)
   const [busy, setBusy] = useState(false)
   // Run Indexer Now's refusal, and the Indexer as the heading had it then: it's said only while the Indexer is as it was
   const [refused, setRefused] = useState<{ failure: unknown; against: string }>()
@@ -106,6 +109,7 @@ export function SearchIndexView({ search }: { search: SearchIndexSearch }) {
     setRefused(undefined)
     try {
       await indexerAnswered(queryClient, await runIndexer(api))
+      setAskedAt(Date.now())
       toast(t('admin.searchIndex.runAsked'))
     } catch (error) {
       // Refused as the Indexer has changed since: the heading is read again first, and the refusal said against it
@@ -120,6 +124,14 @@ export function SearchIndexView({ search }: { search: SearchIndexSearch }) {
   }
 
   const data = index.data
+  // The Indexer's run ending, as the heading shows it, changes what waits and what couldn't be indexed: the tabs and the
+  // Dashboard are asked again at once
+  const indexerRuns = indexerRunning(data)
+  const ranBefore = useRef(indexerRuns)
+  useEffect(() => {
+    if (ranBefore.current && !indexerRuns) indexerEnded(queryClient)
+    ranBefore.current = indexerRuns
+  }, [indexerRuns, queryClient])
   // Run Indexer Now follows the server's reason, which can say it's running a moment before the job shows it
   const refusal = data?.indexer.runRefusal ?? null
   // A refusal goes once a new read shows the Indexer changed since, and while the reason greys the button out it says it

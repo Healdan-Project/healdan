@@ -412,6 +412,35 @@ describe('Reindex', () => {
     expect(options().map((one) => one.textContent)).toEqual(['Correspondence', 'Evidence', 'Pleadings', 'Privileged', "Counsel's Advicein Privileged"])
   })
 
+  it("never starts on Enter in Matter's search or Folder's filter, whatever is already chosen", async () => {
+    const { api, onClose } = renderDialog({ kind: 'matter', id: 12 })
+    await waitFor(() => expect(start().textContent).toBe('Reindex 96 Documents'))
+    await waitFor(() => expect(isDisabled(start())).toBe(false))
+    // Looking for another matter, with matter 12 still chosen and ready to start: Enter with no row on the arrow keys
+    const finder = within(dialog()).getByRole('textbox', { name: 'Matter' })
+    await userEvent.type(finder, '1001.1')
+    await pause()
+    await waitFor(() => expect(within(dialog()).getByRole('heading', { name: '1 Result' })).toBeTruthy())
+    await userEvent.type(finder, '{Enter}')
+    await pause()
+    expect(api.callsTo('POST /v1/admin/reindex')).toEqual([])
+    expect(onClose).not.toHaveBeenCalled()
+
+    // Folder, with a folder chosen: Enter in its filter starts nothing either
+    await userEvent.click(choice('Folder'))
+    await userEvent.click(await within(dialog()).findByRole('button', { name: 'Choose Another Matter' }))
+    await waitFor(() => expect(options()).toHaveLength(3))
+    await userEvent.click(option(/^1001\.1/))
+    const filter = await within(dialog()).findByRole('textbox', { name: 'Folder' })
+    await userEvent.click(option('Evidence'))
+    await waitFor(() => expect(start().textContent).toBe('Reindex 171 Documents'))
+    await waitFor(() => expect(isDisabled(start())).toBe(false))
+    await userEvent.type(filter, 'pl{Enter}')
+    await pause()
+    expect(api.callsTo('POST /v1/admin/reindex')).toEqual([])
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
   it('is used by keyboard alone: choose, search, pick and start', async () => {
     let sent: unknown
     const { onClose } = renderDialog(

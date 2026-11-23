@@ -3,7 +3,7 @@
 
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { createRef } from 'react'
+import { createRef, type FormEvent } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { expectNoAxeViolations, expectNoPageAxeViolations } from '../test/axe'
 import '../tokens.css'
@@ -268,6 +268,36 @@ describe('SearchPicker', () => {
     await user.keyboard('{Enter}')
     expect(onPick).toHaveBeenLastCalledWith(charity)
     expect(onPick).toHaveBeenCalledTimes(2)
+  })
+
+  it('never submits a form it is in on Enter, with a row on the arrow keys or none', async () => {
+    const user = userEvent.setup()
+    const onPick = vi.fn()
+    const onSubmit = vi.fn((event: FormEvent) => event.preventDefault())
+    const { search, asked } = controlled()
+    render(
+      <form onSubmit={onSubmit}>
+        <Example search={search} onPick={onPick} />
+        <button type="submit">Send</button>
+      </form>,
+    )
+    await user.click(field())
+    await user.keyboard('{Enter}')
+    await user.type(field(), 'char')
+    await waitFor(() => expect(search).toHaveBeenCalledWith('char'))
+    await act(async () => asked[0]!.answer([charter, charity]))
+    await screen.findByRole('listbox', { name: '2 Results' })
+    // No row on the arrow keys: Enter does nothing
+    await user.keyboard('{Enter}')
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(onPick).not.toHaveBeenCalled()
+    // A row on them: Enter picks it, and only that
+    await user.keyboard('{ArrowDown}{Enter}')
+    expect(onPick).toHaveBeenCalledExactlyOnceWith(charter)
+    expect(onSubmit).not.toHaveBeenCalled()
+    // The form's own button still sends it
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+    expect(onSubmit).toHaveBeenCalledTimes(1)
   })
 
   it('picks a row that is clicked', async () => {
