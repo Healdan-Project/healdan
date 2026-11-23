@@ -10,9 +10,10 @@
 #                 packages the Office add-in's pages and manifest into its jar, so a change there builds the server too.
 #   clients=true  when a pull request changes anything under clients/, the clients workflow itself, or the API
 #                 contract (healdan-api's openapi.yaml), which the helper's contract tests read.
-#   web=true      when a pull request changes anything under healdan-web/ (the web apps' workspace and its module), the
-#                 web workflow itself, or either API contract (openapi.yaml, or openapi-admin.yaml, the admin API's, which
-#                 doesn't set clients), whose types the apps generate.
+#   web=true      when a pull request changes anything under healdan-web/ (the web apps' workspace and its module) but
+#                 Markdown outside src/ (healdan-web/CLAUDE.md), the web workflow itself, or either API contract
+#                 (openapi.yaml, or openapi-admin.yaml, the admin API's, which doesn't set clients), whose types the apps
+#                 generate.
 # Pushes, and pull requests that change anything else, get code=true; pushes always get clients=true and web=true. The docs site's
 # own checks run in docs-site.yml, and the clients' in clients.yml.
 #
@@ -39,7 +40,8 @@ if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
     echo "Only docs and clients changed, so the Java build steps are skipped."
   fi
   web=false
-  if grep -qE '^healdan-web/|^\.github/workflows/web\.yml$|^healdan-api/src/main/resources/healdan/api/openapi(-admin)?\.yaml$' <<<"$changed"; then
+  # Markdown outside a src/ directory is docs here too, so a CLAUDE.md beside the apps doesn't run their tests.
+  if awk '!/\.md$/ || /(^|\/)src\//' <<<"$changed" | grep -qE '^healdan-web/|^\.github/workflows/web\.yml$|^healdan-api/src/main/resources/healdan/api/openapi(-admin)?\.yaml$'; then
     web=true
   fi
   if [ "$clients" = false ]; then
