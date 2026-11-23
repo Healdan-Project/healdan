@@ -285,8 +285,6 @@ then **Everything**, and leave **Empty the index first** unticked. It indexes ev
 without waiting for the Indexer's runs, while searches keep working. Do step 3 first, as a reindex leaves out the
 documents set not to be indexed. See [Reindex](../../admin/system/search-and-indexing/#reindex).
 
-<!-- P6 docs pass 2 -->
-
 This costs the Indexer's time. Its **Batch** is 500 documents to begin with, taken every 30 minutes, about 1,000
 documents an hour, so 50,000 documents take about two days. [Finding New Documents
 Sooner](../../admin/system/scheduled-tasks/#finding-new-documents-sooner) says how to run it more often, and **Batch** is

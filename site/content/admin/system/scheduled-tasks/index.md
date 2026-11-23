@@ -34,8 +34,6 @@ Right-click the task and choose **Execute**. **Progress** shows how far it has g
 Jobs' **Run Now** and **Stop** do the same, and so, for the Indexer, does **Run Indexer Now** on the Admin app's
 [Search Index](../search-and-indexing/#the-search-index).
 
-<!-- P6 docs pass 2 -->
-
 ## Changing a Schedule
 
 1. Select the task. Its **Scheduling** tab opens below the list.
@@ -69,8 +67,6 @@ finishes quickly.
 
 To have documents already filed indexed again, the Search Index's [Reindex](../search-and-indexing/#reindex) indexes
 them straight through, without waiting for the Indexer's runs.
-
-<!-- P6 docs pass 2 -->
 
 ## Turning a Task Off
 

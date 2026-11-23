@@ -9,8 +9,6 @@ documents are indexed, how many wait and how many couldn't be indexed, with thos
 reindexes, which it starts, follows and cancels. The index's settings stay in the Classic Interface, under
 **Administration → Settings → Search and Indexing** (see [In the Classic Interface](#in-the-classic-interface)).
 
-<!-- P6 docs pass 2 -->
-
 ## How a Document Gets Indexed
 
 The [Indexer](../scheduled-tasks/) reads the text of new and changed documents into the index every 30 minutes to
@@ -36,35 +34,40 @@ states, or in none of them while it's set to Skip:
 - **Couldn't Be Indexed:** it's marked to have its file indexed, isn't archived, and the last time it was tried, it
   couldn't be. The Indexer goes on trying it at each run until it's indexed or set to Skip.
 
-<!-- P6 docs pass 2 -->
-
 ## The Search Index
 
-At the top of the page are the three counts, **Indexed**, **Waiting** and **Couldn't Be Indexed**, then:
+At the top of the page are **Run Indexer Now** and **Reindex…**, then the three counts, **Indexed**, **Waiting** and
+**Couldn't Be Indexed**, the last in the caution colour while it's above 0, and:
 
-- **the index's health,** as the Dashboard's Search Index tile gives it: all is well while every document is indexed
-  or waits to be, and it needs attention while one or more couldn't be indexed;
-- **how many entries the index holds,** for documents and shortcuts alike, so it can differ from **Indexed**, and the
-  size of the index's folder on the server's disk, each where it can be read;
-- **the Indexer:** when it last ran and when it runs next, and **Run Indexer Now**.
+- **under Indexed,** how many entries the index holds, for documents and shortcuts alike, so it can differ from the
+  count, and the size of the index's folder on the server's disk, each where it can be read;
+- **the index's health,** as the Dashboard's Search Index tile gives it: **Index Healthy** while every document is
+  indexed or waits to be, and **Needs Attention**, with how many wait and how many failed, while one or more couldn't
+  be indexed, as in "5 waiting, 2 failed";
+- **the Indexer's runs:** when it last ran and when it runs next, or that it's running and since when.
 
-<!-- P6 docs pass 2 -->
+The tabs carry their counts, as in "Couldn't Be Indexed (2)", and the tab that's open is in the page's address.
 
 **Run Indexer Now** runs the Indexer at once, as **Run Now** on [Background Jobs](../../monitoring/background-jobs/)
-does. The run takes the next documents waiting, as many as one run takes, those that couldn't be indexed among them.
-It's greyed out, with the reason beside it, while the Indexer is running already or is disabled, and while the server
-is set not to run scheduled tasks.
-
-<!-- P6 docs pass 2 -->
+does, and says "Asked the Indexer to run now". The run takes the next documents waiting, as many as one run takes,
+those that couldn't be indexed among them. It's greyed out, with the reason under it, while the Indexer is running
+already or is disabled, and while the server is set not to run scheduled tasks.
 
 ### Reindexes Running
 
-A reindex that's running, or waiting its turn, shows above the tabs: what it covers, such as "Matter 1001.1 Charter
-Dispute", who started it and when, how far it has got, as in "212 of 412 documents", about how long it has left, and
-**Cancel**. While the index can't be written, it says "Waiting for the index" (see [While It Runs](#while-it-runs)).
-One that has been asked to stop says so, and has no **Cancel**. See [Reindex](#reindex).
+A reindex that's running, or waiting its turn, shows above the tabs, in the order they were started.
 
-<!-- P6 docs pass 2 -->
+- **Running,** as "Reindexing Matter 1001.1 Charter Dispute": who started it and when, a bar of how far it has got,
+  and under it a line such as "212 of 412 documents · about 6 minutes left · search keeps working while it runs".
+  While the index can't be written, the line says it's waiting for the index, since when, and that it tries again
+  shortly (see [While It Runs](#while-it-runs)). One that has been asked to stop says it's stopping once the documents
+  it has started on are done, and has no **Cancel**.
+- **Waiting,** as "Waiting to Reindex Store Client Work": who started it and when, and how many documents it will try
+  once its turn comes.
+
+Each has **Cancel** (see [Cancel](#cancel)). A reindex that ends while the page is open stays where it was, as
+"Reindexed …" or "Cancelled Reindexing …", saying how it went, as in "408 reindexed, 3 couldn't be indexed, 1
+skipped.", with **Close**.
 
 While a reindex waits or runs, the page asks again every 5 seconds for its progress, and every 30 seconds for the
 counts and the open tab, while the page is showing. It asks again each time you come back to its window too. When a
@@ -72,75 +75,73 @@ reindex ends, the counts, the tabs and the left pane's count are asked for again
 
 ### Couldn't Be Indexed
 
-Each document that couldn't be indexed: its doc #, its file name, its matter, the reason, and when it was last tried,
-the latest first.
-
-<!-- P6 docs pass 2 -->
+Each document that couldn't be indexed, the latest error first: its **Doc #**, its file name under **Title**, its
+matter, the **Reason** and **When** it was last tried.
 
 - **Try Again** indexes the document now, while you wait, as the Indexer would, so a large or slow file takes a while.
-  The page says how it went. Indexed, it leaves the list. If it couldn't be indexed again, it stays, with the new
-  reason, and the Indexer goes on trying it, unless **On error, mark unindexable** is on (see
+  The row and a message say how it went. Indexed, it leaves the list. If it couldn't be indexed again, it stays, with
+  the new reason, and the Indexer goes on trying it, unless **On error, mark unindexable** is on (see
   [The Settings](#the-settings)), which sets it to Skip, so it leaves the list. When the
   [storage backend](../../storage-backends/) that keeps its file can't be reached just then, Healdan says so, naming the
-  Store, and the document stays as it was: try again once the backend is back.
-- **Skip** sets the document not to be indexed, so the Indexer stops trying it, and it leaves the list. It's then
-  counted in none of the three. Its entry in the index, if it has one, stays, and every reindex leaves it out from then
-  on. To have it indexed again, choose **Mark indexable** for it on the Classic Interface's **Indexing History** tab
-  (see [Indexing Again](#indexing-again)).
+  Store, and changes nothing: the document stays as it was, with no row on the **History** tab, and nothing is
+  recorded, though LogicalDOC's reader still logs that it couldn't read the file, which [Errors](../../monitoring/errors/)
+  shows. Try again once the backend is back.
+- **Skip** asks first, then sets the document not to be indexed, so the Indexer stops trying it, and it leaves the
+  list. It's then counted in none of the three. Its entry in the index, if it has one, stays, and every reindex leaves
+  it out from then on. Skip lasts until someone chooses **Mark indexable** for it on the Classic Interface's
+  **Indexing History** tab (see [Indexing Again](#indexing-again)).
 
-<!-- P6 docs pass 2 -->
+If the document has been indexed or set to Skip since the list was read, Healdan says "This document is no longer
+waiting after an error." in its row, and the row goes at the list's next read.
 
-A document with no doc #, filed before Healdan gave documents their numbers, is listed with **Try Again** and **Skip**
-greyed out: reindex its folder to try it again.
-
-<!-- P6 docs pass 2 -->
+A document with no doc #, filed before Healdan gave documents their numbers, is listed as "No doc #", with **Try Again**
+and **Skip** greyed out: reindex its folder to try it again.
 
 ### Waiting
 
-Each document waiting for the Indexer, those that couldn't be indexed left out, in the order they were filed in.
-**Last Changed** is when the document last changed, which needn't be when it began to wait.
-
-<!-- P6 docs pass 2 -->
+Each document waiting for the Indexer, those that couldn't be indexed left out, in the order they were filed in, with
+its **Doc #**, **Title**, matter and **Last Changed**: when the document last changed, which is when most began to
+wait.
 
 ### History
 
-The reindexes, the newest first, those waiting and running and those that ended; then each time a document was indexed
-or couldn't be, newest first, with the reason when it couldn't, and who did it and when. The events read back as the
-[Audit Trail](../../monitoring/audit-trail/#reading-further-back) does, a stretch at a time, with **Show More**, so a
-page can hold few rows, or none, while there's more to read. A document destroyed for good takes its rows with it.
+Two lists:
 
-<!-- P6 docs pass 2 -->
+- **Reindexes,** the newest first, those waiting and running and those that ended: what each covered, who started it
+  and when, how many documents it set out to try, and its outcome.
+- **Index Events:** each time a document was indexed or couldn't be, newest first, with its doc #, file name and
+  matter, **Indexed** or **Couldn't Be Indexed**, the reason when it couldn't, and who did it, the Indexer's runs
+  included, and when. They read back as the [Audit Trail](../../monitoring/audit-trail/#reading-further-back) does, a
+  stretch at a time, with **Show More**, so a page can hold few rows, or none, while there's more to read. A document
+  destroyed for good takes its rows with it.
 
 ## Reindex
 
 **Reindex…**, at the top of the Search Index, indexes again the documents you choose, straight through, on the server.
-Choose what to reindex:
+Its dialog opens on **Matter**. Choose what to reindex:
 
 | Choice | What it covers |
 |---|---|
-| **Documents** | the documents whose doc #s you type or paste, up to 1,000. Each shows as found, with its file name and matter; as found but left out, with why (see below); or as not found |
-| **Folder** | find the matter, then choose one of its folders: the documents in that folder and in every folder inside it, at every level |
+| **Documents** | the documents whose doc #s you type or paste, with commas, spaces or new lines between them, up to 1,000. Each is listed under **Doc #s Given**: found, with its file name and matter; "Left out: it's set to Skip, archived or being changed"; or "No such document" |
+| **Folder** | find the matter, then choose one of its folders, listed as they nest and filtered by what you type: the documents in that folder and in every folder inside it, at every level. **Choose Another Matter** goes back to the search. The matter's own folder isn't listed: choose **Matter** for that |
 | **Matter** | a search that starts from your Recent Matters and finds a matter by its number, its name or its client's name: the documents of the matter's whole workspace |
-| **Store** | a plain list of the Stores: the documents of every matter in the Store |
+| **Store** | a plain list of the Stores, each with its documents: the documents of every matter in the Store |
 | **Everything** | every document |
 
-<!-- P6 docs pass 2 -->
-
 A folder has no entry of its own in the index, so reindexing one means reindexing the documents in it. The dialog
-shows how many documents the reindex will try, on its button, as in **Reindex 412 Documents**, and about how long it
-will take once it runs: as long a time each as the documents took in the latest reindex that ran to its end having
-tried 20 or more, or 1.75 seconds each until one has, not counting any reindex that runs before it.
+shows how many documents the reindex will try, on its button, as in **Reindex 412 Documents** (**Reindex Everything**
+for Everything), and about how long it will take once it runs, as in "About 12 minutes for 412 documents.": as long a
+time each as the documents took in the latest reindex that ran to its end having tried 20 or more, or 1.75 seconds
+each until one has, not counting any reindex that runs before it.
 
-<!-- P6 docs pass 2 -->
+**What's left out** isn't on the button, and the dialog says how many, as in "3 more are left out: shortcuts, and
+documents set to Skip, archived or being changed.". Shortcuts are left out as the Indexer indexes each again once the
+document it leads to is done, and archived documents as the Indexer leaves them alone too.
 
-**What's left out,** and not counted: shortcuts, which the Indexer indexes again once the document each leads to is
-done; documents set to Skip; archived documents, which the Indexer leaves alone too; and documents being changed at
-that moment.
-
-Healdan says before the button when it won't start one: "There's nothing here to reindex." for a choice with no
-documents to try, and "This is already being reindexed." for a folder, matter, Store or Everything that a waiting or
-running reindex covers already. Documents chosen by doc # are never refused as already being reindexed. More than 1,000
-different doc #s at once are refused.
+Healdan says before the button when it won't start one, and greys the button out: "There's nothing here to reindex."
+for a choice with no documents to try, and "This is already being reindexed." for a folder, matter, Store or
+Everything that a waiting or running reindex covers already. Documents chosen by doc # are never refused as already
+being reindexed. More than 1,000 different doc #s at once are refused.
 
 ### While It Runs
 
@@ -153,55 +154,50 @@ different doc #s at once are refused.
   changed at that moment, is skipped. A document moved or given a new version since is indexed as it is then.
 - **A document whose file's storage can't be reached** at its turn is skipped too, keeping its entry and staying as it
   was, with no row on the **History** tab: a reindex once the [storage backend](../../storage-backends/) is back covers
-  it.
+  it. LogicalDOC's reader still logs an error for each such document, so [Errors](../../monitoring/errors/) shows a
+  fault seen as many times as there were, which can be marked resolved once the backend is back.
 - **A document it couldn't index** joins **Couldn't Be Indexed**, keeping the entry it had, and the Indexer goes on
   trying it at each run.
-- **When the index can't be written,** the reindex waits and tries again, counting nothing meanwhile, and the
-  Search Index says "Waiting for the index".
+- **When the index can't be written,** so that nothing in a stretch of documents could be indexed, the reindex waits
+  and tries that stretch again, counting nothing meanwhile, not even a document that failed for its own reason beside
+  them, and its card says it's waiting for the index.
 - **A restart** of the server lets the running reindex go on from where it was, and the waiting ones wait their turn
   as before.
-
-<!-- P6 docs pass 2 -->
 
 A reindex that has ended is on the **History** tab, saying how many documents it indexed, how many it couldn't, which
 are on **Couldn't Be Indexed**, and how many it skipped. Together they're the documents it set out to try.
 
-<!-- P6 docs pass 2 -->
-
 ### Cancel
 
-**Cancel** stops a reindex. One waiting its turn is cancelled at once. One that's running finishes the documents it's
+**Cancel** asks first, as "Cancel the Reindex of Matter 1001.1 Charter Dispute?", and **Cancel Reindex** stops it. One
+waiting its turn is cancelled at once, so nothing in the index changes. One that's running finishes the documents it's
 working on, then stops. Documents it hadn't reached keep the entries they have, and stay indexed, waiting or failed as
 they were. A reindex that has ended can't be cancelled: "This reindex has ended."
 
-<!-- P6 docs pass 2 -->
-
 ### Empty the Index First
 
-**Empty the index first**, a tick box shown only under **Everything**, is for a damaged index. As the reindex's run
-begins, not as it's started, so no other reindex is running then, it empties the index and marks every document to be
-indexed. Search then misses documents until each is done again, and the Indexer takes any the reindex doesn't cover,
-such as those filed meanwhile. A document set to Skip loses its entry, and stays set to Skip. Without the tick, nothing
-is taken out of the index.
-
-<!-- P6 docs pass 2 -->
+**Empty the index first**, a tick box shown only under **Everything**, beneath its warning and unticked, is for a
+damaged index. As the reindex's run begins, not as it's started, so no other reindex is running then, it empties the
+index and marks every document to be indexed. Search then misses documents until each is done again, and the Indexer
+takes any the reindex doesn't cover, such as those filed meanwhile. A document set to Skip loses its entry, and stays
+set to Skip. Without the tick, nothing is taken out of the index.
 
 ### Reindex from Elsewhere
 
 - **A matter's page,** in the Admin app, has **Reindex**, which opens the Search Index with Reindex open and the matter
   chosen (see [A Matter's Page](../../clients-and-matters/#reindex)).
-- **A folder in the Workspace Editor,** on a matter's **Workspace** tab, has **Reindex** too, which opens it with the
-  folder chosen (see [The Folder Chosen](../../top-level-folders/#the-folder-chosen)).
+- **A folder in the Workspace Editor,** on a matter's **Workspace** tab, has **Reindex** too, after **Delete** and on
+  its menu in the tree, which opens it with the folder chosen (see
+  [The Folder Chosen](../../top-level-folders/#the-folder-chosen)). The matter's own folder at the top has none, as the
+  matter's page covers it, and nor have search folders or a template's folders.
 - **In the User app,** an administrator's right-click menu of a document, of several selected documents, of a folder
-  and of a matter has **Reindex**. It asks first, naming what will be reindexed and how many documents, and its toast
+  and of a matter has **Reindex**. It asks first, naming what will be reindexed and how many documents, and its message
   has **View Progress**, which opens the Search Index in a new tab, so you stay where you were. See
   [Right-Click Menus](../../../user/getting-started/getting-around/#right-click-menus) in the User Guide.
 
-<!-- P6 docs pass 2 -->
-
-The Reindex dialog is in the page's address, so a link can open it with its choice made, and Back closes it.
-
-<!-- P6 docs pass 2 -->
+The Reindex dialog is in the page's address, so a link can open it with its choice made. Opened with **Reindex…**,
+Back closes it. Opened from a matter's page or the Workspace Editor, Back goes back to that page. **Cancel**, Esc and
+starting a reindex close it and leave you on the Search Index.
 
 ## What Healdan Records
 
@@ -213,8 +209,6 @@ Healdan records, in the [Audit Trail](../../monitoring/audit-trail/), with who d
 - **Try Again,** as "Tried to index a document again", named by the document's doc # and file name, as in
   `# 10412 Witness Statement.pdf`, with whether it was indexed or failed;
 - **Skip,** as "Set a document not to be indexed", named the same way.
-
-<!-- P6 docs pass 2 -->
 
 **Run Indexer Now** is recorded as Background Jobs' **Run Now** is: "Asked a job to run". A reindex of a matter, or of
 a folder in it, is on the matter's **Activity** tab too. A change that changes nothing isn't recorded, and nor is

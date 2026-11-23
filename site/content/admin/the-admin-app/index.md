@@ -73,8 +73,6 @@ and **Groups**; under **Storage**, **Stores** and **Backends**; under **Search**
 Interface**, which opens the Classic Interface, in the same window, for everything else. The entry for the screen
 you're on is marked, and so is a list's entry while one of its pages is open, such as **Matters** for a matter's page.
 
-<!-- P6 docs pass 2 -->
-
 An entry shows a count where something there needs attention, as Needs Attention counts it (below): **Backends**, how
 many storage backends can't be reached or are failing; **Search Index**, how many documents couldn't be indexed;
 **Errors**, how many unresolved errors the server logged in the last 24 hours, each kind of fault counting once; and
@@ -82,8 +80,6 @@ many storage backends can't be reached or are failing; **Search Index**, how man
 time you come back to its window, and every 30 seconds while the Dashboard is showing. Resolving or reopening a fault,
 each action on a job, **Try Again** and **Skip** on a document that couldn't be indexed, and the end of a reindex ask
 for them again too, and the count follows: see [Counts in the Left Pane](../monitoring/#counts-in-the-left-pane).
-
-<!-- P6 docs pass 2 -->
 
 On a window narrower than 1,024 pixels, the left pane folds away behind the **☰** (Navigation) button in the top bar,
 which opens it over the page. Esc or choosing a link closes it again. The Admin app is designed for a window 1,280
@@ -112,8 +108,6 @@ server that doesn't use storage backends). Unresolved errors link to **Errors**,
 previews given up on and a background job that failed or is overdue to **Background Jobs**. Documents that couldn't be
 indexed link to **Search Index**. With nothing to report, it says "Nothing needs your attention."
 
-<!-- P6 docs pass 2 -->
-
 | It says, for example | What it means |
 |---|---|
 | "3 files are stuck moving to storage" | files Healdan gave up moving to their Store's storage backend: see [Stuck Files and Retry](../storage-backends/waiting-and-stuck-files/#stuck-files-and-retry) |
@@ -134,8 +128,6 @@ Ten tiles, each with its status in words and a line of detail. A tile opens the 
 Backends** and **Disk** open **Backends** (**Disk** the Classic Interface on a server that doesn't use storage
 backends); **Server**, **Database** and **Memory** open **Server Log**; **Previews** and **Background Jobs** open
 **Background Jobs**; **Search Index** opens **Search Index**; and the others, for now, the Classic Interface.
-
-<!-- P6 docs pass 2 -->
 
 The status is:
 

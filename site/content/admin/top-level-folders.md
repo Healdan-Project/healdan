@@ -36,8 +36,8 @@ on the left, and the folder you choose in it on the right.
 - **Choose a folder** with a click, or with the arrow keys and Enter, to show it on the right.
 - **A folder's menu,** on a right-click, Shift+F10 or the menu key, has **New Folder**, **New Search Folder**,
   **Rename**, **Move To…** and **Delete**, as far as the folder takes them: a search folder holds no folders, and the
-  workspace's own folder, at the top, has only the first two. On a folder in the tree, **F2** renames it and the
-  Delete key (on a Mac, delete) deletes it.
+  workspace's own folder, at the top, has only the first two. In a matter's workspace, a folder below the top also has
+  **Reindex**, last. On a folder in the tree, **F2** renames it and the Delete key (on a Mac, delete) deletes it.
 - **New Folder** and **New Search Folder,** above the tree, make one in the folder chosen, or beside the search folder
   chosen.
 
@@ -51,12 +51,11 @@ On the right are the folder's name and, for any folder but the top, **Rename**, 
 them are [Who Can Use This Folder](../permissions/#who-can-use-this-folder), and then the values the folder sets, or a
 search folder's rule.
 
-On a matter's **Workspace** tab, a folder also has **Reindex**, which opens the
+On a matter's **Workspace** tab, a folder below the top also has **Reindex**, after **Delete**, which opens the
 [Search Index](../system/search-and-indexing/#reindex) with its Reindex dialog open and the folder chosen: the
 documents in the folder and in every folder inside it, at every level, are indexed again, straight through, and search
-keeps finding them meanwhile.
-
-<!-- P6 docs pass 2 -->
+keeps finding them meanwhile. The matter's own folder is reindexed from the matter's page, and a search folder, which
+holds no documents, and a template's folders have no **Reindex**. Back from the dialog comes back here.
 
 ### Making, Renaming, Moving and Deleting Folders
 

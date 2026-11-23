@@ -214,8 +214,6 @@ in Admin**, is also on the toolbar or beside the item, so the menu is a shortcut
 finds every matter in the Admin app's **Matters** list too, and reindexes from its **Search Index** as well (see
 [An Administrator's Items](#an-administrators-items)).
 
-<!-- P6 docs pass 2 -->
-
 - **A document,** in a folder, search results, **Recent Documents**, **Recent Emails**, **Checked Out to Me** or a
   doc # result: **Open**, **Preview** and **Open in New Tab**; **Download** and **Check Out**, or **Check In** and
   **Release** when you checked it out on the web page, or **Release…** when you checked it out on one of your
@@ -267,8 +265,6 @@ documents at a time."
 The reindex then runs on the server, and you stay where you were. A message says it has started, as "Reindexing 412
 documents.", with **View Progress**, which opens the Admin app's Search Index in a new tab, where it can be followed and
 cancelled. See [Reindex](../../../admin/system/search-and-indexing/#reindex) in the Admin Guide.
-
-<!-- P6 docs pass 2 -->
 
 ## The Keyboard
 

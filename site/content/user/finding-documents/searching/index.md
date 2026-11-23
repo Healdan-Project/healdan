@@ -104,8 +104,6 @@ each is done again. An administrator can reindex a document, several selected, a
 right-click menu (see [An Administrator's Items](../../getting-started/getting-around/#an-administrators-items)), and
 see on the Admin app's Search Index which documents couldn't be indexed, and why.
 
-<!-- P6 docs pass 2 -->
-
 An email's From, To, CC and Subject are part of its text, so words in them are found. Its Message-ID isn't, so the
 search box doesn't find it. To find an email by its Message-ID, use the [Classic Interface](../../the-classic-interface/):
 open the **Search** tab's **Full-text** section, choose **Healdan profile** as the **Template**, add **Message-ID** to

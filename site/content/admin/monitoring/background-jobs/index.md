@@ -60,15 +60,12 @@ Healdan's jobs, in the list's order:
   Store, and leaves one that isn't on its Store's backend for the Storage Mover.
 - **Reindex** runs the [reindexes](../../system/search-and-indexing/#reindex) started on the Search Index, one at a
   time, whenever one waits or runs. Its last run is when the latest reindex's run began, and it shows **Running**
-  while one runs. Reindexes are started, followed and cancelled on the Search Index, not here.
-
-<!-- P6 docs pass 2 -->
+  while one runs, and **Failed** when Healdan itself couldn't go on with the reindexes, which it tries again 30 seconds
+  later. Reindexes are started, followed and cancelled on the Search Index, not here.
 
 LogicalDOC's tasks are described on [Scheduled Tasks](../../system/scheduled-tasks/). The Indexer can also be run from
 the Search Index, with **Run Indexer Now** (see
 [Search and Indexing](../../system/search-and-indexing/#the-search-index)).
-
-<!-- P6 docs pass 2 -->
 
 ## What Each Job Allows
 
@@ -82,8 +79,6 @@ question for **Stop** and **Disable**.
   scheduled run does, and the list shows its end and its result. The Trash Destroyer still destroys only what's due.
   Previews, the Email Index, the Storage Alert and Reindex allow nothing here, and none of Healdan's jobs is stopped,
   disabled or given a schedule.
-
-<!-- P6 docs pass 2 -->
 
 - **LogicalDOC's tasks:** **Run Now** while it's enabled and idle, and **Stop** in its place while it runs; **Enable**
   or **Disable**, whichever applies; and, always, **Schedule…** (see [A Task's Schedule](#a-tasks-schedule)). Run Now

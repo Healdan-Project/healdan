@@ -208,9 +208,7 @@ its client's page, once New Matter has made it, and from **Manage in Admin** on 
 
 - **Matters**, above the title, goes back to the list.
 - **The title** is the matter's number and name, such as "1001.1 Charter Dispute – MV Northern Star", with **Edit**,
-  **Move to Another Store**, **Open in Healdan**, **Reindex** and **Delete** beside it.
-
-<!-- P6 docs pass 2 -->
+  **Move to Another Store**, **Reindex**, **Open in Healdan** and **Delete** beside it.
 
 - **The line under it** names the client, the Store, the owner, the template, and the documents with their size, as in
   "Saltmarsh Shipping Ltd · Client Work · owner Tom Reeve · from template Litigation · 412 documents, 4.6 GB". It
@@ -319,9 +317,8 @@ anyone deleted.
 **Reindex** opens the [Search Index](../system/search-and-indexing/#reindex) with its Reindex dialog open and the
 matter chosen, showing how many of its documents it will try and about how long that will take. The reindex indexes
 again every document in the matter's workspace, straight through, and search keeps finding them meanwhile. A
-reindex of the matter, or of a folder in it, shows on its **Activity** tab.
-
-<!-- P6 docs pass 2 -->
+reindex of the matter, or of a folder in it, shows on its **Activity** tab. Back from the dialog comes back to the
+matter's page, and **Cancel** or starting the reindex leaves you on the Search Index.
 
 #### Matters in the Classic Interface
 
