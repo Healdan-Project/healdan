@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { expect, test, type BrowserContext, type Page, type Request } from '@playwright/test'
+import { expect, test, type BrowserContext, type Page, type Request, type Route } from '@playwright/test'
 import { expectNoViolations } from './axe'
 import { ADMIN_PASSWORD, ADMIN_USERNAME, expectListUnder, signIn } from './helpers'
 
@@ -11,17 +11,21 @@ import { ADMIN_PASSWORD, ADMIN_USERNAME, expectListUnder, signIn } from './helpe
 // Backend, Key History and Change Backend dialogs) and on Phase 4's (8.7: Users, a person's page, Groups and a group's
 // page, with the New User, Reset Password, Disable, New Group and Add Member dialogs) and on Phase 5's (8.8: Errors with a
 // fault's details, the Server Log following and paused, the Audit Trail with a row's details and its Person and Matter
-// lists open, Background Jobs with a task's Schedule… and Disable question, and a matter's and a person's Activity tabs),
-// in the light theme and in the dark one, which Playwright's `colorScheme` switches as the system's setting would, and in
-// a tablet-wide window with the left pane opened over the main area, where the Stores, Backends, Errors and Audit Trail
-// lists are checked too. A real browser draws the page, so this is where the screens' colour contrast is checked: the
+// lists open, Background Jobs with a task's Schedule… and Disable question, and a matter's and a person's Activity tabs)
+// and on Phase 6's (8.9 and 13: the Search Index on each tab, Run Indexer Now greyed out, a running reindex's card with its
+// Cancel question, the Reindex dialog on each of its five choices, and the User app's Reindex question), in the light theme
+// and in the dark one, which Playwright's `colorScheme` switches as the system's setting would, and in a tablet-wide window
+// with the left pane opened over the main area, where the Stores, Backends, Errors, Audit Trail and Search Index lists are
+// checked too. A real browser draws the page, so this is where the screens' colour contrast is checked: the
 // app's Vitest checks run in jsdom, which has no colours. It signs in as the stack's admin and depends on nothing an
 // earlier step left. It changes nothing global: Phase 3's dialogs are closed with nothing sent, and Phase 4's are opened
 // on a person and a group it makes, with names of its own run, in each theme, whose password it resets and whose Disable
 // it cancels. Phase 5's resolve no fault and run, stop, switch or reschedule no job: Schedule… and Disable's question are
-// cancelled with nothing sent. The find and Phase 2's screens look at the smoke fixture's client and matter, Phase 3's at
-// its Store Smoke and the storage overlay's Smoke Garage, which every smoke stack has, and Phase 5's at matter 1.1, all of
-// which it only reads.
+// cancelled with nothing sent. Phase 6's start no reindex and press neither Run Indexer Now, Try Again nor Skip: the Reindex
+// dialog and question are cancelled, with only their counts asked for, and Run Indexer Now's refusal and the running card
+// are drawn from answers the test gives the page itself. The find and Phase 2's screens look at the smoke fixture's client
+// and matter, Phase 3's at its Store Smoke and the storage overlay's Smoke Garage, which every smoke stack has, and Phase
+// 5's and Phase 6's at matter 1.1, all of which they only read.
 
 for (const scheme of ['light', 'dark'] as const) {
   test.describe(`the Dashboard in the ${scheme} theme`, () => {
@@ -473,6 +477,195 @@ for (const scheme of ['light', 'dark'] as const) {
       expect(changes, "Phase 5's screens and dialogs, only read").toEqual([])
     })
 
+    // Phase 6's screens (admin spec 8.9 and 13): the Search Index on each of its tabs; Run Indexer Now greyed out under the
+    // focus, and a reindex's card while it runs with its Cancel question, both drawn from answers this test gives the page
+    // itself (the stack's own Indexer is left to its 5 seconds, and a reindex of the stack's runs too fast to be seen
+    // running); the Reindex dialog on each of its five choices, cancelled; and the User app's Reindex question, cancelled.
+    // It only reads: no request it makes may change anything, and only the dialog's and the question's counts (the
+    // preview) are sent as POSTs
+    test("the Search Index, a reindex's card, the Reindex dialog on each choice, and the User app's Reindex question", async () => {
+      test.setTimeout(150_000)
+      const pane = page.getByRole('navigation', { name: 'Navigation' })
+      const heading = main().getByRole('heading', { level: 1, name: 'Search Index' })
+      const tab = (name: string) => main().getByRole('tab', { name: new RegExp(`^${name}( \\([\\d,]+\\))?$`) })
+      const returned = () => page.evaluate(() => void window.dispatchEvent(new Event('focus')))
+      const changes: string[] = []
+      const writes = (request: Request) => {
+        const path = new URL(request.url()).pathname
+        if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method()) && path !== '/api/v1/admin/reindex/preview') changes.push(`${request.method()} ${path}`)
+      }
+      page.on('request', writes)
+
+      // Taken off whatever happens, so a failing step leaves it on no later test
+      try {
+        await test.step("the Search Index's tabs", async () => {
+          await pane.getByRole('link', { name: /^Search Index(,|$)/ }).click()
+          await expect(heading).toBeVisible()
+          await expect(main().getByText('Loading…')).toHaveCount(0)
+          await expect(tab("Couldn't Be Indexed")).toHaveAttribute('aria-selected', 'true')
+          await expect(main().getByRole('table', { name: "Couldn't Be Indexed" }).or(main().getByText('Every document has been indexed or is waiting to be.'))).toBeVisible()
+          await check("the Search Index, Couldn't Be Indexed")
+          await tab('Waiting').click()
+          await expect(main().getByRole('table', { name: 'Waiting' }).or(main().getByText('No document is waiting to be indexed.'))).toBeVisible()
+          await check('the Search Index, Waiting')
+          await tab('History').click()
+          await expect(main().getByRole('heading', { level: 2, name: 'Reindexes' })).toBeVisible()
+          await expect(main().getByRole('heading', { level: 2, name: 'Index Events' })).toBeVisible()
+          await expect(main().getByText('Loading…')).toHaveCount(0)
+          await check('the Search Index, History')
+          await tab("Couldn't Be Indexed").click()
+          await expect(page).toHaveURL(/\/admin\/search-index$/)
+        })
+
+        await test.step('Run Indexer Now, greyed out under the focus', async () => {
+          // The heading's answer as the server gave it, read once through the page's own session (a request the test sent
+          // itself would carry none of the browser's same-origin marks, and be refused), but for what Run Indexer Now would
+          // be refused with: none, then a sentence of this test's own, as when the Indexer starts while the button has the
+          // focus. Nothing is pressed.
+          const index = await page.evaluate(async () => (await (await fetch('/api/v1/admin/search-index')).json()) as { indexer: Record<string, unknown> })
+          const refused = 'The Indexer is running already.'
+          let refusing = false
+          const indexer = (route: Route) => route.fulfill({ json: { ...index, indexer: { ...index.indexer, runRefusal: refusing ? refused : null } } })
+          const matched = (url: URL) => url.pathname === '/api/v1/admin/search-index'
+          await page.route(matched, indexer)
+          try {
+            const run = main().getByRole('button', { name: 'Run Indexer Now' })
+            await returned()
+            await expect(run).toBeEnabled()
+            await run.focus()
+            refusing = true
+            await returned()
+            await expect(run).toBeDisabled()
+            await expect(run).toHaveAccessibleDescription(refused)
+            await expect(heading, 'the focus goes to the heading').toBeFocused()
+            await check('Run Indexer Now greyed out')
+          } finally {
+            await page.unroute(matched, indexer)
+          }
+          await returned()
+        })
+
+        await test.step("a reindex's card while it runs, and its Cancel question, cancelled", async () => {
+          // The reindexes waiting or running, answered by this test: one running reindex it makes up, which only the page
+          // sees: its card, its progress bar and its question are what's checked
+          const me = await page.evaluate(async () => (await (await fetch('/api/v1/me')).json()) as { id: number; username: string; name: string })
+          const now = new Date()
+          const job = {
+            id: 2_000_000_000 + Math.floor(Math.random() * 100_000_000),
+            kind: 'folder',
+            targetId: 1,
+            name: `Folder E2E A11y ${scheme} in 1.1 Smoke Matter`,
+            startedBy: { id: me.id, username: me.username, name: me.name },
+            state: 'running',
+            cancelling: false,
+            emptyFirst: false,
+            total: 412,
+            done: 200,
+            failed: 3,
+            skipped: 9,
+            leftOut: 0,
+            created: new Date(now.getTime() - 300_000).toISOString(),
+            started: new Date(now.getTime() - 290_000).toISOString(),
+            ended: null,
+            stalledSince: null,
+            estimateSecondsLeft: 360,
+          }
+          const active = (route: Route) => route.fulfill({ json: { items: [job], offset: 0, limit: Number(new URL(route.request().url()).searchParams.get('limit') ?? 200), total: 1 } })
+          const matched = (url: URL) => url.pathname === '/api/v1/admin/reindex' && url.searchParams.get('active') === 'true'
+          await page.route(matched, active)
+          try {
+            // The page loaded afresh, so its first read of them is this test's answer
+            await page.goto('/admin/search-index')
+            await expect(heading).toBeVisible()
+            const card = main().getByRole('region', { name: `Reindexing ${job.name}` })
+            await expect(card).toBeVisible()
+            // The bar is named, says how far in words, and is described by the line under it
+            const bar = card.getByRole('progressbar', { name: 'Documents' })
+            await expect(bar).toHaveAttribute('aria-valuenow', '212')
+            await expect(bar).toHaveAttribute('aria-valuemax', '412')
+            await expect(bar).toHaveAttribute('aria-valuetext', '212 of 412')
+            await expect(bar).toHaveAccessibleDescription(/^212 of 412 documents · about 6 minutes left · search keeps working while it runs$/)
+            await check("a reindex's card, running")
+            const cancel = card.getByRole('button', { name: `Cancel Reindexing ${job.name}` })
+            await cancel.click()
+            const question = page.getByRole('alertdialog', { name: `Cancel the Reindex of ${job.name}?` })
+            await expect(question).toBeVisible()
+            await check("a reindex's Cancel question")
+            await question.getByRole('button', { name: 'Cancel', exact: true }).click()
+            await expect(question).toBeHidden()
+            await expect(cancel, 'the focus back on Cancel').toBeFocused()
+            // Left before the made-up reindex leaves the answers, so the page never asks the server for it
+            await page.goto('/admin/search-index')
+            await expect(heading).toBeVisible()
+          } finally {
+            await page.unroute(matched, active)
+          }
+        })
+
+        await test.step('the Reindex dialog on each of its choices, cancelled', async () => {
+          await main().getByRole('button', { name: 'Reindex…' }).click()
+          const dialog = page.getByRole('dialog', { name: 'Reindex' })
+          const choice = (name: string) => dialog.getByRole('radiogroup', { name: 'What to Reindex' }).getByRole('radio', { name })
+          await expect(choice('Matter')).toBeChecked()
+          await expect(dialog.getByRole('listbox', { name: 'Recent Matters' }).getByRole('option').first()).toBeVisible()
+          await check('the Reindex dialog, Matter')
+          await dialog.getByRole('textbox', { name: 'Matter' }).fill('Smoke Matter')
+          await dialog.getByRole('option', { name: /^1\.1 – Smoke Matter/ }).click()
+          await expect(dialog.getByRole('button', { name: /^Reindex [\d,]+ Documents?$/ })).toBeEnabled()
+          await check('the Reindex dialog, Matter chosen')
+
+          await choice('Folder').click()
+          await expect(dialog.getByText('Matter: 1.1 – Smoke Matter')).toBeVisible()
+          await expect(dialog.getByRole('listbox', { name: 'Folders in 1.1 – Smoke Matter' }).getByRole('option', { name: /^Documents/ })).toBeVisible()
+          await check('the Reindex dialog, Folder')
+
+          // A doc # nothing has, which the dialog says, with nothing to reindex
+          await choice('Documents').click()
+          await dialog.getByRole('textbox', { name: 'Doc #s' }).fill('999999999')
+          await expect(dialog.getByRole('list', { name: 'Doc #s Given' })).toContainText('No such document')
+          await expect(dialog.getByRole('button', { name: 'Reindex', exact: true })).toBeDisabled()
+          await check('the Reindex dialog, Documents')
+
+          await choice('Store').click()
+          await expect(dialog.getByRole('radiogroup', { name: 'Store' }).getByRole('radio', { name: /^Smoke\b/ }).first()).toBeVisible()
+          await check('the Reindex dialog, Store')
+
+          // Everything, its count and its tick box, left unticked
+          await choice('Everything').click()
+          await expect(dialog.getByRole('status').filter({ hasText: /^All / })).toBeVisible()
+          await expect(dialog.getByRole('checkbox', { name: 'Empty the index first' })).not.toBeChecked()
+          await check('the Reindex dialog, Everything')
+
+          await dialog.getByRole('button', { name: 'Cancel' }).click()
+          await expect(dialog).toBeHidden()
+          await expect(page).toHaveURL(/\/admin\/search-index$/)
+        })
+
+        await test.step("the User app's Reindex question, cancelled", async () => {
+          // Matter 1.1's own folder, where its Documents folder is a row
+          const matters = await page.evaluate(async () => (await (await fetch('/api/v1/search?scope=matters&q=1.1')).json()) as { items: { number: number; client: { number: number }; folderId: number }[] })
+          const smoke = matters.items.find((one) => one.client.number === 1 && one.number === 1)
+          expect(smoke, 'the smoke fixture has matter 1.1').toBeTruthy()
+          await page.goto(`/app/folders/${smoke!.folderId}`)
+          const row = main().getByRole('grid').getByRole('row', { name: /^Documents\b/ })
+          await row.getByRole('rowheader').click({ button: 'right' })
+          await page.getByRole('menu', { name: 'Actions for Documents' }).getByRole('menuitem', { name: 'Reindex' }).click()
+          const question = page.getByRole('dialog', { name: 'Reindex' })
+          await expect(question.getByRole('button', { name: /^Reindex [\d,]+ Documents?$/ })).toBeEnabled()
+          await check("the User app's Reindex question")
+          await question.getByRole('button', { name: 'Cancel' }).click()
+          await expect(question).toBeHidden()
+        })
+
+        // Back where the next test starts
+        await page.goto('/admin/')
+        await expect(main().getByRole('heading', { level: 1, name: 'Dashboard' })).toBeVisible()
+      } finally {
+        page.off('request', writes)
+      }
+      expect(changes, "Phase 6's screens and dialogs, only read").toEqual([])
+    })
+
     test('a tablet-wide window, with the left pane opened over the main area', async () => {
       await page.setViewportSize({ width: 768, height: 1024 })
       const navigation = banner().getByRole('button', { name: 'Navigation' })
@@ -488,14 +681,15 @@ for (const scheme of ['light', 'dark'] as const) {
       await page.keyboard.press('Escape')
       await expect(page.getByRole('navigation', { name: 'Navigation' })).toHaveCount(0)
       await expect(navigation).toBeFocused()
-      // Phase 3's and Phase 5's lists at the same width, each reached from the pane, which closes as its link is followed. The
-      // Errors entry can carry its count, and the Errors list can be empty, which it then says
-      for (const screen of ['Stores', 'Backends', 'Errors', 'Audit Trail']) {
+      // Phase 3's, Phase 5's and Phase 6's lists at the same width, each reached from the pane, which closes as its link is
+      // followed. The Errors and Search Index entries can carry their counts, and the Errors list can be empty, which it then
+      // says; the Search Index's tabs are plain tables, which can be empty too
+      for (const screen of ['Stores', 'Backends', 'Errors', 'Audit Trail', 'Search Index']) {
         await navigation.click()
         await page.getByRole('navigation', { name: 'Navigation' }).getByRole('link', { name: new RegExp(`^${screen}(,|$)`) }).click()
         await expect(page.getByRole('navigation', { name: 'Navigation' })).toHaveCount(0)
         await expect(main().getByRole('heading', { level: 1, name: screen })).toBeVisible()
-        if (screen !== 'Errors') await expect(main().getByRole('grid', { name: screen }).getByRole('row').nth(1)).toBeVisible()
+        if (screen !== 'Errors' && screen !== 'Search Index') await expect(main().getByRole('grid', { name: screen }).getByRole('row').nth(1)).toBeVisible()
         await expect(main().getByText('Loading…')).toHaveCount(0)
         // Nothing scrolls sideways, the filters included
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), `${screen} at 768 pixels`).toBe(true)
