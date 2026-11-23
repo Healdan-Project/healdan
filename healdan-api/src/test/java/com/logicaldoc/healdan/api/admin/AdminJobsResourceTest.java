@@ -100,7 +100,7 @@ public class AdminJobsResourceTest extends ApiTestCase {
 		for (JsonNode job : jobs)
 			names.add(job.path("name").textValue());
 		List<String> tasks = Context.get(TaskManager.class).getTasks().stream().map(Task::getName).toList();
-		List<String> expected = new ArrayList<>(List.of("preview", "email-index", "trash-destroyer"));
+		List<String> expected = new ArrayList<>(List.of("preview", "email-index", "trash-destroyer", "reindex"));
 		expected.addAll(tasks);
 		assertEquals(expected, names);
 
@@ -116,13 +116,16 @@ public class AdminJobsResourceTest extends ApiTestCase {
 		assertTrue("Run Now is offered", trash.path("canRun").booleanValue());
 		assertFalse(jobs.get(0).path("canRun").booleanValue());
 		assertFalse(jobs.get(1).path("canRun").booleanValue());
+		// The reindex runs by itself, as there's work for it
+		assertEquals("Reindex", jobs.get(3).path("label").textValue());
+		assertFalse(jobs.get(3).path("canRun").booleanValue());
 
-		JsonNode indexer = jobs.get(3 + tasks.indexOf("IndexerTask"));
+		JsonNode indexer = jobs.get(4 + tasks.indexOf("IndexerTask"));
 		assertEquals("Indexer", indexer.path("label").textValue());
 		assertEquals("simple", indexer.path("schedule").path("mode").textValue());
 		assertEquals(1800, indexer.path("schedule").path("intervalSeconds").asLong());
 		assertTrue(indexer.path("schedule").path("cron").isNull());
-		JsonNode optimizer = jobs.get(3 + tasks.indexOf(OPTIMIZER));
+		JsonNode optimizer = jobs.get(4 + tasks.indexOf(OPTIMIZER));
 		assertEquals("cron", optimizer.path("schedule").path("mode").textValue());
 		assertTrue(optimizer.path("schedule").path("intervalSeconds").isNull());
 		assertEquals("00 00 4/4 * * ?", optimizer.path("schedule").path("cron").textValue());

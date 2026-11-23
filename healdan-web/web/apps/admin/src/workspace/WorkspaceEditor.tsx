@@ -6,7 +6,9 @@ import { useCallback, useId, useRef, useState } from 'react'
 import { ApiError, apiPath, type adminComponents, type components } from '@healdan/api'
 import { ErrorPanel, useApi } from '@healdan/shell'
 import { Button, Icon, toast, toastWithAction, type ToastAction } from '@healdan/ui'
+import { reindexHref } from '../addresses'
 import { Confirm } from '../dialogs/Confirm'
+import { ServerLink, useFollow } from '../frame/ServerLink'
 import { t } from '../strings'
 import { useRefusalFor } from '../strings/refusals'
 import { AccessPanel } from './AccessPanel'
@@ -28,6 +30,8 @@ export interface WorkspaceEditorProps {
   /** The workspace's top folder: a matter's own (its `folderId`), or a template's (its id) */
   rootFolderId: number
   kind: 'matter' | 'template'
+  /** A matter's workspace: the matter's id, for Reindex on its folders, which a template's workspace doesn't offer */
+  matterId?: number
 }
 
 /**
@@ -38,19 +42,20 @@ export interface WorkspaceEditorProps {
  * is said as warnings beside the folder's Save, which still saves. A matter's folder deleted here has Undo; a template's
  * hasn't, as the Trash can't put it back. Leaving the page over a change unsaved, or a save on its way, asks first.
  */
-export function WorkspaceEditor({ rootFolderId, kind }: WorkspaceEditorProps) {
+export function WorkspaceEditor({ rootFolderId, kind, matterId }: WorkspaceEditorProps) {
   const tree = useWorkspaceTree(rootFolderId)
   const problems = useTemplateProblems(rootFolderId, kind === 'template')
   if (tree.isError) return <ErrorPanel error={tree.error} onRetry={() => void tree.refetch()} />
   if (tree.data === undefined) return <p className={styles.note}>{t('common.loading')}</p>
-  return <Editor root={tree.data} kind={kind} problems={problems.data ?? []} />
+  return <Editor root={tree.data} kind={kind} matterId={kind === 'matter' ? matterId : undefined} problems={problems.data ?? []} />
 }
 
 /** A dialog the editor has open, and what it acts on */
 type Open = { action: FolderAction; node: WorkspaceNode; parent: WorkspaceNode | undefined }
 
-function Editor({ root, kind, problems }: { root: WorkspaceNode; kind: 'matter' | 'template'; problems: readonly A['TemplateProblem'][] }) {
+function Editor({ root, kind, matterId, problems }: { root: WorkspaceNode; kind: 'matter' | 'template'; matterId: number | undefined; problems: readonly A['TemplateProblem'][] }) {
   const api = useApi()
+  const follow = useFollow()
   const queryClient = useQueryClient()
   const refusalFor = useRefusalFor()
   const foldersId = useId()
@@ -108,13 +113,20 @@ function Editor({ root, kind, problems }: { root: WorkspaceNode; kind: 'matter' 
   // Something new goes in the folder chosen, or beside the search folder chosen
   const making = node.kind === 'folder' ? node : (parent ?? root)
 
+  // A folder of a matter's workspace is reindexed on the Search Index, its Reindex dialog open on it (P6-R18)
+  const reindexOf = (on: WorkspaceNode) => (matterId === undefined ? undefined : reindexHref('folder', on.id, matterId))
+
+  const nodeReindex = node.kind === 'folder' && !isTop ? reindexOf(node) : undefined
+
   function act(action: FolderAction, on: WorkspaceNode) {
     const top = on.id === root.id
-    if (!actionsOf(on, top).includes(action)) {
+    if (!actionsOf(on, top, matterId !== undefined).includes(action)) {
       // F2 or Delete on the top says why not, as its panel does
       if (top) toast(topNote)
       return
     }
+    const reindex = action === 'reindex' ? reindexOf(on) : undefined
+    if (reindex !== undefined) return follow(reindex)
     setOpen({ action, node: on, parent: parentOf(root, on.id) })
   }
 
@@ -214,7 +226,7 @@ function Editor({ root, kind, problems }: { root: WorkspaceNode; kind: 'matter' 
               </span>
             </Button>
           </div>
-          <FolderTree root={root} kind={kind} selected={node.id} onSelect={choose} expanded={expanded} onExpandedChange={setExpanded} onAction={act} />
+          <FolderTree root={root} kind={kind} selected={node.id} onSelect={choose} expanded={expanded} onExpandedChange={setExpanded} reindexable={matterId !== undefined} onAction={act} />
         </section>
         <section aria-label={t('admin.workspace.chosen')} className={styles.panel}>
           <div className={styles.panelHead}>
@@ -248,6 +260,12 @@ function Editor({ root, kind, problems }: { root: WorkspaceNode; kind: 'matter' 
                     {t('admin.workspace.delete')}
                   </span>
                 </Button>
+                {nodeReindex !== undefined && (
+                  <ServerLink className={page.linkButton} href={nodeReindex}>
+                    <Icon name="refresh" size={14} />
+                    {t('admin.workspace.reindex')}
+                  </ServerLink>
+                )}
               </div>
             )}
           </div>

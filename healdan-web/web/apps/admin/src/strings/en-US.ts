@@ -1351,6 +1351,162 @@ export const adminEnUS = {
   'admin.schedule.save': 'Save',
   'admin.schedule.saved': 'Saved the schedule of {name}',
 
+  // Search Index (spec 8.9): the index's counts and health, the Indexer, the reindexes running, and the three tabs
+  'admin.nav.searchIndex': 'Search Index',
+  'admin.searchIndex.title': 'Search Index',
+  'admin.searchIndex.run': 'Run Indexer Now',
+  'admin.searchIndex.runAsked': 'Asked the Indexer to run now',
+  'admin.searchIndex.reindex': 'Reindex…',
+  // The figures, and the health beside its dot
+  'admin.searchIndex.indexed': 'Indexed',
+  'admin.searchIndex.waiting': 'Waiting',
+  'admin.searchIndex.failed': "Couldn't Be Indexed",
+  'admin.searchIndex.healthy': 'Index Healthy',
+  'admin.searchIndex.attention': 'Needs Attention',
+  // The Indexer's runs, on one line under the health
+  'admin.searchIndex.indexer.running': 'The Indexer is running',
+  'admin.searchIndex.indexer.runningSince': 'The Indexer is running, since {when}',
+  'admin.searchIndex.indexer.last': 'Last run {when}',
+  'admin.searchIndex.indexer.never': 'Not run since the server started',
+  'admin.searchIndex.indexer.next': 'next {when}',
+  'admin.searchIndex.indexer.noNext': 'no next run',
+  // The tabs, the first two with their counts: "Couldn't Be Indexed (2)"
+  'admin.searchIndex.tabs': 'Search Index',
+  'admin.searchIndex.tabCount': '{label} ({count})',
+  'admin.searchIndex.tab.failed': "Couldn't Be Indexed",
+  'admin.searchIndex.tab.waiting': 'Waiting',
+  'admin.searchIndex.tab.history': 'History',
+  // The tabs' columns
+  'admin.searchIndex.column.docNumber': 'Doc #',
+  'admin.searchIndex.column.title': 'Title',
+  'admin.searchIndex.column.matter': '{matter}',
+  'admin.searchIndex.column.reason': 'Reason',
+  'admin.searchIndex.column.when': 'When',
+  'admin.searchIndex.column.actions': 'Actions',
+  'admin.searchIndex.column.lastChanged': 'Last Changed',
+  'admin.searchIndex.column.reindex': 'Reindex',
+  'admin.searchIndex.column.startedBy': 'Started By',
+  'admin.searchIndex.column.started': 'Started',
+  'admin.searchIndex.column.documents': 'Documents',
+  'admin.searchIndex.column.outcome': 'Outcome',
+  'admin.searchIndex.column.time': 'Time',
+  'admin.searchIndex.column.event': 'Event',
+  'admin.searchIndex.column.who': 'Who',
+  // A document's doc #, as the lists show it
+  'admin.searchIndex.docNumber': '# {n}',
+  'admin.searchIndex.noNumber': 'No doc #',
+  'admin.searchIndex.showMore': 'Show More',
+  // Couldn't Be Indexed: Try Again and Skip, each named with its document for a screen reader
+  'admin.searchIndex.failed.about': "Each document that couldn't be indexed, the latest error first. LogicalDOC's Indexer tries each again on its schedule; Try Again tries one now, and Skip stops it being tried.",
+  'admin.searchIndex.failed.none': 'Every document has been indexed or is waiting to be.',
+  'admin.searchIndex.noReason': 'No reason was kept',
+  'admin.searchIndex.retry': 'Try Again',
+  'admin.searchIndex.retryName': 'Try Again: {name}',
+  'admin.searchIndex.skip': 'Skip',
+  'admin.searchIndex.skipName': 'Skip {name}',
+  'admin.searchIndex.noDocNumber': "This document has no doc #, so it can't be tried again from here. Reindex its folder to try it again.",
+  'admin.searchIndex.retried.indexed': 'Indexed now.',
+  'admin.searchIndex.retried.failed': "Still couldn't be indexed: {reason}",
+  'admin.searchIndex.indexedToast': 'Indexed {name}',
+  'admin.searchIndex.stillFailedToast': "{name} still couldn't be indexed",
+  'admin.searchIndex.skippedToast': 'Set {name} not to be indexed',
+  'admin.searchIndex.skipTitle': 'Skip {name}?',
+  'admin.searchIndex.skipLine':
+    "It won't be tried again, by LogicalDOC's Indexer or by a reindex, and search won't find its text. If it has an entry in the index, the entry stays.",
+  // Waiting
+  'admin.searchIndex.waiting.about': "Each document waiting for LogicalDOC's Indexer, in the order they were filed, not the order the Indexer takes them in. Last Changed is when the document last changed, which is when most began to wait.",
+  'admin.searchIndex.waiting.none': 'No document is waiting to be indexed.',
+  // History: the reindexes, then what the index was given
+  'admin.searchIndex.history.reindexes': 'Reindexes',
+  'admin.searchIndex.history.noReindexes': 'No reindex has been started.',
+  'admin.searchIndex.history.events': 'Index Events',
+  'admin.searchIndex.history.noEvents': 'Nothing has been indexed yet.',
+  'admin.searchIndex.history.noneYet': 'Nothing found yet in what has been read. Show More reads further back.',
+  'admin.searchIndex.history.noneBackTo': 'Nothing found back to {when}. Show More reads further back.',
+  'admin.searchIndex.history.reach': 'Read back to {when}',
+  'admin.searchIndex.history.end': 'No older events.',
+  'admin.searchIndex.event.indexed': 'Indexed',
+  'admin.searchIndex.event.failed': "Couldn't Be Indexed",
+  // A reindex's state, on the History tab
+  'admin.searchIndex.state.waiting': 'Waiting Its Turn',
+  'admin.searchIndex.state.running': 'Running',
+  'admin.searchIndex.state.cancelling': 'Stopping',
+  'admin.searchIndex.state.done': 'Done',
+  'admin.searchIndex.state.cancelled': 'Cancelled',
+  // A reindex's card, above the tabs: its title by its state, who started it, its progress, how it ended
+  'admin.searchIndex.job.running': 'Reindexing {name}',
+  'admin.searchIndex.job.waiting': 'Waiting to Reindex {name}',
+  'admin.searchIndex.job.done': 'Reindexed {name}',
+  'admin.searchIndex.job.cancelled': 'Cancelled Reindexing {name}',
+  'admin.searchIndex.job.startedBy': 'Started by {name}, {when}',
+  'admin.searchIndex.job.documents': 'Documents',
+  'admin.searchIndex.job.lessThanAMinute': 'less than a minute left',
+  'admin.searchIndex.job.searchWorks': 'search keeps working while it runs',
+  'admin.searchIndex.job.stalled': "waiting for the index, which can't be written to since {when}: it tries again shortly",
+  'admin.searchIndex.job.stopping': 'stopping once the documents it has started on are done',
+  'admin.searchIndex.job.turn': 'Waiting its turn, as one reindex runs at a time: {documents}.',
+  'admin.searchIndex.job.doneOutcome': '{outcome}.',
+  'admin.searchIndex.job.cancelledOutcome': 'Cancelled: {outcome} before it stopped.',
+  'admin.searchIndex.job.cancelledBeforeStart': 'Cancelled before it started, so nothing in the index changed.',
+  'admin.searchIndex.job.failedJoin': "Those that couldn't be indexed are on the Couldn't Be Indexed tab.",
+  'admin.searchIndex.job.cancel': 'Cancel',
+  'admin.searchIndex.job.cancelName': 'Cancel {title}',
+  'admin.searchIndex.job.close': 'Close',
+  'admin.searchIndex.job.closeName': 'Close {title}',
+  'admin.searchIndex.job.cancelledToast': 'Cancelled the reindex of {name}',
+  'admin.searchIndex.job.stoppingToast': 'Asked the reindex of {name} to stop',
+  // Cancel's question
+  'admin.searchIndex.cancelTitle': 'Cancel the Reindex of {name}?',
+  'admin.searchIndex.cancelConfirm': 'Cancel Reindex',
+  'admin.searchIndex.cancelWaiting': "It hasn't started, so nothing in the index changes.",
+  'admin.searchIndex.cancelRunning': "It stops once the documents it has started on are done. The documents it hasn't reached keep the entries they have in the index.",
+
+  // Reindex dialog (spec 8.9, P6-R18): its five choices, what each finds, the count and estimate, and Start
+  'admin.reindex.title': 'Reindex',
+  'admin.reindex.choices': 'What to Reindex',
+  'admin.reindex.kind.documents': 'Documents',
+  'admin.reindex.kind.folder': 'Folder',
+  'admin.reindex.kind.matter': '{matter}',
+  'admin.reindex.kind.store': 'Store',
+  'admin.reindex.kind.everything': 'Everything',
+  // Matter, and Folder's first step: a search that starts from Recent Matters
+  'admin.reindex.matter': '{matter}',
+  'admin.reindex.findMatter': 'Find a {matterLower}',
+  'admin.reindex.matterHint': 'Search by {matterLower} number, name or client.',
+  'admin.reindex.recentMatters': 'Recent {matters}',
+  // Folder, once its matter is chosen: the matter, the way back to the search, and its folders
+  'admin.reindex.folderMatter': '{matter}: {name}',
+  'admin.reindex.otherMatter': 'Choose Another {matter}',
+  'admin.reindex.folder': 'Folder',
+  'admin.reindex.filterFolders': "Filter this {matterLower}'s folders",
+  'admin.reindex.folderHint': 'Includes every folder inside the one you pick.',
+  'admin.reindex.folders': 'Folders in {name}',
+  // A folder found by a filter, below the top's own folders: the folders it's in
+  'admin.reindex.folderIn': 'in {path}',
+  'admin.reindex.noFolders': "This {matterLower} has no folders of its own. Reindex the {matterLower} instead.",
+  // Documents: doc #s typed or pasted, each as matched or not
+  'admin.reindex.docNumbers': 'Doc #s',
+  'admin.reindex.docNumbersHint': 'Type or paste doc #s, with commas, spaces or new lines between them.',
+  'admin.reindex.docNumber': '# {number}',
+  'admin.reindex.matches': 'Doc #s Given',
+  'admin.reindex.noSuchDocument': 'No such document',
+  'admin.reindex.leftOutDocument': "Left out: it's set to Skip, archived or being changed",
+  // Store: a plain list, each with its documents
+  'admin.reindex.store': 'Store',
+  'admin.reindex.notCounted': 'Not counted yet',
+  'admin.reindex.noStores': 'There are no Stores yet.',
+  // Everything's tick box, unticked, and its warning
+  'admin.reindex.emptyFirst': 'Empty the index first',
+  'admin.reindex.emptyFirstWarning': 'Empty the index first is for a damaged index. Search then misses documents until the run ends.',
+  'admin.reindex.estimate.short': 'Under a minute for {documents}. Search keeps working meanwhile.',
+  'admin.reindex.everything.short': "All {documents}, in under a minute. Search keeps finding them while they're replaced.",
+  // The button, until the preview gives its count, and for Everything
+  'admin.reindex.start': 'Reindex',
+  'admin.reindex.startEverything': 'Reindex Everything',
+  // Its openers: on a matter's page, and on a folder of a matter's Workspace
+  'admin.matter.reindex': 'Reindex',
+  'admin.workspace.reindex': 'Reindex',
+
   // The problems only the admin API answers, which the shared catalogue doesn't hold
   'problems.storage-unavailable': "This server doesn't have Healdan's storage module.",
   'problems.secret-key-missing': "Healdan's secret key file is missing.",
@@ -1453,11 +1609,49 @@ export const adminPlurals = {
   // What a run of Show More found, said to a screen reader as it ends
   'admin.audit.moreRows': { one: '{n} more row', other: '{n} more rows' },
 
+  // Reindex dialog, its plurals
+  // The button, with the preview's count
+  'admin.reindex.startCount': { one: 'Reindex {n} Document', other: 'Reindex {n} Documents' },
+  // The estimate under the choice, from the preview, in minutes, or in hours for a long one
+  'admin.reindex.estimate.minutes': {
+    one: 'About a minute for {documents}. Search keeps working meanwhile.',
+    other: 'About {n} minutes for {documents}. Search keeps working meanwhile.',
+  },
+  'admin.reindex.estimate.hours': {
+    one: 'About an hour for {documents}. Search keeps working meanwhile.',
+    other: 'About {n} hours for {documents}. Search keeps working meanwhile.',
+  },
+  'admin.reindex.everything.minutes': {
+    one: "All {documents}, in about a minute. Search keeps finding them while they're replaced.",
+    other: "All {documents}, in about {n} minutes. Search keeps finding them while they're replaced.",
+  },
+  'admin.reindex.everything.hours': {
+    one: "All {documents}, in about an hour. Search keeps finding them while they're replaced.",
+    other: "All {documents}, in about {n} hours. Search keeps finding them while they're replaced.",
+  },
+  // What the preview leaves out of a folder, matter, Store or everything
+  'admin.reindex.leftOut': {
+    one: "{n} more is left out: a shortcut, or a document set to Skip, archived or being changed.",
+    other: '{n} more are left out: shortcuts, and documents set to Skip, archived or being changed.',
+  },
+
   // Monitoring: Background Jobs, its plurals
   // A LogicalDOC task's schedule, every so many seconds, minutes or hours, in the largest of them that fits it whole
   'admin.jobs.every.seconds': { one: 'Every second', other: 'Every {n} seconds' },
   'admin.jobs.every.minutes': { one: 'Every minute', other: 'Every {n} minutes' },
   'admin.jobs.every.hours': { one: 'Every hour', other: 'Every {n} hours' },
+
+  // Search Index, its plurals
+  'admin.searchIndex.entries': { one: '{n} entry', other: '{n} entries' },
+  'admin.searchIndex.documents': { one: '{n} document', other: '{n} documents' },
+  // Under a running reindex's bar: "212 of 412 documents"
+  'admin.searchIndex.job.ofDocuments': { one: '{value} of {n} document', other: '{value} of {n} documents' },
+  'admin.searchIndex.job.minutesLeft': { one: 'about a minute left', other: 'about {n} minutes left' },
+  'admin.searchIndex.job.hoursLeft': { one: 'about an hour left', other: 'about {n} hours left' },
+  // How a reindex went: "412 reindexed, 2 couldn't be indexed, 1 skipped"
+  'admin.searchIndex.outcome.reindexed': { one: '{n} reindexed', other: '{n} reindexed' },
+  'admin.searchIndex.outcome.failed': { one: "{n} couldn't be indexed", other: "{n} couldn't be indexed" },
+  'admin.searchIndex.outcome.skipped': { one: '{n} skipped', other: '{n} skipped' },
 } as const satisfies Record<`admin.${string}`, PluralForms>
 
 export type AdminStringKey = keyof typeof adminEnUS

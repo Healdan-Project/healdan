@@ -40,12 +40,16 @@ function Example({
   selectedId,
   initial = [series, charter],
   leaveOut,
+  minLength,
+  isDisabled,
 }: {
   search: (q: string) => Promise<Matter[]>
   onPick?: (matter: Matter) => void
   selectedId?: string
   initial?: Matter[]
   leaveOut?: (matter: Matter) => boolean
+  minLength?: number
+  isDisabled?: boolean
 }) {
   return (
     <SearchPicker
@@ -67,6 +71,8 @@ function Example({
       onPick={onPick}
       selectedId={selectedId}
       leaveOut={leaveOut}
+      minLength={minLength}
+      isDisabled={isDisabled}
     />
   )
 }
@@ -194,6 +200,29 @@ describe('SearchPicker', () => {
     await user.clear(field())
     expect(screen.getByRole('listbox', { name: 'Recent Matters' })).toBeTruthy()
     expect(search).toHaveBeenCalledOnce()
+  })
+
+  it('asks from one character when its caller says one is enough, as for a one-digit number', async () => {
+    const user = userEvent.setup()
+    const { search, asked } = controlled()
+    render(<Example search={search} minLength={1} />)
+    await user.type(field(), '1')
+    await waitFor(() => expect(search).toHaveBeenCalledWith('1'))
+    await act(async () => asked[0]!.answer([charter]))
+    expect(await screen.findByRole('listbox', { name: '1 Result' })).toBeTruthy()
+  })
+
+  it('takes no typing and no pick while it is disabled, the picked row still shown', async () => {
+    const user = userEvent.setup()
+    const onPick = vi.fn()
+    const { search } = controlled()
+    const { container } = render(<Example search={search} onPick={onPick} selectedId={String(charter.id)} isDisabled />)
+    expect((field() as HTMLInputElement).disabled).toBe(true)
+    await user.click(screen.getByRole('option', { name: /Series A Investment/ }))
+    expect(onPick).not.toHaveBeenCalled()
+    expect(screen.getByRole('option', { name: /Charter Dispute/ }).getAttribute('aria-selected')).toBe('true')
+    expect(screen.getByRole('option', { name: /Series A Investment/ }).getAttribute('aria-disabled')).toBe('true')
+    await expectNoAxeViolations(container)
   })
 
   it('leaves out the rows its caller says to, among the starting rows and what is found, as they change', async () => {

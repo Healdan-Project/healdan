@@ -3,7 +3,7 @@
 
 import { createMemoryHistory } from '@tanstack/react-router'
 import { describe, expect, it } from 'vitest'
-import { ADMIN_BASE, appAddressOf, clientHref, groupHref, groupIdFrom, pathOf, routes, searchId } from './addresses'
+import { ADMIN_BASE, appAddressOf, clientHref, groupHref, groupIdFrom, pathOf, reindexHref, routes, searchId, searchIndexSearch } from './addresses'
 import { createAdminRouter } from './router'
 
 // CE's UrlRewriteFilter isn't anchored at the start of the path, and login.jsp drops some return paths, so no address
@@ -144,5 +144,19 @@ describe("A group's id", () => {
 
   it("names a group's page, a negative id as one segment", () => {
     expect(groupHref(-10000)).toBe('/admin/groups/-10000')
+  })
+})
+
+describe("The Search Index's address", () => {
+  it('reads the tab, the Reindex dialog\'s choice and its ids, and leaves out anything else', () => {
+    expect(searchIndexSearch({ tab: 'waiting', reindex: 'folder', id: '115', matter: 11 })).toEqual({ tab: 'waiting', reindex: 'folder', id: 115, matter: 11 })
+    expect(searchIndexSearch({ tab: 'failed', reindex: 'sideways', id: 'x', matter: '-1', other: 'y' })).toEqual({ tab: undefined, reindex: undefined, id: undefined, matter: undefined })
+    expect(searchIndexSearch({ tab: 'history' }).tab).toBe('history')
+  })
+
+  it("links to the Reindex dialog open on a choice, as a matter's page and the Workspace Editor do", () => {
+    expect(reindexHref('matter', 12)).toBe('/admin/search-index?reindex=matter&id=12')
+    expect(reindexHref('folder', 115, 11)).toBe('/admin/search-index?reindex=folder&id=115&matter=11')
+    expect(reindexHref('everything')).toBe('/admin/search-index?reindex=everything')
   })
 })

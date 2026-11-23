@@ -7,7 +7,7 @@ import { findNode, type WorkspaceNode } from './tree'
 import styles from './Workspace.module.css'
 
 /** What the tree's menus and keys ask the editor to do with a node */
-export type FolderAction = 'new-folder' | 'new-search-folder' | 'rename' | 'move' | 'delete'
+export type FolderAction = 'new-folder' | 'new-search-folder' | 'rename' | 'move' | 'delete' | 'reindex'
 
 export interface FolderTreeProps {
   root: WorkspaceNode
@@ -18,6 +18,8 @@ export interface FolderTreeProps {
   onSelect: (id: number) => void
   expanded: Set<string>
   onExpandedChange: (expanded: Set<string>) => void
+  /** Whether a folder below the top offers Reindex: in a matter's workspace only, never a template's */
+  reindexable?: boolean
   /** A menu item, F2 or Delete on a node */
   onAction: (action: FolderAction, node: WorkspaceNode) => void
 }
@@ -47,10 +49,15 @@ function NodeLabel({ node, top, kind }: { node: WorkspaceNode; top: boolean; kin
   )
 }
 
-/** The actions a node offers: a folder holds new folders and search folders; all but the top are renamed, moved and deleted */
-export function actionsOf(node: WorkspaceNode, top: boolean): FolderAction[] {
+/**
+ * The actions a node offers: a folder holds new folders and search folders; all but the top are renamed, moved and
+ * deleted; and, in a matter's workspace, a folder below the top is reindexed (`reindexable`), as a search folder holds no
+ * documents and the top is the matter's own, which its page reindexes
+ */
+export function actionsOf(node: WorkspaceNode, top: boolean, reindexable = false): FolderAction[] {
   const making: FolderAction[] = node.kind === 'folder' ? ['new-folder', 'new-search-folder'] : []
-  return top ? making : [...making, 'rename', 'move', 'delete']
+  if (top) return making
+  return [...making, 'rename', 'move', 'delete', ...(reindexable && node.kind === 'folder' ? (['reindex'] as const) : [])]
 }
 
 const ACTION_LABELS = {
@@ -59,6 +66,7 @@ const ACTION_LABELS = {
   rename: 'admin.workspace.rename',
   move: 'admin.workspace.move',
   delete: 'admin.workspace.delete',
+  reindex: 'admin.workspace.reindex',
 } as const
 
 /**
@@ -66,7 +74,7 @@ const ACTION_LABELS = {
  * of its own. A click or Enter chooses a node; the arrow keys walk the tree, as React Aria's does. F2 renames, Delete
  * deletes, and a right-click, Shift+F10 or the menu key opens a node's menu of what it offers (actionsOf).
  */
-export function FolderTree({ root, kind, selected, onSelect, expanded, onExpandedChange, onAction }: FolderTreeProps) {
+export function FolderTree({ root, kind, selected, onSelect, expanded, onExpandedChange, reindexable = false, onAction }: FolderTreeProps) {
   const nodeOf = (key: string) => findNode(root, Number(key))
   const toTreeNode = (node: WorkspaceNode): TreeNode => ({
     id: String(node.id),
@@ -79,7 +87,7 @@ export function FolderTree({ root, kind, selected, onSelect, expanded, onExpande
     items: (key) => {
       const node = nodeOf(key)
       if (!node) return undefined
-      return actionsOf(node, node.id === root.id).map((action) => (
+      return actionsOf(node, node.id === root.id, reindexable).map((action) => (
         <MenuItem key={action} id={action} onAction={() => onAction(action, node)}>
           {t(ACTION_LABELS[action])}
         </MenuItem>

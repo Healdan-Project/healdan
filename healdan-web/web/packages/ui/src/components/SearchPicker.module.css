@@ -82,6 +82,11 @@
   box-shadow: var(--hd-focus-inset);
 }
 
+/* A row that can't be picked while the form it's in is on its way: greyed out, the picked one still shown */
+.option[data-disabled] {
+  color: var(--hd-text-secondary);
+}
+
 .check {
   margin-inline-start: auto;
 }

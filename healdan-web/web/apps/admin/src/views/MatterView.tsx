@@ -6,8 +6,9 @@ import { useId, useState, type ReactNode } from 'react'
 import { ApiError, type adminComponents } from '@healdan/api'
 import { ErrorPanel, idFrom } from '@healdan/shell'
 import { Button, formatCount, formatDateTime, formatSize, Icon, Tabs } from '@healdan/ui'
-import { routes, userAppFolderHref } from '../addresses'
+import { reindexHref, routes, userAppFolderHref } from '../addresses'
 import { Fact } from '../facts/Fact'
+import { ServerLink } from '../frame/ServerLink'
 import { DeleteMatterDialog } from '../matters/DeleteMatterDialog'
 import { EditMatterDialog } from '../matters/EditMatterDialog'
 import { MoveMatterDialog } from '../matters/MoveMatterDialog'
@@ -121,6 +122,11 @@ function Matter({ matter, tab }: { matter: A['Matter']; tab: MatterTab }) {
               {t('admin.matter.move')}
             </span>
           </Button>
+          {/* The Search Index's Reindex dialog, with the matter chosen (P6-R18) */}
+          <ServerLink className={page.linkButton} href={reindexHref('matter', matter.id)}>
+            <Icon name="refresh" size={14} />
+            {t('admin.matter.reindex')}
+          </ServerLink>
           <a className={page.linkButton} href={userAppFolderHref(matter.folderId)}>
             <Icon name="arrowUpRight" size={14} />
             {t('admin.matter.open')}
@@ -140,7 +146,7 @@ function Matter({ matter, tab }: { matter: A['Matter']; tab: MatterTab }) {
         onSelect={choose}
         tabs={[
           { id: 'overview', label: t('admin.matter.tab.overview'), content: <Overview matter={matter} /> },
-          { id: 'workspace', label: t('admin.matter.tab.workspace'), keepMounted: workspaceOpened, content: <WorkspaceEditor rootFolderId={matter.folderId} kind="matter" /> },
+          { id: 'workspace', label: t('admin.matter.tab.workspace'), keepMounted: workspaceOpened, content: <WorkspaceEditor rootFolderId={matter.folderId} kind="matter" matterId={matter.id} /> },
           // The Audit Trail for the matter (P5-R24): the Workspace behind it stays as it was, and changing to it asks nothing
           {
             id: 'activity',

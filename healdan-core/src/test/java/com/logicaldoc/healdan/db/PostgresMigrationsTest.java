@@ -31,27 +31,28 @@ import com.logicaldoc.healdan.TestDatabase;
 import com.logicaldoc.healdan.db.HealdanMigrator.Status;
 
 /**
- * Healdan's tables on PostgreSQL: the {@code postgresql/} scripts, V1 to V13 (spec
+ * Healdan's tables on PostgreSQL: the {@code postgresql/} scripts, V1 to V14 (spec
  * section 6.5), apply on a database with CE's schema.
  */
 public class PostgresMigrationsTest {
 
-	/** How many date columns Healdan's tables have but Flyway's history, V1 to V13 */
-	private static final int DATE_COLUMNS = 41;
+	/** How many date columns Healdan's tables have but Flyway's history, V1 to V14 */
+	private static final int DATE_COLUMNS = 45;
 
-	/** The columns declared timestamp(3), V4's, V11's and V12's */
+	/** The columns declared timestamp(3), V4's, V11's, V12's and V14's */
 	private static final Set<String> MILLISECOND_COLUMNS = Set.of("hd_hold_device.ld_lastmodified",
 			"hd_hold_device.ld_creation", "hd_trash.hd_deletedat", "hd_trash_member.hd_removedat",
 			"hd_trash_member.hd_restoredat", "hd_trash_member.hd_destroyedat", "hd_admin_event.hd_date",
-			"hd_error.hd_firstseen", "hd_error.hd_lastseen", "hd_error.hd_resolvedat");
+			"hd_error.hd_firstseen", "hd_error.hd_lastseen", "hd_error.hd_resolvedat", "hd_reindex_job.hd_created",
+			"hd_reindex_job.hd_started", "hd_reindex_job.hd_ended", "hd_reindex_job.hd_stalled");
 
 	/**
 	 * hd_schema_history once every script has applied: Flyway's baseline at
 	 * version 0, which it writes as CE's tables were there first, then a
-	 * successful row for each of the thirteen scripts
+	 * successful row for each of the fourteen scripts
 	 */
 	private static final List<String> HISTORY = Stream
-			.concat(Stream.of("0 BASELINE true"), IntStream.rangeClosed(1, 13).mapToObj(v -> v + " SQL true"))
+			.concat(Stream.of("0 BASELINE true"), IntStream.rangeClosed(1, 14).mapToObj(v -> v + " SQL true"))
 			.toList();
 
 	/** The eight columns V13 widens */
@@ -96,7 +97,7 @@ public class PostgresMigrationsTest {
 
 		assertEquals(Status.MIGRATED, migrator.migrate());
 
-		assertEquals(MigrationVersion.fromVersion("13"), migrator.currentVersion());
+		assertEquals(MigrationVersion.fromVersion("14"), migrator.currentVersion());
 		assertEquals(HISTORY, history());
 	}
 
@@ -108,8 +109,8 @@ public class PostgresMigrationsTest {
 		assertEquals("text", jdbc.queryForObject("select data_type from information_schema.columns "
 				+ "where table_name = 'hd_api_token' and column_name = 'hd_refresh'", String.class));
 
-		// V11's and V12's auto_increment
-		for (String table : List.of("hd_trash", "hd_admin_event", "hd_error"))
+		// V11's and V12's auto_increment, and V14's identity
+		for (String table : List.of("hd_trash", "hd_admin_event", "hd_error", "hd_reindex_job"))
 			assertEquals(table, "YES", jdbc.queryForObject("select is_identity from information_schema.columns "
 					+ "where table_name = ? and column_name = 'hd_id'", String.class, table));
 
@@ -147,6 +148,8 @@ public class PostgresMigrationsTest {
 		assertEquals("hd_admin_event (hd_userid)", indexes.get("hd_admin_event_user"));
 		assertEquals("hd_error (hd_fingerprint)", indexes.get("hd_error_fingerprint"));
 		assertEquals("hd_error (hd_lastseen)", indexes.get("hd_error_lastseen"));
+		assertEquals("hd_reindex_job (hd_state, hd_id)", indexes.get("hd_reindex_job_state"));
+		assertEquals("hd_reindex_doc (hd_jobid, hd_docid)", indexes.get("hd_reindex_doc_pkey"));
 
 		// V12's inline unique index, made unique after its table
 		String definition = "select indexdef from pg_indexes where schemaname = current_schema() and indexname = ?";

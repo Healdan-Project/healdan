@@ -57,4 +57,19 @@ public final class PersonNames {
 	public static String recorded(User user) {
 		return recorded(user.getFirstName(), user.getName(), user.getUsername());
 	}
+
+	/**
+	 * How a history row names who did it, as the Audit Trail's {@code who} does: the account's name now, when the
+	 * row's user id names an account of the tenant; otherwise the name the row kept, null when it's blank.
+	 *
+	 * @param nameNow the account's name as {@link #of(String, String, String)} gives it; null when no account has
+	 *        the row's user id
+	 * @param kept the name the row kept
+	 * @return who did it; null when the row names no one
+	 */
+	public static String who(String nameNow, String kept) {
+		if (nameNow != null)
+			return nameNow;
+		return kept == null || kept.isBlank() ? null : kept;
+	}
 }
