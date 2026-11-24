@@ -23,6 +23,22 @@ Where to look first:
 PostgreSQL's log is `docker compose logs db`. Its error lines can quote the row a statement failed on, with names,
 subjects and comments in it, so read what you copy from it before you post it anywhere, such as in an issue.
 
+## A Source Build Takes Longer Than Usual
+
+Docker's default build cache policy can remove unused download caches after 48 hours. The next source build
+downloads about 650 MB of Maven dependencies again.
+See [Docker's build cache policy](https://docs.docker.com/build/cache/garbage-collection/).
+
+To see each step's output as it runs, build the app image on its own. The running app stays up during this command.
+
+```bash
+docker compose --progress plain build app
+```
+
+For download details, temporarily remove `-ntp` from the Maven command in `Dockerfile` and run the build again.
+Maven then prints the repository URLs as it tries them. Once the build succeeds, use the upgrade command to
+start the new image. See [Upgrading](../upgrading/).
+
 ## The Build Stops with "Illegal Instruction"
 
 When `docker compose up -d --build` stops while building `healdan-web` with these lines, the processor lacks

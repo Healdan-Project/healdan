@@ -28,6 +28,9 @@ docker pull tomcat:11.0.29-jre25-temurin
 docker compose up -d --build
 ```
 
+If Compose spends longer than usual on the build, see
+[A Source Build Takes Longer Than Usual](../troubleshooting/#a-source-build-takes-longer-than-usual).
+
 To update PostgreSQL to the newest release of its version, 18, too, run `docker compose pull --ignore-buildable`
 before that. A plain `docker compose pull` fails, because the app's image is built here and can't be pulled. A new
 major version of PostgreSQL is another matter: see

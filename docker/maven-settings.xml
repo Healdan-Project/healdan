@@ -1,31 +1,24 @@
 <settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"
           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
           xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0 https://maven.apache.org/xsd/settings-1.0.0.xsd">
-  <!-- CI, the Docker build and local builds copy this file to ~/.m2/settings.xml. Some dependencies aren't on Maven
-       Central: Healdan hosts the ones only LogicalDOC's repository has, and Terracotta's repository has the rest.
-       Upstream's two retired repositories go to Central. The design is
-       docs/superpowers/specs/2026-10-29-healdan-maven-repository-design.md. -->
+  <!-- CI, the Docker build and local builds use this settings file. Healdan hosts the artifacts from LogicalDOC's
+       repository and Alfresco's Jakarta OpenCMIS build. Terracotta supplies org.terracotta.internal:statistics.
+       .github/scripts/check-maven-repositories.py checks declarations in project POMs and in this file. -->
   <mirrors>
-    <!-- Upstream's POMs declare LogicalDOC's repository (id logicaldoc, on logicaldoc.sourceforge.net). A mirror
-         matches by id, so every request for it, whatever URL a POM gives, goes to Healdan's copies instead.
-         .github/scripts/check-maven-repositories.py fails the build without this mirror. -->
+    <!-- Upstream's POMs declare repositories for LogicalDOC's artifacts and Alfresco's Jakarta OpenCMIS build.
+         The mirror matches their ids, so Maven resolves both sets of artifacts from Healdan's copies. -->
     <mirror>
       <id>healdan</id>
-      <name>Healdan's copies of artifacts only LogicalDOC's repository has</name>
-      <mirrorOf>logicaldoc</mirrorOf>
+      <name>Healdan's copies of LogicalDOC and Jakarta OpenCMIS artifacts</name>
+      <mirrorOf>logicaldoc,Alfresco Maven Repository</mirrorOf>
       <url>https://maven.healdan.com/</url>
     </mirror>
-    <!-- Upstream's parent POM also declares two repositories that have gone: java.net (maven.java.net, whose
-         certificate chain no longer validates) and sourceforge (oss.sonatype.org, Sonatype's retired OSSRH, which
-         answers 404). Neither serves anything, and a build on an empty local repository finds everything without
-         them, but Maven still asks every repository for each version range's metadata, so each CI test shard failed
-         a TLS handshake with java.net and warned of it dozens of times. This sends both to Central instead.
-         .github/scripts/check-maven-repositories.py fails the build when a POM declares a repository on either host
-         that no mirror to Central covers. -->
+    <!-- These repositories supply no artifacts to the build. In #302, Eclipse's Retry-After response held up
+         every OpenCMIS download from Alfresco. The last five ids belong to the samples outside the reactor. -->
     <mirror>
       <id>retired-repositories</id>
-      <name>Maven Central in place of upstream's retired java.net and Sonatype repositories</name>
-      <mirrorOf>java.net,sourceforge</mirrorOf>
+      <name>Maven Central in place of unused upstream repositories</name>
+      <mirrorOf>java.net,sourceforge,eclipse-releases,google-api-services,mulesoft-public,maven2-repository.dev.java.net,smartgwt,gwtupload,gwtchismes,gwt-image-loader-repo</mirrorOf>
       <url>https://repo1.maven.org/maven2</url>
     </mirror>
   </mirrors>
@@ -37,7 +30,8 @@
           <id>central</id>
           <url>https://repo1.maven.org/maven2</url>
         </repository>
-        <!-- Terracotta repository (org.terracotta.internal:statistics, etc.) -->
+        <!-- Terracotta supplies org.terracotta.internal:statistics:1.0.5 and its forge-parent POM. Healdan's
+             mirror importer takes a JAR with its POM, and the parent is published on its own. -->
         <repository>
           <id>terracotta</id>
           <url>https://repo.terracotta.org/maven2</url>
