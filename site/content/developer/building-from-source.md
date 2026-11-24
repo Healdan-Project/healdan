@@ -11,12 +11,11 @@ builds it for you. This page is for working on the code.
 - **JDK 25.** It's the JDK the `Dockerfile`'s `MAVEN_IMAGE` and `TOMCAT_IMAGE` name. CI's `build` check reads it
   from there, and fails if the two differ.
 - **Maven 3.9 or newer.**
-- **Two extra Maven repositories.** Some dependencies aren't on Maven Central. They come from Healdan's copies at
-  `https://maven.healdan.com/`, of the artifacts only LogicalDOC's repository has, and from
-  `https://repo.terracotta.org/maven2`. `docker/maven-settings.xml` lists them. It also sends two repositories
-  upstream's POMs declare but that have gone, `java.net` and `sourceforge` (Sonatype's retired OSSRH), to Maven
-  Central, so a build never contacts them. CI and the Docker build copy it to `~/.m2/settings.xml`; copy it there for
-  local builds.
+- **Healdan's Maven settings.** The build uses Maven Central, Healdan's copies of LogicalDOC's artifacts and
+  Alfresco's Jakarta build of OpenCMIS, and Terracotta's statistics library and its parent POM.
+  `docker/maven-settings.xml` sends unused repositories from upstream's POMs to Central. CI and the Docker build
+  copy it to `~/.m2/settings.xml`. For local builds, copy it there or pass `-s docker/maven-settings.xml` from
+  the repository root.
 - **`~/logicaldoc-dev.properties`.** Spring-based tests fail in `setUp` without it. An empty file works.
 - **Docker, for the test database.** The tests in Healdan's modules run on a PostgreSQL server, which
   `docker/tests/test-db.sh start` runs in a container (see [The Test Database](../tests/#the-test-database)).
@@ -50,6 +49,18 @@ A module's tests run against the installed jars of the modules it uses, so insta
   there's no test-jar. Their `with-tests` profiles then leave the test-jar out, and the build still works, but
   `healdan-api`'s, `healdan-storage`'s and `healdan-web`'s tests can't run until `healdan-core` is installed with
   `-DskipTests`.
+
+## Checking Repository Changes
+
+When changing where Maven gets its dependencies, run a build with a fresh local repository. Use a current
+Maven 3.9 release with `-itr`, the option CI and the Docker build use to ignore repositories declared by
+transitive dependencies. Leave transfer logging on so you can see both the repositories Maven tries and the
+ones that serve files.
+
+```bash
+healdan_maven_cache=$(mktemp -d)
+mvn -B -itr -s docker/maven-settings.xml -Dmaven.repo.local="$healdan_maven_cache" -DskipTests install
+```
 
 ## Skipping the GWT Compile
 

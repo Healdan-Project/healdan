@@ -26,11 +26,16 @@ COPY --exclude=docker --exclude=Dockerfile --exclude=.dockerignore --exclude=.gi
 # optional secret build_ca (docker build --secret id=build_ca,src=<file>, or HEALDAN_BUILD_CA=<file> for the Docker test
 # scripts), which docker/with-build-ca.sh has Maven and npm trust. Without it, the script runs Maven as it is. A secret
 # is neither in the layer nor in the cache key, so CI's build and the image are the same either way.
+# Give transient HTTP failures two retries. Maven Resolver skips a retry if the delay would exceed five seconds,
+# including when a repository sends a long Retry-After header (#302).
 RUN --mount=type=cache,target=/root/.m2/repository,sharing=locked \
     --mount=type=cache,target=/root/.npm \
     --mount=type=secret,id=build_ca \
     --mount=type=bind,source=docker/with-build-ca.sh,target=/tmp/with-build-ca.sh \
-    sh /tmp/with-build-ca.sh mvn -B -ntp -DskipTests install \
+    sh /tmp/with-build-ca.sh mvn -B -ntp -itr -DskipTests \
+      -Daether.connector.http.retryHandler.count=2 \
+      -Daether.connector.http.retryHandler.interval=1000 \
+      -Daether.connector.http.retryHandler.intervalMax=5000 install \
  && rm -rf /root/.m2/repository/com/logicaldoc
 RUN mkdir -p /build/ROOT \
  && cd /build/ROOT \

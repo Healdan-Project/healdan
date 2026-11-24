@@ -53,8 +53,7 @@ jobs:
       - name: Check for LogicalDOC's servers
         run: python3 .github/scripts/check-logicaldoc-hosts.py
 
-      # Builds get the artifacts only LogicalDOC's Maven repository has from Healdan's copies; a sync can bring
-      # another of LogicalDOC's repositories in
+      # A sync can add a Maven repository. Approve the endpoint or give its id an explicit mirror.
       - name: Check Maven repositories
         run: python3 .github/scripts/check-maven-repositories.py
 
@@ -290,7 +289,7 @@ jobs:
       # image CI also builds.
       - name: Maven install (all modules but the WAR, without the GWT compile)
         run: >-
-          mvn -B -ntp $MAVEN_METADATA -DskipTests -Dgwt.skipCompilation=true -Dmaven.antrun.skip=true -Dmaven.javadoc.skip=true
+          mvn -B -ntp -itr ${MAVEN_METADATA:+"$MAVEN_METADATA"} -DskipTests -Dgwt.skipCompilation=true -Dmaven.antrun.skip=true -Dmaven.javadoc.skip=true
           -Dhealdan.web.skip=true -Dassembly.skipAssembly=true -Dmaven.source.skip=true -pl '!logicaldoc-webapp' install
 
       # Each module gets the whole -Dtest list and runs the classes it has. -fae runs every module's tests even when
@@ -301,7 +300,7 @@ jobs:
           TESTS: ${{ matrix.tests }}
         run: |
           touch ~/logicaldoc-dev.properties
-          mvn -B -ntp $MAVEN_METADATA -fae -pl "$MODULES" test -Dgwt.skipCompilation=true -Dmaven.antrun.skip=true -Dhealdan.web.skip=true -Dsurefire.failIfNoSpecifiedTests=false -Dtest="$TESTS"
+          mvn -B -ntp -itr ${MAVEN_METADATA:+"$MAVEN_METADATA"} -fae -pl "$MODULES" test -Dgwt.skipCompilation=true -Dmaven.antrun.skip=true -Dhealdan.web.skip=true -Dsurefire.failIfNoSpecifiedTests=false -Dtest="$TESTS"
 
       - name: Record test times
         run: python3 .github/scripts/test-shards.py times ./*/target/surefire-reports > test-times-${{ matrix.shard }}.txt

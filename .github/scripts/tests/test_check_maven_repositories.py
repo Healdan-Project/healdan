@@ -20,62 +20,40 @@ POM = """<?xml version="1.0" encoding="UTF-8"?>
 """
 
 SETTINGS = """<settings xmlns="http://maven.apache.org/SETTINGS/1.0.0">
-{body}
+  <mirrors>
+{mirrors}
+  </mirrors>
+{repositories}
 </settings>
 """
 
-MIRROR = """  <mirrors>
-    <mirror>
-      <id>healdan</id>
+MIRROR = """    <mirror>
+      <id>{id}</id>
       <mirrorOf>{mirror_of}</mirrorOf>
-      <url>{url}</url>
-    </mirror>
-  </mirrors>"""
-
-RETIRED_MIRROR = """  <mirrors>
-    <mirror>
-      <id>healdan</id>
-      <mirrorOf>logicaldoc</mirrorOf>
-      <url>https://maven.healdan.com/</url>
-    </mirror>
-    <mirror>
-      <id>retired-repositories</id>
-      <mirrorOf>{mirror_of}</mirrorOf>
-      <url>{url}</url>
-    </mirror>
-  </mirrors>"""
+      <url>{url}</url>{extra}
+    </mirror>"""
 
 SOURCEFORGE = "https://logicaldoc.sourceforge.net/maven/"
-JAVA_NET = "https://maven.java.net/content/repositories/releases"
-OSSRH = "https://oss.sonatype.org/content/groups/sourceforge/"
+ECLIPSE = "https://repo.eclipse.org/content/groups/releases/"
+GOOGLE = "https://google-api-client-libraries.appspot.com/mavenrepo"
+ALFRESCO = "https://maven.alfresco.com/nexus/content/groups/public/"
+CENTRAL = "https://repo1.maven.org/maven2/"
 
 
 def repositories(*entries, tag="repository"):
-    """A <repositories> (or <pluginRepositories>) element, one <tag> per (id, url) entry, each four lines long."""
     wrapper = {"repository": "repositories", "pluginRepository": "pluginRepositories"}[tag]
     items = "".join(f"    <{tag}>\n      <id>{id_}</id>\n      <url>{url}</url>\n    </{tag}>\n" for id_, url in entries)
     return f"  <{wrapper}>\n{items}  </{wrapper}>"
-
-
-def problem(name, line, id_, host="logicaldoc.sourceforge.net"):
-    return f"{name}:{line}: repository {id_} " + checker.FIX.format(host=host, id=id_)
-
-
-def retired(name, line, id_, host):
-    return (f"{name}:{line}: repository {id_} "
-            + checker.RETIRED_FIX.format(host=host, why=checker.RETIRED[host], id=id_))
 
 
 class CheckMavenRepositoriesTest(unittest.TestCase):
 
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
         self.repo = pathlib.Path(self._tmp.name)
         subprocess.run(["git", "init", "-q"], cwd=self.repo, check=True)
-        self.settings(MIRROR.format(mirror_of="logicaldoc", url="https://maven.healdan.com/"))
-
-    def tearDown(self):
-        self._tmp.cleanup()
+        self.settings()
 
     def write(self, name, text, track=True):
         path = self.repo / name
@@ -84,115 +62,105 @@ class CheckMavenRepositoriesTest(unittest.TestCase):
         if track:
             subprocess.run(["git", "add", name], cwd=self.repo, check=True)
 
-    def settings(self, body):
-        self.write("docker/maven-settings.xml", SETTINGS.format(body=body))
+    def settings(self, *, mirror_of="logicaldoc", extra_mirror="", repos=""):
+        mirror = MIRROR.format(id="healdan", mirror_of=mirror_of, url="https://maven.healdan.com/", extra="")
+        self.write(checker.SETTINGS, SETTINGS.format(mirrors=mirror + extra_mirror, repositories=repos))
 
     def problems(self):
         return checker.find_problems(self.repo)
 
-    def test_mirrored_repository_passes_whatever_its_url(self):
-        self.write("pom.xml", POM.format(body=repositories(("logicaldoc", "https://logicaldoc.sourceforge.net/maven"))))
-        self.write("logicaldoc-webdav/pom.xml",
-                   POM.format(body=repositories(("logicaldoc", "http://logicaldoc.sourceforge.net/maven"))))
+    def test_approved_direct_repositories_pass(self):
+        self.write("pom.xml", POM.format(body=repositories(
+            ("central", "https://repo.maven.apache.org/maven2/"),
+            ("terracotta", "https://repo.terracotta.org/maven2"))))
         self.assertEqual([], self.problems())
 
-    def test_unmirrored_repository_reported_with_file_and_line(self):
-        for url in (SOURCEFORGE, "http://logicaldoc.sourceforge.net/maven"):
-            with self.subTest(url):
-                self.write("a/pom.xml", POM.format(body=repositories(("central", "https://repo1.maven.org/maven2"),
-                                                                     ("logicaldoc-snapshots", url))))
-                self.assertEqual([problem("a/pom.xml", 9, "logicaldoc-snapshots")], self.problems())
+    def test_alfresco_must_be_mirrored_to_healdan(self):
+        self.write("pom.xml", POM.format(body=repositories(("Alfresco Maven Repository", ALFRESCO))))
+        problem, = self.problems()
+        self.assertIn("needs a mirror to https://maven.healdan.com", problem)
+        self.settings(mirror_of="logicaldoc,Alfresco Maven Repository")
+        self.assertEqual([], self.problems())
 
-    def test_other_logicaldoc_hosts_reported(self):
+    def test_wrong_url_reported_even_under_an_approved_id(self):
+        for url in ("http://repo1.maven.org/maven2", "https://repo1.maven.org/other", "${repository.url}"):
+            with self.subTest(url=url):
+                self.write("pom.xml", POM.format(body=repositories(("central", url))))
+                problem, = self.problems()
+                self.assertIn(f"pom.xml:5: repository central ({url}) is unapproved", problem)
+
+    def test_explicit_mirrors_cover_dependencies_and_plugins(self):
+        self.settings(mirror_of="logicaldoc,logicaldoc-snapshots",
+                      extra_mirror="\n" + MIRROR.format(id="unused", mirror_of="eclipse-releases,google-api-services",
+                                                        url=CENTRAL, extra=""))
+        self.write("pom.xml", POM.format(body=repositories(("eclipse-releases", ECLIPSE),
+                                                           ("logicaldoc-snapshots", SOURCEFORGE))))
+        self.write("sub/pom.xml", POM.format(body=repositories(("google-api-services", GOOGLE), tag="pluginRepository")))
+        self.assertEqual([], self.problems())
+
+    def test_unmirrored_repositories_reported_with_file_and_line(self):
+        self.write("pom.xml", POM.format(body=repositories(("eclipse-releases", ECLIPSE))))
+        self.write("sub/pom.xml", POM.format(body=repositories(("new-plugins", "https://example.org/maven"),
+                                                              tag="pluginRepository")))
+        dependency, plugin = self.problems()
+        self.assertIn("pom.xml:5: repository eclipse-releases (https://repo.eclipse.org/content/groups/releases) "
+                      "is unapproved", dependency)
+        self.assertIn("sub/pom.xml:5: repository new-plugins (https://example.org/maven) is unapproved", plugin)
+
+    def test_settings_repositories_checked(self):
+        self.settings(repos=repositories(("google-api-services", GOOGLE)))
+        problem, = self.problems()
+        self.assertIn("docker/maven-settings.xml:10: repository google-api-services", problem)
+
+    def test_mirrors_to_unapproved_destinations_rejected(self):
+        extra = MIRROR.format(id="invalid", mirror_of="central", url="https://example.org/maven", extra="")
+        self.settings(extra_mirror="\n" + extra)
+        problem, = self.problems()
+        self.assertIn("mirror of central must point to Maven Central or https://maven.healdan.com", problem)
+
+    def test_wildcard_padded_and_blocked_mirrors_do_not_cover_repositories(self):
+        for ids, extra in (("*", ""), ("eclipse-releases, google-api-services", ""),
+                           ("eclipse-releases", "<blocked>true</blocked>"),
+                           ("eclipse-releases", "<mirrorOfLayouts>legacy</mirrorOfLayouts>")):
+            with self.subTest(ids=ids, extra=extra):
+                mirror = MIRROR.format(id="unused", mirror_of=ids, url=CENTRAL, extra=extra)
+                self.settings(extra_mirror="\n" + mirror)
+                self.write("pom.xml", POM.format(body=repositories(("eclipse-releases", ECLIPSE))))
+                invalid, unapproved = self.problems()
+                self.assertIn("needs explicit repository ids", invalid)
+                self.assertIn("repository eclipse-releases", unapproved)
+
+    def test_overlapping_mirrors_reported(self):
+        extra = MIRROR.format(id="overlap", mirror_of="logicaldoc", url=CENTRAL, extra="")
+        self.settings(extra_mirror="\n" + extra)
+        self.assertTrue(any("second mirror for logicaldoc" in problem for problem in self.problems()))
+
+    def test_other_logicaldoc_hosts_require_healdans_mirror(self):
+        extra = MIRROR.format(id="unused", mirror_of="ld", url=CENTRAL, extra="")
+        self.settings(extra_mirror="\n" + extra)
         self.write("pom.xml", POM.format(body=repositories(("ld", "https://maven.logicaldoc.com/releases"))))
-        self.assertEqual([problem("pom.xml", 5, "ld", host="maven.logicaldoc.com")], self.problems())
+        problem, = self.problems()
+        self.assertIn("needs a mirror to https://maven.healdan.com", problem)
 
-    def test_plugin_repository_checked(self):
-        self.write("pom.xml", POM.format(body=repositories(("ld-plugins", SOURCEFORGE), tag="pluginRepository")))
-        self.assertEqual([problem("pom.xml", 5, "ld-plugins")], self.problems())
+    def test_missing_logicaldoc_mirror_reported(self):
+        self.settings(mirror_of="some-other-id")
+        self.assertEqual([f"{checker.SETTINGS}: {checker.NO_MIRROR}"], self.problems())
 
-    def test_distribution_management_ignored(self):
+    def test_missing_settings_reported(self):
+        subprocess.run(["git", "rm", "-q", "-f", checker.SETTINGS], cwd=self.repo, check=True)
+        self.assertEqual([f"{checker.SETTINGS}: {checker.NO_MIRROR}"], self.problems())
+
+    def test_distribution_management_and_untracked_pom_ignored(self):
         body = ("  <distributionManagement>\n    <repository>\n      <id>logicaldoc-community</id>\n"
                 f"      <url>{SOURCEFORGE}</url>\n    </repository>\n  </distributionManagement>")
         self.write("pom.xml", POM.format(body=body))
-        self.assertEqual([], self.problems())
-
-    def test_other_hosts_ignored(self):
-        self.write("pom.xml", POM.format(body=repositories(
-            ("eclipse-releases", "https://repo.eclipse.org/content/groups/releases/"),
-            ("terracotta", "https://repo.terracotta.org/maven2"),
-            ("props", "${repository.url}"))))
-        self.assertEqual([], self.problems())
-
-    def test_retired_repositories_mirrored_to_central_pass(self):
-        self.settings(RETIRED_MIRROR.format(mirror_of="java.net,sourceforge", url="https://repo1.maven.org/maven2/"))
-        self.write("pom.xml", POM.format(body=repositories(("sourceforge", OSSRH), ("java.net", JAVA_NET))))
-        self.write("samples/pom.xml", POM.format(body=repositories(
-            ("sourceforge", "http://oss.sonatype.org/content/groups/sourceforge/"), ("java.net", JAVA_NET))))
-        self.assertEqual([], self.problems())
-
-    def test_unmirrored_retired_repositories_reported_with_file_and_line(self):
-        self.write("pom.xml", POM.format(body=repositories(("central", "https://repo1.maven.org/maven2"),
-                                                           ("sourceforge", OSSRH), ("java.net", JAVA_NET))))
-        self.assertEqual([retired("pom.xml", 9, "sourceforge", "oss.sonatype.org"),
-                          retired("pom.xml", 13, "java.net", "maven.java.net")], self.problems())
-
-    def test_retired_hosts_reported_under_any_id_and_scheme(self):
-        self.settings(RETIRED_MIRROR.format(mirror_of="java.net, sourceforge", url="https://repo1.maven.org/maven2"))
-        self.write("pom.xml", POM.format(body=repositories(
-            ("ossrh-snapshots", "http://OSS.sonatype.org/content/repositories/snapshots"),
-            ("java-net-plugins", JAVA_NET), tag="pluginRepository")))
-        self.assertEqual([retired("pom.xml", 5, "ossrh-snapshots", "oss.sonatype.org"),
-                          retired("pom.xml", 9, "java-net-plugins", "maven.java.net")], self.problems())
-
-    def test_retired_repository_mirrored_elsewhere_reported(self):
-        for url in ("https://download.java.net/maven/2/", "https://repo1.maven.org/maven2/releases"):
-            with self.subTest(url):
-                self.settings(RETIRED_MIRROR.format(mirror_of="java.net", url=url))
-                self.write("pom.xml", POM.format(body=repositories(("java.net", JAVA_NET))))
-                self.assertEqual([retired("pom.xml", 5, "java.net", "maven.java.net")], self.problems())
-
-    def test_retired_repository_may_be_mirrored_to_healdan(self):
-        self.settings(MIRROR.format(mirror_of="logicaldoc,java.net", url="https://maven.healdan.com/"))
-        self.write("pom.xml", POM.format(body=repositories(("java.net", JAVA_NET))))
-        self.assertEqual([], self.problems())
-
-    def test_retired_repository_and_logicaldoc_host_both_checked(self):
-        self.settings(RETIRED_MIRROR.format(mirror_of="sourceforge", url="https://repo1.maven.org/maven2"))
-        self.write("pom.xml", POM.format(body=repositories(("ld", SOURCEFORGE), ("sourceforge", OSSRH))))
-        self.assertEqual([problem("pom.xml", 5, "ld")], self.problems())
-
-    def test_settings_without_healdan_mirror_reported(self):
-        for body in ("", MIRROR.format(mirror_of="logicaldoc", url=SOURCEFORGE),
-                     MIRROR.format(mirror_of="central", url="https://maven.healdan.com/")):
-            with self.subTest(body=body):
-                self.settings(body)
-                self.assertEqual([f"docker/maven-settings.xml: {checker.NO_MIRROR}"], self.problems())
-
-    def test_missing_settings_reported(self):
-        subprocess.run(["git", "rm", "-q", "-f", "docker/maven-settings.xml"], cwd=self.repo, check=True)
-        self.assertEqual([f"docker/maven-settings.xml: {checker.NO_MIRROR}"], self.problems())
-
-    def test_mirror_of_list_and_url_without_slash(self):
-        self.settings(MIRROR.format(mirror_of="logicaldoc, logicaldoc-snapshots", url="https://maven.healdan.com"))
-        self.write("pom.xml", POM.format(body=repositories(("logicaldoc-snapshots", SOURCEFORGE))))
-        self.assertEqual([], self.problems())
-
-    def test_settings_repositories_checked(self):
-        self.settings(MIRROR.format(mirror_of="logicaldoc", url="https://maven.healdan.com/") + "\n"
-                      + repositories(("ld", SOURCEFORGE), ("ossrh", OSSRH)))
-        self.assertEqual([problem("docker/maven-settings.xml", 10, "ld"),
-                          retired("docker/maven-settings.xml", 14, "ossrh", "oss.sonatype.org")], self.problems())
-
-    def test_untracked_pom_ignored(self):
         self.write("x/pom.xml", POM.format(body=repositories(("ld", SOURCEFORGE))), track=False)
         self.assertEqual([], self.problems())
 
     def test_unparseable_pom_reported(self):
         self.write("pom.xml", "<project><repositories></project>\n")
-        problems = self.problems()
-        self.assertEqual(1, len(problems))
-        self.assertTrue(problems[0].startswith("pom.xml: can't be parsed: "), problems[0])
+        problem, = self.problems()
+        self.assertTrue(problem.startswith("pom.xml: can't be parsed: "), problem)
 
     def test_main_exit_codes(self):
         self.write("pom.xml", POM.format(body=repositories(("logicaldoc", SOURCEFORGE))))

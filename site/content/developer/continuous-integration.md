@@ -20,7 +20,7 @@ weight: 4
 
 | Check | Workflow | What it does |
 |---|---|---|
-| `build` | `build-logicaldoc.yml` | Checks the GUI's Font Awesome icons (`check-fontawesome-icons.py`), for links to LogicalDOC's docs (`check-logicaldoc-doc-links.py`), for LogicalDOC's servers (`check-logicaldoc-hosts.py`), for Maven repositories on LogicalDOC's hosts and on upstream's retired ones (`check-maven-repositories.py`), for Oracle's and SQL Server's drivers (`check-database-drivers.py`) and for the licences of the User app's npm packages (`check-web-licences.py`), compiles every module except the WAR without the GWT compile, and runs Healdan's tests in parallel shards, each with a PostgreSQL of its own (see below) |
+| `build` | `build-logicaldoc.yml` | Checks the GUI's Font Awesome icons (`check-fontawesome-icons.py`), for links to LogicalDOC's docs (`check-logicaldoc-doc-links.py`), for LogicalDOC's servers (`check-logicaldoc-hosts.py`), for approved Maven repositories (`check-maven-repositories.py`), for Oracle's and SQL Server's drivers (`check-database-drivers.py`) and for the licences of the User app's npm packages (`check-web-licences.py`), compiles every module except the WAR without the GWT compile, and runs Healdan's tests in parallel shards, each with a PostgreSQL of its own (see below) |
 | `Test (amd64)`, `Test (arm64)` | `docker-image.yml` | Builds the image natively on each architecture, runs the init tool's unit tests, `WarParsersTest`, `WarStorageTest` and `WarHibernateTest`, and runs `docker/smoke-test.sh` against the image, M2's client flow through the API (`test-api.sh`), the helper's open-save-close cycle (its stack test), provider sign-in through a stand-in Keycloak (`test-signin.sh`) and storage backends against a stand-in Garage (`test-storage.sh`) included, all on PostgreSQL 18, then on amd64 the move from MariaDB (`test-move.sh`). The smoke test fails on an `ERROR` line in PostgreSQL's own log that its list doesn't expect (see [PostgreSQL's Log](../tests/#postgresqls-log)). A smoke test that fails uploads its logs and its failed browser tests' traces as an artifact (see [The Smoke Test's Results in the Image CI](#the-smoke-tests-results-in-the-image-ci)) |
 | `Clients` | `clients.yml` | Builds and tests the desktop clients in `clients/`: the helper on Ubuntu and macOS, the LibreOffice extension's Python tests and the Office add-in's Node tests on Ubuntu (see below) |
 | `Web` | `web.yml` | Builds and tests the User app and the Admin app in `healdan-web/web`: generates the APIs' types, typechecks, lints, runs the tests and builds (see below) |
@@ -302,23 +302,21 @@ The arm64 runner hasn't run short, so its job doesn't.
   and the SOAP, CMIS and WebDAV XML namespaces, which are identifiers no one fetches. When a sync brings one in,
   remove the call in the sync PR. The script's `ALLOWED` list holds the exact lines nothing contacts, such as the
   POM's credits, each with its reason.
-- **LogicalDOC's Maven repository.** Builds get the artifacts only LogicalDOC's repository has from Healdan's copies
-  at `https://maven.healdan.com/` (repository `Healdan-Project/maven`), through a mirror in
-  `docker/maven-settings.xml`. `.github/scripts/check-maven-repositories.py` runs after the hosts check and
-  fails `build` when a POM or the settings file points a repository at a LogicalDOC host the mirror doesn't cover.
+- **Healdan's Maven mirror.** Builds get LogicalDOC's artifacts and Alfresco's Jakarta OpenCMIS from
+  `https://maven.healdan.com/` (repository `Healdan-Project/maven`). The mirror in `docker/maven-settings.xml`
+  covers both repository ids. `.github/scripts/check-maven-repositories.py` runs after the hosts check and
+  requires a tracked POM's dependency or plugin repository, or one in the settings file, to use an approved
+  endpoint or have an explicit mirror.
   When a sync bumps a hosted artifact or brings a new one, the build fails with `Could not find artifact … in
   healdan`. In the sync PR, check its licence allows hosting it, import it with `python3 import-artifact.py` in a
   checkout of `Healdan-Project/maven`, push, and re-run CI once
   `python3 import-artifact.py --verify https://maven.healdan.com/` passes. One whose licence doesn't allow hosting
   it is dropped from the build instead, as JAI was. A missing `com.logicaldoc:*` artifact is never imported: it
   means a module or version was left behind, so bump it.
-- **Upstream's retired Maven repositories.** Upstream's parent POM also declares `java.net` (`maven.java.net`,
-  whose certificate chain no longer validates) and `sourceforge` (`oss.sonatype.org`, Sonatype's retired OSSRH,
-  which answers 404). Nothing comes from either, but Maven asks every repository for each version range's metadata,
-  so every shard failed a TLS handshake with `java.net` and warned of it dozens of times. A second mirror in
-  `docker/maven-settings.xml`, `retired-repositories`, sends both to Maven Central. The same check fails `build`
-  when a POM or the settings file has a repository on either host under an id that no mirror to Central, or to
-  Healdan's copies, covers. When a sync brings one in, add its id to that mirror's `mirrorOf` in the sync PR.
+- **Other Maven repositories.** The settings send unused entries, including Eclipse, Google, MuleSoft, `java.net`
+  and `sourceforge`, to Central. The Docker and Java CI builds pass `-itr` to ignore repositories declared by
+  transitive dependencies. When a sync brings in a repository, check what the build gets from it and make the
+  repository change in the sync PR. See [Checking Repository Changes](../building-from-source/#checking-repository-changes).
 - **Oracle and SQL Server.** Healdan supports only open-source databases, so the WAR ships neither driver and the
   setup wizard doesn't offer them. `.github/scripts/check-database-drivers.py` runs after the Maven repository
   check and fails `build` on a POM dependency on Oracle's or SQL Server's JDBC driver, or on a tracked file naming
