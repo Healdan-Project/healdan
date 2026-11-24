@@ -2,7 +2,6 @@ package com.logicaldoc.util.http;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.Date;
 
 import org.apache.hc.client5.http.classic.methods.HttpPost;
 import org.apache.hc.client5.http.entity.mime.FileBody;
@@ -48,7 +47,7 @@ public class HttpUpload {
         if (f == null)
             f = file.getName();
 
-        String name = "LDOC-%d".formatted(new Date().getTime());
+        String name = "LDOC-" + System.currentTimeMillis();
 
         FileBody filePart = null;
         if (listener != null)

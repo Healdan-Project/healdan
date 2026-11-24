@@ -947,7 +947,7 @@ public class LDRepositoryTest extends AbstractCmisTestCase {
         // An entry at the cutoff must be included.
         assertTrue(testSubject.getDocumentLastChanges(documentTime, 1000).stream().anyMatch(
                 object -> object.getChangeEventInfo().getChangeTime().toInstant().toEpochMilli() == documentTime
-                        && ("doc.%d".formatted(documentEntry.getDocId())).equals(
+                        && ("doc." + documentEntry.getDocId()).equals(
                                 object.getProperties().getProperties().get(PropertyIds.OBJECT_ID).getFirstValue())));
 
         assertTrue(testSubject.getFolderLastChanges(folderTime, 1000).stream()
