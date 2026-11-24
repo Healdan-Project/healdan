@@ -97,7 +97,7 @@ public class SmokeSignInSeedTest extends AbstractHealdanTestCase {
 		assertEquals(UserSource.DEFAULT, user.getSource());
 		assertTrue(user.isEnabled());
 		// A local password the smoke test signs in with before the first sign-in links the account
-		assertEquals(Encrypter.encryptSHA256(SmokeSignInSeed.LOCAL_PASSWORD), user.getPassword());
+		assertEquals(Encrypter.encodeSHA256(SmokeSignInSeed.LOCAL_PASSWORD), user.getPassword());
 		assertTrue(user.getGroups().stream().anyMatch(g -> g.getId() == sso.getId()));
 
 		assertEquals("0", HealdanSettings.get().get("signin.recheck.minutes"));

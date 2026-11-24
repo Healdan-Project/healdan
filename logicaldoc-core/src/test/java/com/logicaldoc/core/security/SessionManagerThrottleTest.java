@@ -113,7 +113,7 @@ public class SessionManagerThrottleTest extends AbstractCoreTestCase {
 
 		try (Connection con = getConnection(); Statement st = con.createStatement()) {
 			st.executeUpdate("update ld_user set ld_password = '%s' where ld_id = 4"
-					.formatted(Encrypter.encryptSHA256(PASSWORD)));
+					.formatted(Encrypter.encodeSHA256(PASSWORD)));
 		} catch (Exception e) {
 			throw new IllegalStateException(e);
 		}
@@ -540,7 +540,7 @@ public class SessionManagerThrottleTest extends AbstractCoreTestCase {
 				() -> SessionManager.get().newSession(key, outside));
 
 		assertEquals(-1L, count(LoginThrottle.LOGINFAIL_APIKEY + key));
-		assertEquals(1L, count(LoginThrottle.LOGINFAIL_APIKEY + Encrypter.encryptSHA256(key)));
+		assertEquals(1L, count(LoginThrottle.LOGINFAIL_APIKEY + Encrypter.encodeSHA256(key)));
 	}
 
 	@Test

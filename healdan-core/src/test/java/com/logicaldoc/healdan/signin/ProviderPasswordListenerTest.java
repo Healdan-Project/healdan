@@ -119,7 +119,7 @@ public class ProviderPasswordListenerTest extends AbstractHealdanTestCase {
 	}
 
 	private static String hash(String password) throws Exception {
-		return Encrypter.encryptSHA256(password);
+		return Encrypter.encodeSHA256(password);
 	}
 
 	@Test

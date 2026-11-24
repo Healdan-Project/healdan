@@ -173,7 +173,7 @@ public class Encrypter {
      * 
      * @throws NoSuchAlgorithmException encrypting exception
      */
-    public static String encryptSHA256(String original) throws NoSuchAlgorithmException {
+    public static String encodeSHA256(String original) throws NoSuchAlgorithmException {
         StringBuilder copy = new StringBuilder();
 
         MessageDigest md = MessageDigest.getInstance("SHA-256");

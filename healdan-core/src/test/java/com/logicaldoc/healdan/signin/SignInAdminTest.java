@@ -227,7 +227,7 @@ public class SignInAdminTest extends AbstractHealdanTestCase {
 	 */
 	private void assertTemporary(String username, String password) throws Exception {
 		User user = UserDAO.get().findByUsername(username);
-		assertEquals(Encrypter.encryptSHA256(password), storedPassword(user));
+		assertEquals(Encrypter.encodeSHA256(password), storedPassword(user));
 		assertTrue(reload(user).isPasswordExpired());
 		assertThrows(PasswordExpiredException.class, () -> SessionManager.get().newSession(username, password, client));
 	}

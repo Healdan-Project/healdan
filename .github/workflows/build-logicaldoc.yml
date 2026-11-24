@@ -120,6 +120,8 @@ jobs:
             SoapPermissionGapsTest
             DocumentsDataServletTest
             ConvertPdfTest
+            ServletUtilTest#testDownloadDocument
+            EncrypterTest
             CacheControlFilterTest
             HealdanDocNumberSortTest
             InitializeReadOnlyTest

@@ -469,7 +469,7 @@ public class UserAdministrationTest extends AbstractHealdanTestCase {
 		assertEquals(UserSource.DEFAULT, stored.getSource());
 		assertTrue(stored.isPasswordExpired());
 		assertTrue(stored.isEnabled());
-		assertEquals(Encrypter.encryptSHA256(STRONG.get(0)), stored.getPassword());
+		assertEquals(Encrypter.encodeSHA256(STRONG.get(0)), stored.getPassword());
 		assertEquals(1, history(stored, UserEvent.CREATED));
 		// It has to change at the first sign-in
 		assertThrows(PasswordExpiredException.class,
@@ -1035,7 +1035,7 @@ public class UserAdministrationTest extends AbstractHealdanTestCase {
 		assertFalse(reset.emailed());
 		assertEquals(NotEmailed.NOT_ASKED, reset.notEmailed());
 		User stored = UserDAO.get().findById(carol.getId());
-		assertEquals(Encrypter.encryptSHA256(STRONG.get(0)), stored.getPassword());
+		assertEquals(Encrypter.encodeSHA256(STRONG.get(0)), stored.getPassword());
 		assertTrue(stored.isPasswordExpired());
 		assertEquals(1, history(stored, UserEvent.PASSWORDCHANGED));
 		assertFalse(SessionManager.get().isOpen(web.getSid()));

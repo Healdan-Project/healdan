@@ -21,7 +21,7 @@ import com.logicaldoc.core.sequence.SequenceDAO;
 @Component
 public class ApiKeyCountersSeed implements SeedStep {
 
-	// How Encrypter.encryptSHA256 writes a digest
+	// How Encrypter.encodeSHA256 writes a digest
 	private static final Pattern DIGEST = Pattern.compile("[0-9A-F]{64}");
 
 	@Override

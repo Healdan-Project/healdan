@@ -386,7 +386,7 @@ public class SecurityServiceImpl extends AbstractRemoteService implements Securi
             if (oldPassword == null && !MenuDAO.get().isReadAllowed(Menu.ACCESS_CONTROL, requestor.getId()))
                 throw new ServerException("The current password is required");
 
-            if (oldPassword != null && !Encrypter.encryptSHA256(oldPassword).equals(user.getPassword()))
+            if (oldPassword != null && !Encrypter.encodeSHA256(oldPassword).equals(user.getPassword()))
                 throw new ServerException("Wrong old passord");
 
             UserHistory history = null;

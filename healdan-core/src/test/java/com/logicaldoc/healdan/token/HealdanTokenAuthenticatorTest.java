@@ -71,7 +71,7 @@ public class HealdanTokenAuthenticatorTest extends AbstractHealdanTestCase {
 		assertEquals("clerk", session.getUsername());
 		assertTrue(SessionManager.get().isOpen(session.getSid()));
 		assertEquals(session.getSid(), ApiTokens.get().find(issued.token()).get().getSid());
-		assertNotEquals(Encrypter.encryptSHA256(issued.token()), session.getKey());
+		assertNotEquals(Encrypter.encodeSHA256(issued.token()), session.getKey());
 		assertEquals(issued.row().getId(), session.getDictionary().get(ApiTokens.SESSION_TOKEN));
 		assertTrue(session.getKeyLabel(), session.getKeyLabel().startsWith("hd_api_"));
 	}

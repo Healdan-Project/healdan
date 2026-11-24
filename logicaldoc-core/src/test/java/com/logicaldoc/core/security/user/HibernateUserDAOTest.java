@@ -117,7 +117,7 @@ public class HibernateUserDAOTest extends AbstractCoreTestCase {
         User user = testSubject.findByUsername("admin", true);
         assertNotNull(user);
         assertEquals("admin", user.getUsername());
-        assertEquals(Encrypter.encryptSHA256("admin"), user.getPassword());
+        assertEquals(Encrypter.encodeSHA256("admin"), user.getPassword());
         assertEquals("admin@admin.net", user.getEmail());
         assertEquals(2, user.getGroups().size());
 
@@ -170,7 +170,7 @@ public class HibernateUserDAOTest extends AbstractCoreTestCase {
         assertNotNull(user);
         assertEquals("admin", user.getUsername());
         user.setDecodedPassword("admin");
-        assertEquals(Encrypter.encryptSHA256("admin"), user.getPassword());
+        assertEquals(Encrypter.encodeSHA256("admin"), user.getPassword());
         assertEquals("admin@admin.net", user.getEmail());
         assertEquals(2, user.getGroups().size());
 
@@ -228,7 +228,7 @@ public class HibernateUserDAOTest extends AbstractCoreTestCase {
         assertEquals(user, storedUser);
         assertEquals(2, storedUser.getGroups().size());
         assertNotNull(storedUser.getUserGroup());
-        assertEquals(Encrypter.encryptSHA256(pswd), storedUser.getPassword());
+        assertEquals(Encrypter.encodeSHA256(pswd), storedUser.getPassword());
         assertEquals(1, storedUser.getWorkingTimes().size());
         assertEquals(1, storedUser.getWorkingTimes().iterator().next().getDayOfWeek());
         assertEquals(5, storedUser.getWorkingTimes().iterator().next().getHourStart());

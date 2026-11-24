@@ -230,7 +230,7 @@ public final class HealdanThrottle {
         try {
             User user = UserDAO.get().getUser(account);
             return user != null && user.getPassword() != null
-                    && user.getPassword().equals(Encrypter.encryptSHA256(password));
+                    && user.getPassword().equals(Encrypter.encodeSHA256(password));
         } catch (PersistenceException | NoSuchAlgorithmException e) {
             // Counted, rather than let a sign-in off unchecked
             log.warn("{}", e.getMessage(), e);
@@ -249,7 +249,7 @@ public final class HealdanThrottle {
      */
     static String keyCounter(String key) {
         try {
-            return LoginThrottle.LOGINFAIL_APIKEY + Encrypter.encryptSHA256(key);
+            return LoginThrottle.LOGINFAIL_APIKEY + Encrypter.encodeSHA256(key);
         } catch (NoSuchAlgorithmException e) {
             throw new IllegalStateException(e);
         }
