@@ -404,6 +404,16 @@ The screenshot's case on the owner's server after PR 1; after PR 2, a working da
 2,000-document folder sorted by each new column in under a second (`docker/tests/bulk-documents.sh` on a throwaway stack,
 as M6's row 4 did).
 
+**After PR 3: passed on 2026-11-24**, on a throwaway stack beside the firm's on the owner's server, on its image (master
+at `677ddb597`). `bulk-documents.sh` filed 2,000 documents into matter 1.1's Documents folder in 7 minutes 47 seconds,
+and SQL gave them varied values: 8 Classes, a Subclass on all but one in nine, 12 Typists, and the 400 emails each their
+own From, To and Sent. Every sort of the folder answered in 40 to 110 ms, the six new columns and the eleven others, both
+ways, on the first page of 100 and the last (`GET /api/v1/folders/{id}/children`, the median and slowest of five), in
+the right order. #296's second timing, a Folders search sorted by Matter over 10,000 folders of one name, took about
+7 s a page (0.86 s with 1,000 hits, 0.26 s with 100), as each page checks every hit in the window one at a time; the
+firm has 3 matters, so the owner accepted #234 with the bulk check as a follow-up,
+[Healdan-Project/healdan#317](https://github.com/Healdan-Project/healdan/issues/317).
+
 ## 9. Docs (in the same pull request)
 
 - **PR 1:** the User Guide's Getting Around (`site/content/user/getting-started/getting-around/index.md`): the Matter
