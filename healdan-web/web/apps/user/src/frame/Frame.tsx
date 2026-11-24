@@ -7,6 +7,7 @@ import { SignedOut, focusInto, isInnermost, openLayer, useNarrow } from '@healda
 import { t } from '@healdan/ui'
 import { OpenInAppProvider } from '../actions/OpenInAppState'
 import { ReleaseProvider } from '../actions/ReleaseProvider'
+import { ReindexProvider } from '../actions/useReindex'
 import { DetailsTabProvider } from '../details/DetailsTab'
 import { FilingProvider } from '../filing/FilingProvider'
 import { OrganisingProvider } from '../organising/OrganisingProvider'
@@ -33,9 +34,11 @@ export function Frame() {
           <FilingProvider>
             <OrganisingProvider>
               <ReleaseProvider>
-                <DetailsTabProvider>
-                  <Layout />
-                </DetailsTabProvider>
+                <ReindexProvider>
+                  <DetailsTabProvider>
+                    <Layout />
+                  </DetailsTabProvider>
+                </ReindexProvider>
               </ReleaseProvider>
             </OrganisingProvider>
           </FilingProvider>

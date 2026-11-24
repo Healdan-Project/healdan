@@ -705,7 +705,7 @@ describe('The Workspace Editor by keyboard', () => {
     row(/^Pleadings/).focus()
     await userEvent.keyboard('{Shift>}{F10}{/Shift}')
     const menu = await screen.findByRole('menu', { name: 'Actions for Pleadings' })
-    expect(within(menu).getAllByRole('menuitem').map((item) => item.textContent)).toEqual(['New Folder', 'New Search Folder', 'Rename', 'Move To…', 'Delete'])
+    expect(within(menu).getAllByRole('menuitem').map((item) => item.textContent)).toEqual(['New Folder', 'New Search Folder', 'Rename', 'Move To…', 'Delete', 'Reindex'])
     await userEvent.keyboard('{ArrowDown}{ArrowDown}{Enter}')
     expect(await screen.findByRole('dialog', { name: 'Rename Pleadings' })).toBeTruthy()
   })

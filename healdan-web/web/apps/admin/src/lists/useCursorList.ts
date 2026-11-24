@@ -5,7 +5,7 @@ import { hashKey, keepPreviousData, useInfiniteQuery } from '@tanstack/react-que
 import { useEffect, useMemo, useState } from 'react'
 import type { adminPaths, Api } from '@healdan/api'
 import { ASK_ON_RETURN, useApi } from '@healdan/shell'
-import { adminKey, type AdminAnswer, type AdminGetPath } from '../queries'
+import { adminKey, POLL_MS, type AdminAnswer, type AdminGetPath } from '../queries'
 
 /** A page of a list that comes by cursor: its rows, and where the next page starts, null at the end */
 interface CursorPage<T> {
@@ -13,7 +13,7 @@ interface CursorPage<T> {
   nextCursor: string | null
 }
 
-/** The lists that come a page at a time by cursor, each answer's `nextCursor` sent back as `cursor`: the Audit Trail */
+/** The lists that come a page at a time by cursor, each answer's `nextCursor` sent back as `cursor`: the Audit Trail and the index's events */
 export type CursorPath = {
   [P in AdminGetPath]: AdminAnswer<P> extends CursorPage<unknown> ? P : never
 }[AdminGetPath]
@@ -89,9 +89,19 @@ export interface CursorListing<T, Page extends CursorPage<T> = CursorPage<T>> {
  * at most; then it stops, and `hasMore` offers the rest to Show More, which starts such a run again. A read that fails
  * keeps the rows shown and says so (`isError` with `isLoaded`). `query` is the list's filters; changing it starts afresh.
  */
-export function useCursorList<P extends CursorPath>(path: P, query: CursorQuery<P>, pageSize: number): CursorListing<CursorItem<P>, AdminAnswer<P> & CursorPage<CursorItem<P>>> {
+export function useCursorList<P extends CursorPath>(
+  path: P,
+  query: CursorQuery<P>,
+  pageSize: number,
+  options: { poll?: boolean } = {},
+): CursorListing<CursorItem<P>, AdminAnswer<P> & CursorPage<CursorItem<P>>> {
   const api = useApi()
   const queryKey = adminKey(path, query)
+  // Where the run of pages that Show More (or the first page) started is, for these filters: the pages after it were
+  // followed by the list itself. Other filters start at their first page.
+  const question = hashKey(queryKey)
+  const [run, setRun] = useState({ question, start: 0 })
+  const start = run.question === question ? run.start : 0
   const asked = useInfiniteQuery({
     queryKey,
     queryFn: ({ pageParam, signal }) =>
@@ -102,14 +112,13 @@ export function useCursorList<P extends CursorPath>(path: P, query: CursorQuery<
     // Asked again whenever it's shown, however fresh (P5-R34); a return to the window keeps the 30-second rule a list of
     // several pages has, as each re-read reads every page loaded
     refetchOnMount: 'always',
+    // `poll`: asked again every POLL_MS while the page is visible, as the Search Index's History is while a reindex runs,
+    // only until Show More is pressed: a re-read reads every page loaded, each a bounded scan on the server, so a list read
+    // further back is asked again only on a return to the window, as a list is without `poll`
+    refetchInterval: options.poll && start === 0 ? POLL_MS : false,
+    refetchIntervalInBackground: false,
     meta: ASK_ON_RETURN,
   })
-
-  // Where the run of pages that Show More (or the first page) started is, for these filters: the pages after it were
-  // followed by the list itself. Other filters start at their first page.
-  const question = hashKey(queryKey)
-  const [run, setRun] = useState({ question, start: 0 })
-  const start = run.question === question ? run.start : 0
 
   const pages = asked.data?.pages
   const last = pages?.at(-1)

@@ -35,7 +35,7 @@ async function renderPane(nav: readonly NavGroup[], routes: Routes = {}) {
 }
 
 describe('The left pane', () => {
-  it('shows only the screens that have shipped: the Dashboard, Clients, Matters and Workspace Templates under Firm, Users and Groups under People, Stores and Backends under Storage, Errors, Server Log, Audit Trail and Background Jobs under Monitoring, and the Classic Interface at its foot', async () => {
+  it('shows only the screens that have shipped: the Dashboard, Clients, Matters and Workspace Templates under Firm, Users and Groups under People, Stores and Backends under Storage, Search Index under Search, Errors, Server Log, Audit Trail and Background Jobs under Monitoring, and the Classic Interface at its foot', async () => {
     // Nothing needs attention, so no entry has a count
     const { view } = await renderApp('/', { 'GET /v1/admin/dashboard': { ...dashboard, attention: [] } })
     const links = within(pane()).getAllByRole('link')
@@ -48,17 +48,18 @@ describe('The left pane', () => {
       ['Groups', '/admin/groups'],
       ['Stores', '/admin/stores'],
       ['Backends', '/admin/backends'],
+      ['Search Index', '/admin/search-index'],
       ['Errors', '/admin/errors'],
       ['Server Log', '/admin/server-log'],
       ['Audit Trail', '/admin/audit'],
       ['Background Jobs', '/admin/jobs'],
       ['Classic Interface', '/frontend.jsp'],
     ])
-    // Search has no shipped screen yet, so its group isn't drawn
-    expect(within(pane()).getAllByRole('heading').map((heading) => heading.textContent)).toEqual(['Firm', 'People', 'Storage', 'Monitoring'])
+    expect(within(pane()).getAllByRole('heading').map((heading) => heading.textContent)).toEqual(['Firm', 'People', 'Storage', 'Search', 'Monitoring'])
     expect(within(pane()).getByRole('region', { name: 'Firm' })).toBeTruthy()
     expect(within(pane()).getByRole('region', { name: 'People' })).toBeTruthy()
     expect(within(pane()).getByRole('region', { name: 'Storage' })).toBeTruthy()
+    expect(within(pane()).getByRole('region', { name: 'Search' })).toBeTruthy()
     expect(within(pane()).getByRole('region', { name: 'Monitoring' })).toBeTruthy()
     await expectNoAxeViolations(view.container)
   })
@@ -79,6 +80,13 @@ describe('The left pane', () => {
     // One question for every count, the Dashboard's own
     expect(api.callsTo('GET /v1/admin/dashboard')).toHaveLength(1)
     await expectNoAxeViolations(view.container)
+  })
+
+  it("shows Search Index's count, the documents that couldn't be indexed, from the Dashboard's answer", async () => {
+    await renderApp('/clients', { 'GET /v1/admin/dashboard': dashboard })
+    const search = within(pane()).getByRole('region', { name: 'Search' })
+    expect(await within(search).findByRole('link', { name: 'Search Index, 2 need attention' })).toBeTruthy()
+    expect(screenAt('/admin/search-index')).toBe('Search Index')
   })
 
   it("names the Monitoring screens where the Dashboard's rows link to them", () => {

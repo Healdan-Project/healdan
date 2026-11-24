@@ -53,10 +53,11 @@ public class AdminDashboardResourceTest extends ApiTestCase {
 		assertEquals(HealthTile.NAMES, names);
 		// The storage's is fixed on the Admin app's Backends screen, and so are the disks' where storage backends are
 		// on, which they aren't here; the server's on its Server Log, and the previews' and the jobs' on Background
-		// Jobs; the rest on the Classic Interface's still
+		// Jobs, and the search index's on the Search Index; the rest on the Classic Interface's still
 		Map<String, String> links = Map.of(HealthTile.STORAGE_BACKENDS, "/admin/backends", HealthTile.SERVER,
 				"/admin/server-log", HealthTile.DATABASE, "/admin/server-log", HealthTile.MEMORY, "/admin/server-log",
-				HealthTile.PREVIEWS, "/admin/jobs", HealthTile.BACKGROUND_JOBS, "/admin/jobs");
+				HealthTile.PREVIEWS, "/admin/jobs", HealthTile.BACKGROUND_JOBS, "/admin/jobs", HealthTile.SEARCH_INDEX,
+				"/admin/search-index");
 		for (JsonNode tile : dashboard.path("health")) {
 			assertTrue(tile.toString(), tile.path("problem").isNull());
 			assertTrue(tile.toString(), tile.path("detail").isTextual());

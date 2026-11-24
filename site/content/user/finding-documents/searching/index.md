@@ -98,6 +98,12 @@ and attachment names. A document's words are searchable once the server's Indexe
 minutes unless your administrator has changed that, so a document filed a moment ago may not show up in a search yet.
 A `#` and its doc # finds it at once.
 
+Search keeps working while an administrator reindexes documents: each document's entry in the index is replaced as
+it's done, so search goes on finding it. Only a reindex that empties a damaged index first leaves documents out, until
+each is done again. An administrator can reindex a document, several selected, a folder or a matter from its
+right-click menu (see [An Administrator's Items](../../getting-started/getting-around/#an-administrators-items)), and
+see on the Admin app's Search Index which documents couldn't be indexed, and why.
+
 An email's From, To, CC and Subject are part of its text, so words in them are found. Its Message-ID isn't, so the
 search box doesn't find it. To find an email by its Message-ID, use the [Classic Interface](../../the-classic-interface/):
 open the **Search** tab's **Full-text** section, choose **Healdan profile** as the **Template**, add **Message-ID** to

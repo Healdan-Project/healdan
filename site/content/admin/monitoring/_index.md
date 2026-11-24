@@ -27,6 +27,10 @@ succeeds after failing, and a LogicalDOC task's run that **Run Now** started, th
 fault, and a LogicalDOC task's scheduled run that fails, can take a minute or two to show, as the server works them
 out afresh once a minute.
 
+**Search Index**, beside them, shows how many documents couldn't be indexed, and follows **Try Again**, **Skip**, a
+reindex's end and a waiting reindex cancelled the same way (see
+[Search and Indexing](../system/search-and-indexing/#the-search-index)).
+
 ## From the Dashboard
 
 The Dashboard's links open these screens:

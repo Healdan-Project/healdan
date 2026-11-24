@@ -282,6 +282,17 @@ see [Building from Source](../building-from-source/#running-the-war-outside-dock
     log's download and the export stream through `StreamingOutput`, both `no-store`: the log's files are checked, and
     the export's filters worked out and its first page read (`AuditCsv.open`), before the first byte, so a failure
     there is a problem, not a file cut short, and a `HEAD` of either reads no file and no row.
+  - **The Search Index routes** are two classes, both `SEARCH_INDEX`, each at its own exact root:
+    `AdminSearchIndexResource` (`/v1/admin/search-index`: the heading, the failed and waiting lists, the history, Run
+    Indexer Now, and Try Again and Skip by doc #, over `IndexOverview`, `IndexHistory`, `IndexReview` and
+    `JobControl`) and `AdminReindexResource` (`/v1/admin/reindex`: the preview, the start, the list, a reindex and its
+    cancel, over `ReindexService`). Their path ids are digits (`{docNumber: [0-9]+}`, `{id: [0-9]+}`), so
+    `/v1/admin/reindex/preview` never reaches `{id}`. `AdminReindexResource` reads its body as JSON nodes, so a member
+    left out, one sent as null and one of the wrong type are told apart: a wrong type, a member for another kind and
+    a doc # that isn't a whole number from 0 up are `400` before the target's `404`, a `kind` missing or unknown is
+    `422`, and the service's field refusals, null target and rules follow. `SearchIndexView` and `ReindexView` hold
+    the contract's records. Try Again's storage outage goes up to `ProblemMapper`, which answers it
+    `503 storage-unreachable`.
 - **`healdan-storage`** keeps documents' files on [storage backends](../../admin/storage-backends/), and is a plugin
   of its own that requires `healdan-core`. Its code is under `com.logicaldoc.healdan.storage`, where `healdan-core`'s
   Spring scan finds its beans.
@@ -795,15 +806,110 @@ see [Building from Source](../building-from-source/#running-the-war-outside-dock
     out and the rest whole. Tests call `refreshNow()` themselves, as no test makes a real start.
   - **The Search Index's counts** (`IndexCounts`, `com.logicaldoc.healdan.admin.index`) tell a document that failed
     from one that waits (Admin app spec §9.6), among the documents not in the Trash, shortcuts left out. A document
-    has failed when it waits to be indexed (`ld_indexed` is `TO_INDEX`), isn't archived, and its latest
+    has failed when it waits to be indexed (`ld_indexed` is `TO_INDEX`, or `TO_INDEX_METADATA` for one the file
+    patterns have indexed by its properties alone), isn't archived, and its latest
     `event.indexed` or `event.indexed.error` row in `ld_history` is the error, whose comment says why.
     `DocumentManager.index` writes those rows, and LogicalDOC's Indexer goes on trying such a document on its
     schedule, with an error row each time. A document waits when the Indexer will take it (`TO_INDEX` or
     `TO_INDEX_METADATA`, not archived) and it hasn't failed. Its latest event is chosen by one look through its own
     rows, on `ld_history`'s index by document: the latest time first, a row with no time counting as older than any
     with one, and rows at the same moment, as MariaDB's whole seconds give, by the order they were written in.
-    `counts()` gives the indexed, the waiting and the failed in one pass, and `failed(offset, limit)` lists the
-    failed, latest error first, each with the matter stamped on it.
+    `counts()` gives the indexed, the waiting and the failed in one pass, `failed(offset, limit)` lists the failed,
+    latest error first, and `waiting(offset, limit)` the waiting, by id, each with the matter stamped on it.
+    `changes()` moves on (`moved()`) after Try Again, Skip, a waiting reindex cancelled and a reindex's end, and the
+    Dashboard's index source reads afresh after it moves, so the left pane's Search Index count follows at its next
+    read.
+  - **The Search Index's reads and two actions** (`admin.index`, Admin app spec §8.9). `IndexOverview` gives the heading
+    and both lists' totals from one count of its own, never the Dashboard's, kept for up to 10 seconds
+    (`COUNTS_KEPT_MS`) and dropped as soon as `IndexCounts.changes()` moves or LogicalDOC's Indexer has ended a run
+    since (its last end, `Jobs.lastEnd("IndexerTask")`, which reads no errors): the index's entries, asked of Solr directly
+    (LogicalDOC's own count logs an error and answers 0 when it fails), and its folder's size, each null, logged at warn
+    by class, when it can't be read; the health, the Dashboard's own tile (`DashboardService.searchIndexTile`); and the
+    Indexer, `Jobs.one("IndexerTask")` with `JobControl.runRefusal`, a read-only check made of Run Now's own checks in
+    its order, which Run Now itself uses, so the greyed-out button and a `409` never disagree. `IndexHistory` pages
+    `ld_history`'s `event.indexed` and `event.indexed.error` rows newest first by a cursor (`IndexHistoryCursor`): no
+    index serves a newest-first read by event, so each page looks through at most 100,000 of the tenant's rows by the
+    key (`SCAN`), as the Audit Trail reads a source no index serves, with the event's condition written `ld_event ||
+    ''`, so neither a custom plan nor a generic one reads the event's index; an indexed row's comment, the start of the
+    document's text, is never read out. `IndexReview` is Try Again and Skip, for a live document of the caller's tenant
+    that couldn't be indexed only (`NOT_FAILED` otherwise). Try Again first applies the tenant's file patterns as
+    LogicalDOC's save of a document does (`IndexRules`, from `HibernateDocumentDAO.setIndexed`: `index.includes` and
+    `index.excludes`, then the `.metadata` pair, matched with `FileUtil.matches`): a document they have indexed by its
+    properties alone is set `TO_INDEX_METADATA` first, so LogicalDOC reads no file of it, and one they leave out is set
+    to Skip with `LEFT_OUT` as its reason and its error row, not indexed. It then indexes through `DocumentIndexing`,
+    on the request's thread, with no history, so LogicalDOC writes no row and applies none of its settings:
+    `DocumentManager.parseDocument` reads the text first, so a storage outage is always one even with
+    `index.ignorecontenterror` on, whose trapping would otherwise index the file with no text, and the text read goes to
+    `DocumentManager.index(id, text, null)`; an empty text, as for a scanned PDF with no text layer, or a damaged file
+    the setting lets by, goes as a single space (`NO_TEXT`), as LogicalDOC's index reads the file again whenever it's
+    given no text, so the file is read, and converted where it's converted to PDF first, only once. It then writes the row itself through `IndexEventRows` and, with
+    `index.skiponerror` on, sets a document that failed again to Skip, as LogicalDOC's Indexer would. A failure with a
+    `StorageUnreachableException` among its causes writes, counts and records nothing, and goes up as the route's
+    `503`; an index fault while the index doesn't answer a write check (`IndexFaults.answers`) does the same as `409
+    refused`, `INDEX_UNWRITABLE`; a failure after which the document was indexed meanwhile
+    (`IndexEventRows.indexedSince`: an `event.indexed` row dated since the try began, or the document now `INDEXED`
+    where it wasn't) is answered as indexed, with nothing written over it; any other failure, an `Error` but the
+    virtual machine's included, is the document's own, its reason the message or the class's simple name
+    (`IndexFaults.reason`), which the worker gives too. Skip sets Skip in one statement that holds only while the
+    document still couldn't be indexed, and evicts the document from the second-level cache. Both are recorded with
+    `recordAfter`, `index.retried` with its `outcome` and `index.skipped`, aimed at `document` by its id and named `#
+    10412 Witness Statement.pdf`.
+  - **`IndexEventRows`** writes `event.indexed` and `event.indexed.error` (with the failure's message as its
+    comment) as `DocumentManager.recordIndexingError` writes its own row, with the folder's path, in the caller's
+    transaction, and, for a session this node has open, its address and device; a document that no longer exists gets
+    none. Try Again and the reindex worker both write through it, as LogicalDOC's `index` writes its error row before
+    it throws whenever it's given a history, a storage outage's included.
+  - **`hd_reindex_job` and `hd_reindex_doc`** (`V14__reindex.sql`) are the reindexes. `hd_reindex_job` has a row for
+    each reindex started: its kind, target and name, who started it, its state (`WAITING`, `RUNNING`, `DONE` or
+    `CANCELLED`), whether it was asked to stop (`hd_cancel`) and whether it empties the index first and has
+    (`hd_emptyfirst`, `hd_emptied`), its counts (`hd_total`, `hd_done`, `hd_failed`, `hd_skipped`, `hd_leftout`), its
+    position, its times, and since when the index couldn't be written (`hd_stalled`). `hd_reindex_doc` holds the
+    documents of each reindex that hasn't ended, fixed when it's started, and loses them in the transaction that ends
+    it, so a reindex knows what it covered whatever happens to its folders, its counts add up, and a restart goes on
+    over the same set. `ReindexJobs` is their JDBC store.
+  - **`ReindexService`** (`admin.index`) previews, starts, lists and cancels reindexes, administrators only. A scope
+    is `ReindexScope`: documents by doc # (1,000 different ones at most), a folder's, a matter's or a Store's tree
+    walked by parent (`StoredRows.tree`), or the tenant's every live document. Of those, a reindex tries what
+    `ReindexJobs.ELIGIBLE` keeps, and counts as left out the shortcuts and the documents set to Skip, archived (which
+    LogicalDOC's Indexer leaves alone) or in a running LogicalDOC transaction (a `lock` row of `ld_generic` for its
+    transaction, the rows `LockManager.getAllTransactions()` reads), so a preview's `count` is the reindex's total.
+    A start is refused when it would try nothing, and while a reindex of the same kind and target hasn't ended (never
+    for documents), both checked under one lock so two starts at once can't both pass; it writes the reindex, its
+    documents and its record (`reindex.started`) in one transaction, `WAITING`, and wakes the worker. A cancel ends a
+    waiting reindex at once and asks a running one to stop. The estimate is the count times the seconds a document
+    took in the latest reindex that ended `DONE` having tried 20 or more, or 1.75 s each; a running reindex that has
+    tried 20 or more gives what it has left at its own rate so far.
+  - **`ReindexWorker`** (`admin.index`) is a `HealdanStartListener` and a `HealdanJob`, `reindex`, labelled Reindex,
+    which can't be run now. It runs the reindexes one at a time, oldest first, on its thread, `healdan-reindex`, from a
+    minute after the start, woken by a start or a cancel. Each turn ends a running reindex asked to stop, or one with
+    nothing left, or works through its next 100 documents above its position, in id order, on as many threads as
+    LogicalDOC's Indexer takes (`threadpool.IndexerTask.max`); with none running, it begins the oldest waiting one, and
+    a reindex that empties the index first, as its run begins, marks the tenant's documents indexed, or waiting for
+    their properties alone, as the file patterns have them (`IndexRules`: `TO_INDEX`, `TO_INDEX_METADATA` or Skip),
+    Skip kept, and commits, then drops the index and counts it, and only once it's
+    empty sets `hd_emptied`; LogicalDOC's drop swallows its failures, so one that leaves entries stalls the reindex as
+    an outage does, and the next turn marks, drops and counts again. Each document is looked at again just before its
+    turn: one no longer live, set to Skip, archived or in a running transaction is skipped, and so is one whose file's
+    storage can't be reached, its entry, status and history as they were. The file patterns decide, as for Try Again:
+    one they leave out is skipped and set to Skip in the batch's save, and one they have indexed by its properties
+    alone is set `TO_INDEX_METADATA` just before its turn. It's indexed through `DocumentIndexing`, its text read first
+    as Try Again reads it, its old entry kept until the new one replaces it, so search goes on finding it; a document's
+    own failure writes its error row, as the reindex's starter, and marks it to wait as it was tried, `TO_INDEX` or
+    `TO_INDEX_METADATA`, so it joins Couldn't Be Indexed and LogicalDOC's Indexer tries it again, or Skip where
+    `index.skiponerror` is on; unless `IndexEventRows.indexedSince` finds it indexed since its try began, by Try Again
+    or the Indexer, when it counts as done and nothing of its failure is saved; and the save sets a document that
+    wasn't `INDEXED` as its try began only while it still isn't, so an index committed after that check is kept. A failure that's a collision with
+    another write (a stale row or an optimistic lock failure among its causes) is tried once more after the batch's
+    threads are done. A batch's rows, counts and position are saved together once it ends. A batch in which a document
+    failed because the index can't be written (an `IndexException` or a `SolrException` among its causes) is the
+    index's outage, whatever was indexed beside it, once the index fails a write check (`IndexFaults.answers`: a count,
+    and a committed delete of a key no entry has); while it answers, those faults are the documents' own failures. In
+    an outage nothing of the batch is saved, the documents it set `TO_INDEX_METADATA` are put back as they were,
+    `hd_stalled` says since when, and the batch runs again after 5 seconds, doubling to a minute. Documents skipped as their storage couldn't be reached are also
+    counted in `hd_unreachable`, with a warn line per batch that met one, giving counts only. It reports to `JobStatus`
+    as a reindex's run begins and ends, and as the worker itself fails, which it tries again 30 seconds later: its loop
+    catches every `Throwable`, an `Error` too, and only an interrupt as it stops ends it, and `failingSince`, in memory,
+    says since when it has failed at each try with a reindex running.
   - **What the background jobs last did** (`com.logicaldoc.healdan.admin.jobs`, Admin app spec §9.5). Each of
     Healdan's jobs is a `HealdanJob` bean, with a name, a label and whether it can run now, and reports to
     `JobStatus` under its name: `started` before a run, `finished` or `failed` after it, each with its next run, and
@@ -814,8 +920,9 @@ see [Building from Source](../building-from-source/#running-the-war-outside-dock
     (`runOnce`), `healdan-storage`'s mover from its sweep and its `runOnce()`, and the Trash destroyer and the
     storage retests, purge, alert and nightly check from their schedulers and from Run Now (see Job control, below),
     so a direct call to one of those last, as a test makes, reports nothing.
-  - **`Jobs`** lists Healdan's eight jobs in a fixed order (`preview`, `email-index`, `trash-destroyer`,
-    `storage-mover`, `storage-retest`, `storage-purge`, `storage-alert`, `storage-nightly-check`; the storage ones only
+  - **`Jobs`** lists Healdan's nine jobs in a fixed order (`preview`, `email-index`, `trash-destroyer`,
+    `storage-mover`, `storage-retest`, `storage-purge`, `storage-alert`, `storage-nightly-check`, `reindex`; the
+    storage ones only
     where `healdan-storage` is, and switched off on an `FSStore` server, where none runs: `HealdanJob.enabled()`, which
     `healdan-storage`'s `StorageJob` answers from `StoreTracking.active()`), then LogicalDOC's six scheduled tasks from
     `TaskManager`: the Indexer, Index Optimizer, Tags Processor, Digest Processor, Statistics Collector and Paths
@@ -862,7 +969,8 @@ see [Building from Source](../building-from-source/#running-the-war-outside-dock
     each change adds to once it commits): the next read after it forgets what they keep, as `forget()` does, and works
     them out afresh, so the Errors screen's ask straight after a resolve gets the new count. The jobs' source is told
     the same way of each job action that changed something and each run that ends otherwise than the one before
-    (`Jobs.changes()`, below). `readAt` is when the
+    (`Jobs.changes()`, below), and the index's source of Try Again, Skip and a reindex's end (`IndexCounts.changes()`,
+    above). `readAt` is when the
     oldest answer a request is given was read. A source that fails, is stuck,
     or is still being worked out, puts its codes in `unchecked` and gives its tiles `problem`, a fixed line, with
     `attention` for status, and the rest are whole; the failure is logged at warn with its class only, its stack at
@@ -870,13 +978,15 @@ see [Building from Source](../building-from-source/#running-the-war-outside-dock
     Admin app's addresses that is the Classic Interface's, `/frontend.jsp`, until each screen ships. Phase 2 gave
     Clients, Matters and Workspace Templates theirs, Phase 3 Stores and Backends, Phase 4 Users, `/admin/users`,
     which no item or tile links to yet, and Phase 5 Errors (`/admin/errors`), Server Log (`/admin/server-log`),
-    Audit Trail (`/admin/audit`) and Background Jobs (`/admin/jobs`) (`DashboardScreensTest`):
+    Audit Trail (`/admin/audit`) and Background Jobs (`/admin/jobs`), and Phase 6 Search Index
+    (`/admin/search-index`) (`DashboardScreensTest`):
     `files-stuck` links to Stores, or to Backends when only files with no Store are stuck (the item's own screen, in
     `Found`), and `backend-unreachable`, `disk-low`, the Storage Backends tile and the Disk tile to Backends; where
     storage backends are off, `disk-low` and the Disk tile link to the Classic Interface, as Backends has nothing
     there. `errors` links to Errors with Unresolved Only set (`UNRESOLVED_ERRORS`, `/admin/errors?unresolved=true`);
     `previews-given-up`, `job-failed`, `job-overdue`, and the Previews and Background
-    Jobs tiles to Background Jobs; and the Server, Database and Memory tiles to Server Log. Tests
+    Jobs tiles to Background Jobs; `index-failed` and the Search Index tile to Search Index; and the Server, Database
+    and Memory tiles to Server Log. Tests
     call `read()` after `forget()`, which drops what's kept.
   - **Reading a document is recorded** (`DocumentViews`, `com.logicaldoc.healdan.admin`; Admin app spec §8.8), as
     LogicalDOC's `event.viewed` in the document's history, for the Audit Trail. `healdan-api`'s `/preview` calls
@@ -1038,7 +1148,8 @@ see [Building from Source](../building-from-source/#running-the-war-outside-dock
       daemon thread, `healdan-run-now-<job>`, only while none goes on, and reports to `JobStatus` as a scheduled run
       does, the job's next scheduled run left as it was; a scheduled run that comes due meanwhile waits for it to end,
       then runs. The mover's Run Now wakes its coordinator, whose passes report as they always do, and is refused before
-      the coordinator has started. Previews, the email index and the storage alert run only by themselves.
+      the coordinator has started. Previews, the email index, the storage alert and the reindex worker run only by
+      themselves.
     - **Recorded** with `recordAfter`, as saving a task's scheduling writes `context.properties` and reschedules it,
       which isn't one transaction: in the `MONITORING` area, aimed at `job` with no id and named by the job's name,
       `job.run-requested`, `job.stop-requested`, `job.enabled`, `job.disabled` and `job.schedule-changed` (one change,

@@ -63,8 +63,8 @@ export const NAV: readonly NavGroup[] = [
       { label: 'admin.nav.backends', route: routes.backends, icon: 'database', count: ['backend-unreachable'] },
     ],
   },
-  // Search Index, in Phase 6
-  { group: 'admin.nav.search', items: [] },
+  // Search Index, in Phase 6: documents that couldn't be indexed need attention
+  { group: 'admin.nav.search', items: [{ label: 'admin.nav.searchIndex', route: routes.searchIndex, icon: 'search', count: ['index-failed'] }] },
   // Errors, Server Log, Audit Trail and Background Jobs, in Phase 5: errors nobody has resolved, and jobs that failed or
   // are overdue, need attention (P5-R20)
   {

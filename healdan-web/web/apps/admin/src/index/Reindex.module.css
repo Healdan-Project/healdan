@@ -1,0 +1,108 @@
+/* SPDX-FileCopyrightText: 2026 The Healdan Project
+   SPDX-License-Identifier: LGPL-3.0-only */
+
+/* The Reindex dialog, as 05-reindex-search.html draws it: the five choices as a segmented control, the choice's own part
+   under them, then the estimate and the buttons. */
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hd-space-4);
+  min-height: 320px;
+}
+
+/* A choice's own part */
+.pane {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hd-space-3);
+  min-width: 0;
+}
+
+/* A row of a search: its icon, its words, and a count at its end */
+.row {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--hd-space-3);
+  min-width: 0;
+}
+
+.rowText {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.secondary {
+  color: var(--hd-text-secondary);
+  font-size: var(--hd-font-size-small);
+}
+
+.count {
+  flex: none;
+  color: var(--hd-text-secondary);
+  font-size: var(--hd-font-size-small);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Folder's matter, once chosen, with the way back to the search */
+.chosen {
+  display: flex;
+  align-items: center;
+  gap: var(--hd-space-2);
+  padding: var(--hd-space-1) var(--hd-space-1) var(--hd-space-1) var(--hd-space-3);
+  border: 1px solid var(--hd-line);
+  border-radius: var(--hd-radius);
+  background: var(--hd-sidebar);
+}
+
+.chosenName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The doc #s given, each as found or not */
+.matches {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hd-space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.match {
+  display: flex;
+  align-items: center;
+  gap: var(--hd-space-3);
+  min-height: 24px;
+}
+
+.missing {
+  color: var(--hd-text-secondary);
+}
+
+.line {
+  margin: 0;
+}
+
+/* A list that couldn't be read, with Try Again */
+.unread {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--hd-space-3);
+}
+
+/* What the preview says under the choice: the estimate, and what's left out */
+.estimate {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hd-space-1);
+  margin-top: auto;
+}

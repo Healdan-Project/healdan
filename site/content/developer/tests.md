@@ -547,7 +547,71 @@ start them; `DashboardServiceTest` calls `forget()`, which drops what the Dashbo
   `Task.run` as any task is, which waits until the test releases it (`release`), so a test can see it running and stop
   it, and which can hold the thread that runs it before its run begins (`holdTheStart`, `letStart`), so the task stays
   idle; it's enabled, every hour, in memory only. `JobsTestHooks.list(task)` lists it after LogicalDOC's tasks through
-  `Jobs`' seam, and `reset()` puts the list back.
+  `Jobs`' seam, `JobsTestHooks.instead(task)` puts it in place of LogicalDOC's task of the same name (a held Indexer,
+  through `HeldTask(String name)`), and `reset()` puts the list back.
+- **The Search Index's tests.** `IndexCountsTest` checks the three counts, the latest of many tries and tries at the
+  same moment, the failed and waiting lists with their matters (a metadata-only document that failed among the failed),
+  one document's failure and its Skip, and `moved()` moving the changes on. `IndexOverviewTest` checks the heading,
+  entries and a size that can't be read (their warnings pinned), the lists with their totals, the count kept for 10
+  seconds less a nanosecond and counted again at 10 or once `moved()` moves the changes on (through its `nanoTime`
+  seam), counted again once LogicalDOC's Indexer has ended a run (`testTheCountsAfterTheIndexerEndsARun`, through the
+  real task's scheduling, put back after), and a non-administrator refused. `IndexHistoryTest`
+  checks the events newest first, a page looking through a window by key and short pages with a cursor, the cursor's one
+  spelling, and, as `AuditFeedTest` does, every statement's bound under a custom plan and under `plan_cache_mode =
+  force_generic_plan` (`testEveryStatementKeepsItsBoundUnderACustomPlanAndAGenericOne`). `IndexReviewTest` checks Try
+  Again as the actor, one that fails again with its reason, one on a file whose storage can't be reached writing,
+  counting and recording nothing, one that fails with `index.skiponerror` on setting Skip
+  (`testTryAgainThatFailsWithSkipOnErrorSetsItToSkip`, with the document in the second-level cache first), Skip, only a
+  failed document and only an administrator, a document by its doc #, the record's name, Try Again while the index can't
+  be written leaving everything as it was until the index answers (`testTryAgainWhileTheIndexCantBeWritten`), and any
+  other failure the document's own (`testTryAgainThatFailsOtherwiseIsTheDocumentsFailure`), and, since the owner's
+  review, the file patterns (`testTryAgainKeepsTheFilePatterns`: a metadata-only file indexed without its text, one
+  left out set to Skip), a file whose storage can't be reached with `index.ignorecontenterror` on still the outage
+  (`testTryAgainWithIgnoreContentErrorOnAFileWhoseStorageCantBeReached`), and a failure not written over an index made
+  meanwhile (`testTryAgainDoesntUndoANewerIndex`). `IndexEventRowsTest` checks both rows. `IndexFilesFail` (in the
+  tests' package) wraps the store `DocumentManager` reads files through, so named documents' files fail with a
+  `StorageUnreachableException` or an `IOException` inside LogicalDOC's own parse, or are read as empty files
+  (`servedEmpty`), counting each document's reads (`reads`), and `TenantSetting` sets one of the
+  default tenant's settings, such as `index.excludes`, in memory until closed. `IndexTestHooks`, in `healdan-core`'s test-jar, makes Try Again's index fail as LogicalDOC's does
+  (`failIndexing(cause)`, wrapped in a `ParsingException`), the search index not answer Try Again's check
+  (`indexDown()`), and the Search Index's next read count afresh (`forgetCounts()`), and puts the first two back
+  (`reset()`). `AdminSearchIndexResourceTest`, in `healdan-api`, checks the routes: the heading as `IndexCounts` counts,
+  the lists and their paging, the history, Run Indexer Now refused while it runs, Try Again and Skip with the row's user
+  and the web session's address, a `503` on storage that can't be reached, a doc # no live document has, and
+  administrators on the web session only.
+- **The reindex's tests** extend `AbstractReindexTestCase`, whose layout is two Stores, three matters with their folders
+  and an empty index, the reindex seams put back after each test. `ReindexServiceTest` checks each scope's live
+  documents and what it leaves out, targets that aren't live, the scope's shape, `emptyFirst` for Everything only, a
+  start recorded and waiting its turn, the start's refusals, a waiting reindex cancelled, the list newest first, and the
+  estimates. `ReindexWorkerTest` checks a reindex in id order to `DONE`, one unreadable document, a cancel before and
+  during a batch, one at a time oldest first, a restart resuming from its position, documents deleted, moved, checked
+  out, replaced, set to Skip, destroyed, archived or busy after the start (`testDocumentsChangedAfterTheStart`, the
+  counts adding up), the scope's folder deleted mid-run, an index that can't be written and its waits, an index fault
+  beside a document indexed (that document's failure) and beside a document's own failure (the outage), a Solr fault, a
+  document on storage that can't be reached skipped, the index emptied once as the run begins, a reindex asked to stop
+  never ending `DONE`, a failure while idle, and the worker as a background job that runs by itself. Since the final
+  review it also checks a marking that fails leaving the index as it was, a drop that leaves entries stalling, a failure
+  between the emptying and the first batch, an `Error` failing the turn while the worker goes on
+  (`testAnErrorFailsTheTurnAndTheWorkerGoesOn`), a document the index refuses while it answers failing on its own
+  (`testADocumentTheIndexRefusesWhileItAnswersFails`), `index.skiponerror` setting a failed document to Skip, a save
+  that collides tried once more, and `unreachable` counted. Since the owner's review it checks the file patterns
+  (`testTheFilePatternsDecideHowEachDocumentIsIndexed`, `testEmptyTheIndexFirstKeepsTheFilePatterns`), a file whose
+  storage can't be reached kept with `index.ignorecontenterror` on while a damaged one ends as LogicalDOC ends it
+  (`testIgnoreContentErrorKeepsTheEntryOfAFileWhoseStorageCantBeReached`), an index fault after a document indexed
+  stalling while the index doesn't answer (`testAnIndexFaultAfterADocumentDoneIsTheOutageWhileTheIndexDoesntAnswer`),
+  and a failure not saved over an index made after its try began, by a row or by the status
+  (`testAFailureIsntSavedOverANewerIndex`), or committed between that check and the save
+  (`testAFailureIsntSavedOverAnIndexMadeAsItsSaved`, through the `afterIndexChecks` seam). `DocumentIndexingTest`
+  checks that a document's file is read once: its text, a file with no text, a damaged one with
+  `index.ignorecontenterror` on (its errors logged once) and without it, one whose storage can't be reached, and none
+  for a metadata-only document. `ReindexTestHooks`, in `healdan-core`'s test-jar, sets the
+  worker's seams: how it indexes (`real()`, `unwritable()`, `indexWith`, `fail(id, reason)`, `indexUnwritable()`), the
+  search index it reaches (`indexDown()`, which doesn't answer, and `dropLeavesEntries()`), its batch (`batch(n)`) and
+  its threads (`threads(n)`, one making a test's order fixed), what happens in a batch's save before its failures are saved
+  (`afterIndexChecks`), and `reset()` puts them back, `IndexFilesFail`'s store too. `AdminReindexResourceTest`,
+  in `healdan-api`, checks a preview's count as the started reindex's total, each kind, targets that aren't live, an
+  empty set refused, the fields' `422`s and the body's `400`s, the refusals' order, the list, a reindex and its cancel,
+  and administrators on the web session only.
 
 ### The Storage Tests
 
@@ -1213,6 +1277,25 @@ Tests](#the-web-modules-tests) are Maven's). [The Web App](../the-web-app/) says
     other specs', runs, stops, switches or reschedules no job, as step 9 relies on the Indexer's 5 seconds, only reads
     `webuser`'s account and matter 1.1, and makes the server log no error; its group, folder and documents stay on
     the stack, one set per browser per run.
+  - `admin-reindex.spec.ts` reindexes through the Search Index and the User app (Admin app spec §8.9, §13), in four
+    tests run one after another. As `admin`, it makes a folder of its own, `Reindex <run>`, in the shared `E2E` folder
+    of matter 1.1, with `Filed <run>` inside it, and files three text documents there whose contents hold a word of the
+    run's own, through the admin's web session in the page (`fetch` from the page, with `X-Healdan-Client: web` on
+    writes), not a device token: a device token's sign-in from a client LogicalDOC hasn't seen sends the account a
+    new-device email, which a stack with no mail server logs at error. It waits until search finds the three. Coming to
+    the Search Index from the Dashboard by the left pane, it then reindexes `Reindex <run>` from **Reindex…** by the
+    keyboard alone (Tab landing on the checked choice, **Matter**, the left arrow and Space to **Folder**, matter 1.1
+    found, the folder picked, Enter in the filter starting nothing, Tab to **Reindex 3 Documents**); the start steps
+    back over the dialog's address, so Back then goes to the Dashboard, and the card ends with `3 reindexed.`, search
+    finding the three after the start and after the end, and **History** listing it; then `Filed <run>` from a
+    right-click in the User app, whose question names it with its count once in the accessibility tree, and whose
+    toast's **View Progress** opens the Search Index in a new tab, the reindex read to its end through the page's
+    session. A matter's page and the Workspace Editor's folder open the dialog on what they're for: **Cancel** and Esc
+    close one a link opened in place, the focus on the heading, and Back goes back to the matter's page; **Cancel** and
+    Back close one **Reindex…** opened by stepping back, the focus on **Reindex…**, and none of it sends a start. Last,
+    the Audit Trail has one **Started a reindex** row for the folder, by `admin`. It never ticks **Empty the Index
+    First**, reindexes Everything or a Store, presses **Run Indexer Now**, as step 9 relies on the Indexer's 5 seconds,
+    or tries again or skips a document; its folders and documents stay on the stack, one set per browser per run.
   - `admin-a11y.spec.ts` runs axe on the Admin app as `admin`, in the light theme and again in the dark one, as
     `a11y.spec.ts` does: the Dashboard once its ten tiles and Usage's figures are drawn (it waits for Usage's chart,
     so a summary that failed fails it), the find's list for the smoke fixture's client and matter, the Help menu, the
@@ -1231,9 +1314,21 @@ Tests](#the-web-modules-tests) are Maven's). [The Web App](../the-web-app/) says
     question, each cancelled with the focus back on its button, and the **Activity** tabs of matter 1.1, also with a
     **To Date** before its **From Date**, and of the person it made in the theme, with a listener failing it on any
     request that writes;
-    and the Errors and Audit Trail lists at 768 × 1024 too), and last the signed-out screen. Phase 4's dialogs are
-    opened on a person and a group it makes in each theme, with names of its own run, so it changes nothing global. A
-    check that follows the press of a button that goes pending (**Create User**, **Reset Password**, **Create Group**)
+    and the Errors and Audit Trail lists at 768 × 1024 too), Phase 6's (the Search Index on each of its tabs; drawn
+    from answers the test gives the page with `page.route`, as one Playwright sends itself lacks the browser's
+    `Sec-Fetch-Site` and the web session refuses it: **Run Indexer Now** greyed out under the focus, the focus going to
+    the heading, the heading asked again every 5 seconds while the Indexer runs, a running reindex's card, its progress
+    bar, named **Documents** with "212 of 412" as its value, and its **Cancel** question, the focus back on the card's
+    **Cancel**, the card while the worker fails at it, and **Try Again** on a made-up row refused while the index can't
+    be written, its sentence in the row, the row kept and the focus on its button, the request never sent; the Reindex
+    dialog on each of its five choices, cancelled, **Empty the Index First** unticked; and the User app's Reindex
+    question, cancelled; with a listener that allows no write but the dialog's and the question's previews; and at
+    768 × 1024 the Search Index, the Reindex dialog within the window with nothing scrolling sideways, on **Matter** and
+    on **Folder**, and, with rows the test serves, the Waiting and History tables' sideways boxes, fitting at 768 and
+    scrolling at 480 pixels, each a named region and a Tab stop only while narrower than its table, reached by Tab and
+    scrolled by the arrow keys), and last the signed-out screen. Phase 4's dialogs
+    are opened on a person and a group it makes in each theme, with names of its own run, so it changes nothing global.
+    A check that follows the press of a button that goes pending (**Create User**, **Reset Password**, **Create Group**)
     first waits for React Aria's announcement of the button to go: a node in its live region that names the button by
     `aria-labelledby` and stays 7 seconds, after the button has gone with its form, which axe would otherwise find
     naming nothing. This is where the Dashboard's colour contrast is checked. The find's list is checked with the

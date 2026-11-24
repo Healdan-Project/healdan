@@ -1,0 +1,248 @@
+/* SPDX-FileCopyrightText: 2026 The Healdan Project
+   SPDX-License-Identifier: LGPL-3.0-only */
+
+/* The Search Index, as the first drawing of 04-index-users-storage.html draws it: the title with Run Indexer Now and
+   Reindex… at the end of its line, the figures in tiles, the reindexes' cards, then the tabs, each a plain table, as
+   Background Jobs' is (Jobs.module.css), since a row of Couldn't Be Indexed holds its own buttons. The page scrolls as a
+   whole. */
+
+.view {
+  padding: var(--hd-space-5) var(--hd-space-6) var(--hd-space-6);
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--hd-space-3) var(--hd-space-4);
+  margin-bottom: var(--hd-space-4);
+}
+
+.title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: var(--hd-weight-bold);
+}
+
+.title:focus-visible,
+.cardTitle:focus-visible,
+.sectionTitle:focus-visible,
+.about:focus-visible,
+.name:focus-visible,
+.footer p:focus-visible {
+  outline: var(--hd-focus-outline);
+  outline-offset: var(--hd-focus-offset);
+}
+
+.headActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--hd-space-2);
+  margin-inline-start: auto;
+}
+
+/* A button's icon beside its words */
+.withIcon {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--hd-space-2);
+}
+
+/* Why Run Indexer Now is greyed out */
+.refused {
+  margin: 0 0 var(--hd-space-4);
+}
+
+.muted {
+  color: var(--hd-text-secondary);
+}
+
+.small {
+  color: var(--hd-text-secondary);
+  font-size: var(--hd-font-size-small);
+}
+
+.line {
+  margin: 0;
+}
+
+/* Indexed, Waiting, Couldn't Be Indexed, and the health with the Indexer's runs */
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: var(--hd-space-3);
+  margin: 0 0 var(--hd-space-4);
+  padding: 0;
+  list-style: none;
+}
+
+.tile,
+.card {
+  min-width: 0;
+  padding: var(--hd-space-3) var(--hd-space-4);
+  border: 1px solid var(--hd-line);
+  border-radius: var(--hd-radius-large);
+  background: var(--hd-window);
+}
+
+.tile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hd-space-1);
+}
+
+.big {
+  font-size: 22px;
+  font-weight: var(--hd-weight-bold);
+  font-variant-numeric: tabular-nums;
+}
+
+.caution {
+  color: var(--hd-caution-text);
+}
+
+/* The reindexes, one card each, above the tabs */
+.cards {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hd-space-3);
+  margin-bottom: var(--hd-space-4);
+}
+
+.cards:empty {
+  display: none;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hd-space-2);
+}
+
+.cardTop {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--hd-space-2) var(--hd-space-3);
+}
+
+.cardTitle {
+  margin: 0;
+  font-size: var(--hd-font-size);
+  font-weight: var(--hd-weight-bold);
+  overflow-wrap: anywhere;
+}
+
+.cardActions {
+  display: flex;
+  gap: var(--hd-space-2);
+  margin-inline-start: auto;
+}
+
+/* A tab's panel: the line that says what it lists, then the list */
+.tab {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--hd-space-3);
+  padding-top: var(--hd-space-4);
+}
+
+.tab > * {
+  max-width: 100%;
+}
+
+.about {
+  max-width: 760px;
+  margin: 0;
+  color: var(--hd-text-secondary);
+}
+
+.sectionTitle {
+  margin: 0 0 var(--hd-space-2);
+  font-size: var(--hd-font-size-title);
+  font-weight: var(--hd-weight-bold);
+}
+
+.tab section {
+  width: 100%;
+  margin-bottom: var(--hd-space-4);
+}
+
+/* The table scrolls sideways in a narrow window, never the page */
+.tableBox {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+/* A Tab stop while it scrolls sideways (SidewaysBox), the outline inside it, as the box is as wide as the page */
+.tableBox:focus-visible {
+  outline: var(--hd-focus-outline);
+  outline-offset: calc(var(--hd-focus-offset) * -1);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table th,
+.table td {
+  padding: var(--hd-space-2) var(--hd-space-4) var(--hd-space-2) 0;
+  border-bottom: 1px solid var(--hd-line);
+  text-align: start;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.table thead th {
+  color: var(--hd-text-secondary);
+  font-size: var(--hd-font-size-small);
+  font-weight: var(--hd-weight-bold);
+}
+
+.table .name {
+  font-weight: var(--hd-weight-medium);
+}
+
+/* A title, a reason or a reindex's name wraps between words, as they can be long */
+.table .wraps {
+  min-width: 140px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* A row's buttons, at its end, in one line */
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--hd-space-2);
+}
+
+/* Under a row: why its buttons are greyed out, how Try Again went, or what was refused */
+.table tr:has(+ .more) > * {
+  border-bottom: 0;
+}
+
+.table .more > td {
+  padding-top: 0;
+  white-space: normal;
+}
+
+.more p {
+  margin: 0;
+}
+
+/* Show More, and how far back the events have been read */
+.footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--hd-space-3);
+  margin-top: var(--hd-space-3);
+}
+
+.footer p {
+  margin: 0;
+}

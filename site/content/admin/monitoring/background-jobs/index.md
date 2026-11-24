@@ -58,8 +58,14 @@ Healdan's jobs, in the list's order:
   email when it's due, one a day at most.
 - **Storage Nightly Check**, each night at 03:17, server time, checks that each file is recorded under its document's
   Store, and leaves one that isn't on its Store's backend for the Storage Mover.
+- **Reindex** runs the [reindexes](../../system/search-and-indexing/#reindex) started on the Search Index, one at a
+  time, whenever one waits or runs. Its last run is when the latest reindex's run began, and it shows **Running**
+  while one runs, and **Failed**, with the error under it, when Healdan itself couldn't go on with the reindexes, which
+  it tries again 30 seconds later. Reindexes are started, followed and cancelled on the Search Index, not here.
 
-LogicalDOC's tasks are described on [Scheduled Tasks](../../system/scheduled-tasks/).
+LogicalDOC's tasks are described on [Scheduled Tasks](../../system/scheduled-tasks/). The Indexer can also be run from
+the Search Index, with **Run Indexer Now** (see
+[Search and Indexing](../../system/search-and-indexing/#the-search-index)).
 
 ## What Each Job Allows
 
@@ -71,8 +77,9 @@ question for **Stop** and **Disable**.
 - **Healdan's jobs:** **Run Now**, for the Trash Destroyer, the Storage Mover, the Storage Retests, the Storage Purge
   and the Storage Nightly Check, while it's switched on and isn't running. It runs at once, in the background, as a
   scheduled run does, and the list shows its end and its result. The Trash Destroyer still destroys only what's due.
-  Previews, the Email Index and the Storage Alert allow nothing here, and none of Healdan's jobs is stopped, disabled or
-  given a schedule.
+  Previews, the Email Index, the Storage Alert and Reindex allow nothing here, and none of Healdan's jobs is stopped,
+  disabled or given a schedule.
+
 - **LogicalDOC's tasks:** **Run Now** while it's enabled and idle, and **Stop** in its place while it runs; **Enable**
   or **Disable**, whichever applies; and, always, **Schedule…** (see [A Task's Schedule](#a-tasks-schedule)). Run Now
   isn't offered while the server is set not to run scheduled tasks.

@@ -72,7 +72,9 @@ public class StorageJobsTest extends AbstractStorageTestCase {
 				all.subList(0, 8).stream().map(JobView::name).toList());
 		assertEquals(List.of("Storage Mover", "Storage Retests", "Storage Purge", "Storage Alert",
 				"Storage Nightly Check"), all.subList(3, 8).stream().map(JobView::label).toList());
-		assertEquals("IndexOptimizer", all.get(8).name());
+		// The reindex comes last of Healdan's, after the storage's
+		assertEquals("reindex", all.get(8).name());
+		assertEquals("IndexOptimizer", all.get(9).name());
 		assertTrue(all.subList(3, 8).stream().allMatch(JobView::enabled));
 		assertFalse(all.subList(3, 8).stream().anyMatch(JobView::logicalDocTask));
 	}

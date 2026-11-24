@@ -41,6 +41,46 @@ export function searchId(value: unknown): number | undefined {
   return idFrom(typeof value === 'number' ? String(value) : typeof value === 'string' ? value : undefined)
 }
 
+/** The Search Index's tabs (spec 8.9): Couldn't Be Indexed, the one it opens on, Waiting and History */
+export type IndexTab = 'failed' | 'waiting' | 'history'
+
+/** What a reindex covers, as the Reindex dialog's choices and `ReindexScope.kind` name it */
+export type ReindexKind = 'documents' | 'folder' | 'matter' | 'store' | 'everything'
+
+export const reindexKinds = ['documents', 'folder', 'matter', 'store', 'everything'] as const satisfies readonly ReindexKind[]
+
+/**
+ * What the Search Index's address holds (P6-R18): the tab open, when it isn't Couldn't Be Indexed; and the Reindex dialog,
+ * open on a choice (`reindex`) with what it's chosen on: `id`, the matter's, the folder's or the Store's id, and `matter`,
+ * the matter whose folders the Folder choice lists. The page reads the tab; the dialog reads the rest.
+ */
+export interface SearchIndexSearch {
+  tab?: Exclude<IndexTab, 'failed'>
+  reindex?: ReindexKind
+  id?: number
+  matter?: number
+}
+
+/**
+ * The address's parameters the Search Index reads; anything else, or anything that isn't what it should be, is left out,
+ * and Couldn't Be Indexed is the tab when it names none. The ids may come as numbers, as the router validated them before.
+ */
+export function searchIndexSearch(search: Record<string, unknown>): SearchIndexSearch {
+  const tab = search.tab === 'waiting' || search.tab === 'history' ? search.tab : undefined
+  return { tab, reindex: reindexKinds.find((kind) => kind === search.reindex), id: searchId(search.id), matter: searchId(search.matter) }
+}
+
+/**
+ * The Search Index with the Reindex dialog open on a choice, with ADMIN_BASE, as a matter's page and the Workspace Editor
+ * link to it (P6-R18): `/admin/search-index?reindex=matter&id=12`, and for a folder its matter too
+ */
+export function reindexHref(kind: ReindexKind, id?: number, matter?: number): string {
+  const params = new URLSearchParams({ reindex: kind })
+  if (id !== undefined) params.set('id', String(id))
+  if (matter !== undefined) params.set('matter', String(matter))
+  return `${ADMIN_BASE}${routes.searchIndex}?${params.toString()}`
+}
+
 /** A client's page, with ADMIN_BASE: the client's id, as one segment */
 export function clientHref(id: number): string {
   return `${ADMIN_BASE}/clients/${encodeURIComponent(String(id))}`

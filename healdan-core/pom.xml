@@ -159,6 +159,12 @@
 			<version>${project.version}</version>
 			<scope>test</scope>
 		</dependency>
+		<!-- FileUtil.matches reads the index's file patterns with Ant's selectors (IndexRules); the WAR ships Ant -->
+		<dependency>
+			<groupId>org.apache.ant</groupId>
+			<artifactId>ant</artifactId>
+			<scope>provided</scope>
+		</dependency>
 		<dependency>
 			<groupId>junit</groupId>
 			<artifactId>junit</artifactId>

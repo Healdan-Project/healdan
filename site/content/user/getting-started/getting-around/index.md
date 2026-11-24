@@ -210,25 +210,28 @@ open a document in an app from the page, as each update runs the search again, o
 
 Right-click a document, a folder or a matter, in a list or in the left pane, for a menu of what you can do with it. On
 a Mac, Control-click does the same. Each action has an icon beside its label. Where the toolbar or a **⋯** menu
-shows an icon for the same action, the icons match. Every choice in these menus, but those only administrators see,
-such as **Manage in Admin**, is also on the toolbar or beside the item, so the menu is a shortcut, never the only way.
-An administrator finds every matter in the Admin app's **Matters** list too.
+shows an icon for the same action, the icons match. The toolbar or controls beside the item also offer the regular
+menu actions. Administrators can find every matter in the Admin app's **Matters** list and reindex from its
+**Search Index** (see
+[An Administrator's Items](#an-administrators-items)).
 
 - **A document,** in a folder, search results, **Recent Documents**, **Recent Emails**, **Checked Out to Me** or a
   doc # result: **Open**, **Preview** and **Open in New Tab**; **Download** and **Check Out**, or **Check In** and
   **Release** when you checked it out on the web page, or **Release…** when you checked it out on one of your
   computers; **Rename**, **Move To…** and **Delete**; **Copy Link** and **Add to Favorites** (or **Remove
-  from Favorites**). They work as the toolbar's buttons and its **⋯** (More) menu do.
+  from Favorites**). They work as the toolbar's buttons and its **⋯** (More) menu do. An administrator's menu also has
+  **Reindex**, last, after a line.
 - **A folder,** in a list or in the **My Matters** tree: **Open**, **Open in New Tab**, **New Folder** where you can
   make one (inside a matter, and never in a search folder), **Rename**, **Move To…** and **Delete** (each greyed
   out where you can't do it to the folder, and **Rename** on a matter's own folder, which has no **Move To…** or
-  **Delete** either), and **Add to Favorites** or **Remove from Favorites**.
+  **Delete** either), and **Add to Favorites** or **Remove from Favorites**. An administrator's menu also has
+  **Reindex**, last, after a line, but not on a search folder.
 - **A matter,** in **My Matters**, **Recent Matters** or a search for matters: **Open**, **Open in New Tab**,
   **Rename**, which is always greyed out (a matter's folder takes the matter's name, which only an administrator
-  changes), and **Add to My Matters** or **Remove from My Matters**. An administrator's menu also has **Manage in
-  Admin**, last, after a line: it opens the matter's page in the Admin app, in a new tab, where administrators edit,
-  move and delete the matter and change its workspace (see the Admin Guide's
-  [A Matter's Page](../../../admin/clients-and-matters/#a-matters-page)). Nobody else's menu has it.
+  changes), and **Add to My Matters** or **Remove from My Matters**. An administrator's menu also has **Reindex** and
+  **Manage in Admin**, last, after a line. **Manage in Admin** opens the matter's page in the Admin app, in a new tab,
+  where administrators edit, move and delete the matter and change its workspace (see the Admin Guide's
+  [A Matter's Page](../../../admin/clients-and-matters/#a-matters-page)).
 - **An item in My Favorites:** **Open** and **Open in New Tab**; **Rename Favorite**, and **Use Original Name** when it has a
   name of its own (see [A Favourite's Own Name](#a-favourites-own-name)); and **Remove from Favorites**.
 - **An item in the Trash:** **Restore** and, where offered, **Remove…**. See [The Trash](../../documents/the-trash/).
@@ -236,7 +239,8 @@ An administrator finds every matter in the Admin app's **Matters** list too.
 Right-clicking a document that isn't selected selects it first, in place of what was selected, as the Finder does.
 Right-clicking one of several selected documents keeps them all selected, and the menu then acts on all of them: only
 **Move To…**, **Delete** and, when they're all checked out to you, **Release** take several documents, and
-**Move To…** and **Delete** folders too, so the rest are greyed out, as they are on the toolbar.
+**Move To…** and **Delete** folders too, so the rest are greyed out, as they are on the toolbar. An administrator's
+**Reindex** takes several documents too, but not a selection with a folder in it.
 
 **Open in New Tab** opens the document's or folder's page in a new browser tab. Anywhere else, such as a text box, the
 search box, an email's message, a preview, or the space in a list below its last row, right-clicking shows your
@@ -245,6 +249,24 @@ browser's own menu, so copy, paste and spelling work as usual.
 With the keyboard, press Shift-F10, or the menu key if your keyboard has one, to open the menu of the row, tree item or
 link in **Recent Matters** or **My Favorites** that has the focus. The arrow keys move through the menu, Enter chooses, and Esc closes it and puts the focus back where
 it was.
+
+### An Administrator's Items
+
+**Reindex** and **Manage in Admin** show only in an administrator's menus. Nobody else's menu has them, and Healdan
+refuses them to anyone else.
+
+**Reindex** has the search index read again the documents you right-clicked: one document, several selected, a folder
+with every folder inside it, or a matter's whole workspace. It first asks, naming what will be reindexed, such as
+"Matter 1001.1 Charter Dispute", and saying how many documents will be indexed again, and that search keeps finding
+them meanwhile, as "412 documents will be indexed again. Search keeps finding them meanwhile." It says "Counting the
+documents…" until it knows. **Reindex 412 Documents** starts it, and **Cancel** leaves things as they are. Where
+Healdan wouldn't start one, such as for a folder with nothing to reindex or a matter already being reindexed, it says
+why in place of the count, with only **Cancel**. More than 1,000 documents at once are refused: "Reindex at most 1,000
+documents at a time."
+
+The reindex then runs on the server, and you stay where you were. A message says it has started, as "Reindexing 412
+documents.", with **View Progress**, which opens the Admin app's Search Index in a new tab, where it can be followed and
+cancelled. See [Reindex](../../../admin/system/search-and-indexing/#reindex) in the Admin Guide.
 
 ## The Keyboard
 

@@ -10,9 +10,10 @@ where clients and matters are made, with a page for each client and matter (see
 workspace templates (see [Workspace Templates](../workspace-templates/)); the Stores, with a page for each (see
 [Stores](../stores/)); the storage backends, with a page for each (see [Storage Backends](../storage-backends/)); and
 the people who sign in and the groups they're in, with a page for each person and group (see
-[Users and Groups](../users-and-groups/)); and the errors the server has logged, its log files, the Audit Trail of who
-did what and the background jobs (see [Monitoring](../monitoring/)). Everything else is still done in the Classic
-Interface, which the rest of this guide describes, and the Admin app links there.
+[Users and Groups](../users-and-groups/)); the search index, with the documents that couldn't be indexed and the
+reindexes (see [Search and Indexing](../system/search-and-indexing/)); and the errors the server has logged, its log
+files, the Audit Trail of who did what and the background jobs (see [Monitoring](../monitoring/)). Everything else is
+still done in the Classic Interface, which the rest of this guide describes, and the Admin app links there.
 
 {{< callout type="warning" >}}
 An administrator can read every document: an account in the `admin` group skips every permission check. Give each
@@ -67,17 +68,18 @@ Interface. See [Reverse Proxy](../../install/reverse-proxy/).
 
 The left pane has what the Admin app has so far: **Dashboard**; under **Firm**, **Clients**, **Matters**, which
 takes your install's word for matters, such as **Projects**, and **Workspace Templates**; under **People**, **Users**
-and **Groups**; under **Storage**, **Stores** and **Backends**; under **Monitoring**, **Errors**, **Server Log**,
-**Audit Trail** and **Background Jobs**; and at its foot **Classic Interface**, which opens the Classic Interface, in
-the same window, for everything else. The entry for the screen you're on is marked, and so is a list's entry while one
-of its pages is open, such as **Matters** for a matter's page.
+and **Groups**; under **Storage**, **Stores** and **Backends**; under **Search**, **Search Index**; under
+**Monitoring**, **Errors**, **Server Log**, **Audit Trail** and **Background Jobs**; and at its foot **Classic
+Interface**, which opens the Classic Interface, in the same window, for everything else. The entry for the screen
+you're on is marked, and so is a list's entry while one of its pages is open, such as **Matters** for a matter's page.
 
 An entry shows a count where something there needs attention, as Needs Attention counts it (below): **Backends**, how
-many storage backends can't be reached or are failing; **Errors**, how many unresolved errors the server logged in the
-last 24 hours, each kind of fault counting once; and **Background Jobs**, how many jobs failed or are overdue. The
-counts are asked for when the Admin app opens and each time you come back to its window, and every 30 seconds while the
-Dashboard is showing. Resolving or reopening a fault, and each action on a job, asks for them again too, and the count
-follows: see [Counts in the Left Pane](../monitoring/#counts-in-the-left-pane).
+many storage backends can't be reached or are failing; **Search Index**, how many documents couldn't be indexed;
+**Errors**, how many unresolved errors the server logged in the last 24 hours, each kind of fault counting once; and
+**Background Jobs**, how many jobs failed or are overdue. The counts are asked for when the Admin app opens and each
+time you come back to its window, and every 30 seconds while the Dashboard is showing. Resolving or reopening a fault,
+each action on a job, **Try Again** and **Skip** on a document that couldn't be indexed, and the end of a reindex ask
+for them again too, and the count follows: see [Counts in the Left Pane](../monitoring/#counts-in-the-left-pane).
 
 On a window narrower than 1,024 pixels, the left pane folds away behind the **☰** (Navigation) button in the top bar,
 which opens it over the page. Esc or choosing a link closes it again. The Admin app is designed for a window 1,280
@@ -104,14 +106,13 @@ files are, or to **Backends** when only files with no Store are stuck, as those 
 that can't be reached, or a disk more than 85% full, links to **Backends** too (the disk to the Classic Interface on a
 server that doesn't use storage backends). Unresolved errors link to **Errors**, with **Unresolved Only** ticked, and
 previews given up on and a background job that failed or is overdue to **Background Jobs**. Documents that couldn't be
-indexed link to **Classic Interface** until their place is in the Admin app. With nothing to report, it says "Nothing
-needs your attention."
+indexed link to **Search Index**. With nothing to report, it says "Nothing needs your attention."
 
 | It says, for example | What it means |
 |---|---|
 | "3 files are stuck moving to storage" | files Healdan gave up moving to their Store's storage backend: see [Stuck Files and Retry](../storage-backends/waiting-and-stuck-files/#stuck-files-and-retry) |
 | "1 storage backend can't be reached" | a storage backend Healdan can't reach now, or that's failing for another reason, so Healdan can't use it: see [When a Backend Fails](../storage-backends/when-a-backend-fails/) |
-| "12 documents couldn't be indexed, so search won't find their text" | documents the [Indexer](../system/scheduled-tasks/) failed on at its last try, which it goes on trying: see [Search and Indexing](../system/search-and-indexing/) |
+| "12 documents couldn't be indexed, so search won't find their text" | documents the [Indexer](../system/scheduled-tasks/) or a reindex failed on at the last try, which the Indexer goes on trying: see [Search and Indexing](../system/search-and-indexing/#couldnt-be-indexed) |
 | "4 unresolved errors in the last 24 hours" | errors the server logged in the last 24 hours that nobody has resolved, an error logged again and again counting once. A refused sign-in, such as one with a password that has to be changed first or a disabled account's, isn't counted: it's a refusal, not a fault. See [Errors](../monitoring/errors/) |
 | "2 previews were given up on" | Office previews Healdan gave up making after their last try: see [Office Previews](../office-previews/) |
 | "1 background job failed when it last ran" | a background job that's switched on, Healdan's own work or one of LogicalDOC's scheduled tasks, whose last run failed: see [Background Jobs](../monitoring/background-jobs/). A scheduled task's run counts as failed when it logged an error while it ran, even one it went on from |
@@ -126,7 +127,9 @@ Stuck Files, Errors.", and never says that nothing needs your attention while it
 Ten tiles, each with its status in words and a line of detail. A tile opens the screen behind it: **Storage
 Backends** and **Disk** open **Backends** (**Disk** the Classic Interface on a server that doesn't use storage
 backends); **Server**, **Database** and **Memory** open **Server Log**; **Previews** and **Background Jobs** open
-**Background Jobs**; and the others, for now, the Classic Interface. The status is:
+**Background Jobs**; **Search Index** opens **Search Index**; and the others, for now, the Classic Interface.
+
+The status is:
 
 - **OK** when all is well;
 - **Needs Attention** when something needs acting on;
@@ -180,9 +183,11 @@ Everything else, which the rest of this guide describes there: the permissions o
 who can see it; Healdan Settings with its Sign-In tab, where an account is unlinked from its sign-in provider; for
 people, the Security settings under **Access Control**, making read-only accounts and deleting accounts (see
 [In the Classic Interface](../users-and-groups/#in-the-classic-interface)); and the screens [System](../system/)
-covers, such as search and indexing, outgoing email and reports. Its Scheduled Tasks, System Information's **Log** tab
-and the Last Changes report still work there too, beside the Admin app's Background Jobs, Server Log and Audit Trail
-(see [What's Still in the Classic Interface](../monitoring/#whats-still-in-the-classic-interface)).
+covers, such as the search index's settings, outgoing email and reports. Its Scheduled Tasks, System Information's
+**Log** tab and the Last Changes report still work there too, beside the Admin app's Background Jobs, Server Log and
+Audit Trail (see [What's Still in the Classic Interface](../monitoring/#whats-still-in-the-classic-interface)), and so
+do the Search and Indexing screen's buttons and tabs, beside the Search Index (see
+[In the Classic Interface](../system/search-and-indexing/#in-the-classic-interface)).
 **Classic Interface**, in your menu or at the foot of the left pane, opens it, on the same sign-in. Its own ways of
 making and changing clients, matters, templates, users and groups still work there too, and so does Healdan Settings'
 **Storage** tab, which does what the Admin app's storage screens do (see

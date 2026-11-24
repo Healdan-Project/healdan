@@ -58,6 +58,8 @@ import com.logicaldoc.healdan.admin.storage.StorageRecords.BackendInfo;
 import com.logicaldoc.healdan.admin.storage.StorageRecords.StorageOverview;
 import com.logicaldoc.healdan.admin.storage.StorageRecords.StorageSettingsInfo;
 import com.logicaldoc.healdan.admin.storage.StorageRecords.StoreBackendInfo;
+import com.logicaldoc.healdan.admin.index.IndexCounts;
+import com.logicaldoc.healdan.admin.index.IndexReview;
 import com.logicaldoc.healdan.matter.Matter;
 import com.logicaldoc.healdan.preview.PreviewJobs;
 import com.logicaldoc.healdan.preview.PreviewWorker;
@@ -84,6 +86,8 @@ public class DashboardServiceTest extends AbstractHealdanTestCase {
 
 	private static final String SERVER_LOG = "/admin/server-log";
 
+	private static final String SEARCH_INDEX = "/admin/search-index";
+
 	/** The links to the Admin app's screens, by attention code and tile name; every other is the Classic Interface */
 	private static final Map<String, String> LINKS = Map.ofEntries(
 			Map.entry(AttentionItem.FILES_STUCK, "/admin/stores"), Map.entry(AttentionItem.BACKEND_UNREACHABLE, BACKENDS),
@@ -93,7 +97,8 @@ public class DashboardServiceTest extends AbstractHealdanTestCase {
 			Map.entry(HealthTile.STORAGE_BACKENDS, BACKENDS), Map.entry(HealthTile.DISK, BACKENDS),
 			Map.entry(HealthTile.SERVER, SERVER_LOG), Map.entry(HealthTile.DATABASE, SERVER_LOG),
 			Map.entry(HealthTile.MEMORY, SERVER_LOG), Map.entry(HealthTile.PREVIEWS, JOBS),
-			Map.entry(HealthTile.BACKGROUND_JOBS, JOBS));
+			Map.entry(HealthTile.BACKGROUND_JOBS, JOBS), Map.entry(AttentionItem.INDEX_FAILED, SEARCH_INDEX),
+			Map.entry(HealthTile.SEARCH_INDEX, SEARCH_INDEX));
 
 	private final HealdanFixtures fx = new HealdanFixtures();
 
@@ -653,6 +658,37 @@ public class DashboardServiceTest extends AbstractHealdanTestCase {
 		}
 		// Enabled again, it counts again at the next read
 		assertEquals(failed.detail(), item(service.read(), AttentionItem.JOB_FAILED).detail());
+	}
+
+	// A document tried again or set to Skip, or a reindex job's end, is counted at the next read, not once what's kept
+	// is old (ruling P6-R15)
+	@Test
+	public void testAnIndexChangeIsCountedAtTheNextRead() throws Exception {
+		service.clock = Clock.fixed(Instant.now(), ZoneOffset.UTC);
+		Document document = unindexable();
+		assertEquals(1, item(read(), AttentionItem.INDEX_FAILED).count());
+
+		// Skipped: the next read, kept a moment ago, has it
+		IndexReview.get().skip(document.getId(), fx.admin());
+		assertNull(item(service.read(), AttentionItem.INDEX_FAILED));
+		assertEquals("None waiting, none failed", tile(service.read(), HealthTile.SEARCH_INDEX).detail());
+
+		// A change nothing says of is seen once what's kept is old, or forgotten
+		jdbc.update("update ld_document set ld_indexed = ? where ld_id = ?", IndexingStatus.TO_INDEX.ordinal(),
+				document.getId());
+		assertNull(item(service.read(), AttentionItem.INDEX_FAILED));
+		// A reindex job's end says so
+		IndexCounts.get().moved();
+		assertEquals(1, item(service.read(), AttentionItem.INDEX_FAILED).count());
+	}
+
+	// The Search Index's own page shows the tile as the Dashboard makes it (ruling P6-R14)
+	@Test
+	public void testTheSearchIndexTileForItsPage() {
+		HealthTile tile = DashboardService.searchIndexTile(new IndexCounts.Counts(10, 2, 1));
+		assertEquals(new HealthTile(HealthTile.SEARCH_INDEX, HealthTile.ATTENTION, "2 waiting, 1 failed", null, null,
+				SEARCH_INDEX, null), tile);
+		assertEquals(HealthTile.OK, DashboardService.searchIndexTile(new IndexCounts.Counts(10, 0, 0)).status());
 	}
 
 	// What's costly is kept: a second read within the minute answers from it, without asking again
