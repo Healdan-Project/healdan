@@ -209,8 +209,8 @@ open a document in an app from the page, as each update runs the search again, o
 ## Right-Click Menus
 
 Right-click a document, a folder or a matter, in a list or in the left pane, for a menu of what you can do with it. On
-a Mac, Control-click does the same. Each action has an icon beside its label. When an action also appears on the
-toolbar or in a **⋯** menu, it uses the same icon. Every choice in these menus, but those only administrators see,
+a Mac, Control-click does the same. Each action has an icon beside its label. Where the toolbar or a **⋯** menu
+shows an icon for the same action, the icons match. Every choice in these menus, but those only administrators see,
 such as **Manage in Admin**, is also on the toolbar or beside the item, so the menu is a shortcut, never the only way.
 An administrator finds every matter in the Admin app's **Matters** list too.
 
