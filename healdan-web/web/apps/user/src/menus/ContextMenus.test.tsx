@@ -35,6 +35,7 @@ describe("a document row's menu", () => {
 
     expect(await screen.findByRole('menu', { name: 'Actions for Lease.docx' })).toBeTruthy()
     expect(await names()).toEqual(['Open', 'Preview', 'Open in New Tab', 'Download', 'Check Out', 'Rename', 'Move To…', 'Delete', 'Copy Link', 'Add to Favorites'])
+    for (const entry of await items()) expect(entry.querySelector('svg')?.getAttribute('aria-hidden')).toBe('true')
     expect(within(await menu()).getAllByRole('separator')).toHaveLength(3)
     const newTab = await item('Open in New Tab')
     expect(newTab.getAttribute('href')).toBe('/app/doc/10432')

@@ -49,6 +49,12 @@
   color: var(--hd-text-muted);
 }
 
+/* In a menu with leading icons, leave the same space before a label that has none. */
+.menu:has(.itemIcon) .item:not(:has(> .itemIcon))::before {
+  content: '';
+  flex: 0 0 16px;
+}
+
 /* The tick on the checked one of a menu's choices, such as a heading's sorts, at the item's end */
 .check {
   margin-inline-start: auto;

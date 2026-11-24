@@ -54,10 +54,10 @@ export function PersonMenu({ children }: { children?: ReactNode }) {
         </MenuItem>
       )}
       {children}
-      <MenuItem id="classic" href="/frontend.jsp">
+      <MenuItem id="classic" icon="dashboard" href="/frontend.jsp">
         {t('person.classic')}
       </MenuItem>
-      <MenuItem id="signOut" onAction={() => void signOut()}>
+      <MenuItem id="signOut" icon="logout" onAction={() => void signOut()}>
         {t('person.signOut')}
       </MenuItem>
     </Menu>

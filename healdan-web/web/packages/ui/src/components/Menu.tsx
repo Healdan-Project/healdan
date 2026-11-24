@@ -10,6 +10,7 @@ import {
   Separator,
   type MenuItemProps as AriaMenuItemProps,
 } from 'react-aria-components'
+import { Icon, type IconName } from '../icons'
 import { Button, type ButtonProps } from './Button'
 import styles from './Menu.module.css'
 
@@ -36,8 +37,15 @@ export function Menu({ label, children, ...rest }: MenuProps) {
   )
 }
 
-export function MenuItem(props: Omit<AriaMenuItemProps, 'className' | 'style'>) {
-  return <AriaMenuItem {...props} className={styles.item} />
+export function MenuItem({ icon, children, textValue, ...props }: Omit<AriaMenuItemProps, 'className' | 'style'> & { icon?: IconName }) {
+  if (!icon) return <AriaMenuItem {...props} className={styles.item} textValue={textValue}>{children}</AriaMenuItem>
+
+  const withIcon = (label: ReactNode) => <><Icon name={icon} className={styles.itemIcon} />{label}</>
+  return (
+    <AriaMenuItem {...props} className={styles.item} textValue={textValue ?? (typeof children === 'string' ? children : undefined)}>
+      {typeof children === 'function' ? (values) => withIcon(children(values)) : withIcon(children)}
+    </AriaMenuItem>
+  )
 }
 
 /** A line between a menu's groups of items */

@@ -17,11 +17,11 @@ export function PersonMenu() {
   return (
     <>
       <ShellPersonMenu>
-        <MenuItem id="devices" onAction={() => setShowDevices(true)}>
+        <MenuItem id="devices" icon="devices" onAction={() => setShowDevices(true)}>
           {t('person.devices')}
         </MenuItem>
         {admin && (
-          <MenuItem id="admin" href="/admin/">
+          <MenuItem id="admin" icon="settings" href="/admin/">
             {t('person.admin')}
           </MenuItem>
         )}

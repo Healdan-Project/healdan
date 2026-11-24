@@ -23,9 +23,9 @@ export interface HeadingMenuOptions {
 }
 
 /** A sort, ticked while it's the list's: a screen reader hears it as the checked one of the sorts */
-function SortItem({ id, label, onAction }: { id: string; label: string; onAction: () => void }) {
+function SortItem({ id, label, onAction }: { id: TableSort['direction']; label: string; onAction: () => void }) {
   return (
-    <MenuItem id={id} textValue={label} onAction={onAction}>
+    <MenuItem id={id} icon={id === 'ascending' ? 'arrowUp' : 'arrowDown'} textValue={label} onAction={onAction}>
       {({ isSelected }) => (
         <>
           {label}
@@ -60,7 +60,7 @@ export function headingMenu<T extends TableRow>(columns: TableColumn<T>[], id: s
   }
   if (relevance && sort) {
     sorts.push(
-      <MenuItem key="relevance" id="relevance" onAction={relevance.onSelect}>
+      <MenuItem key="relevance" id="relevance" icon="listSearch" onAction={relevance.onSelect}>
         {t('columns.sortByRelevance')}
       </MenuItem>,
     )
@@ -72,7 +72,7 @@ export function headingMenu<T extends TableRow>(columns: TableColumn<T>[], id: s
     sorts,
     startResize
       ? [
-          <MenuItem key="resize" id="resize" onAction={() => startResize(id)}>
+          <MenuItem key="resize" id="resize" icon="arrowsHorizontal" onAction={() => startResize(id)}>
             {t('columns.resize')}
           </MenuItem>,
         ]
@@ -80,28 +80,28 @@ export function headingMenu<T extends TableRow>(columns: TableColumn<T>[], id: s
     choice && !fixed
       ? [
           left && !left.isRowHeader && (
-            <MenuItem key="moveLeft" id="moveLeft" onAction={() => choice.onMove(id, index - 1)}>
+            <MenuItem key="moveLeft" id="moveLeft" icon="arrowLeft" onAction={() => choice.onMove(id, index - 1)}>
               {t('columns.moveLeft')}
             </MenuItem>
           ),
           index < columns.length - 1 && (
-            <MenuItem key="moveRight" id="moveRight" onAction={() => choice.onMove(id, index + 1)}>
+            <MenuItem key="moveRight" id="moveRight" icon="arrowRight" onAction={() => choice.onMove(id, index + 1)}>
               {t('columns.moveRight')}
             </MenuItem>
           ),
-          <MenuItem key="hide" id="hide" onAction={() => choice.onHide(id)}>
+          <MenuItem key="hide" id="hide" icon="eyeOff" onAction={() => choice.onHide(id)}>
             {t('columns.hide', { column: column.name })}
           </MenuItem>,
         ].filter(Boolean)
       : [],
     [
       choice && (
-        <MenuItem key="choose" id="choose" onAction={options.onChoose}>
+        <MenuItem key="choose" id="choose" icon="columns" onAction={options.onChoose}>
           {t('columns.choose')}
         </MenuItem>
       ),
       onResetColumns && (
-        <MenuItem key="reset" id="reset" onAction={onResetColumns}>
+        <MenuItem key="reset" id="reset" icon="refresh" onAction={onResetColumns}>
           {t('columns.reset')}
         </MenuItem>
       ),
