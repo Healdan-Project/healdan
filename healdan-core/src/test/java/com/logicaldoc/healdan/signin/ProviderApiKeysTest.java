@@ -322,7 +322,7 @@ public class ProviderApiKeysTest extends AbstractHealdanTestCase {
 		Session bobsSession = SessionManager.get().newSession("bob", HealdanFixtures.PASSWORD, client);
 
 		// A local account with a password again behind Healdan's back, as a restore could leave it
-		String hash = Encrypter.encryptSHA256(HealdanFixtures.PASSWORD);
+		String hash = Encrypter.encodeSHA256(HealdanFixtures.PASSWORD);
 		jdbc().update("update ld_user set ld_source = ?, ld_password = ? where ld_id = ?",
 				UserSource.DEFAULT.ordinal(), hash, jane.getId());
 		UserDAO.get().evict(jane.getId());
@@ -358,7 +358,7 @@ public class ProviderApiKeysTest extends AbstractHealdanTestCase {
 
 		// Refused every time, and never counted: neither the address's count nor the key's moves, so 25 tries (the
 		// address's limit is 20) don't block the address
-		String keyCounter = LoginThrottle.LOGINFAIL_APIKEY + Encrypter.encryptSHA256(key);
+		String keyCounter = LoginThrottle.LOGINFAIL_APIKEY + Encrypter.encodeSHA256(key);
 		for (int i = 0; i < 25; i++) {
 			AuthenticationException e = assertThrows(AuthenticationException.class,
 					() -> SessionManager.get().newSession(key, client));

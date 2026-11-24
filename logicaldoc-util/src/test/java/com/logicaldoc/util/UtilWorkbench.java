@@ -10,14 +10,8 @@ import com.logicaldoc.util.crypt.Encrypter;
 public class UtilWorkbench {
 
 	public static void main(String[] args) throws Exception {
-	    String encrypted = Encrypter.get().encrypt("marco");
-	    System.out.println("encrypted: "+encrypted);
-	    
-	    String decrypted = Encrypter.get().decrypt(encrypted);
-        System.out.println("decrypted: "+decrypted);
+		System.out.println(Encrypter.get().encodeSHA256("eIZlvHriTOjBJwaGNv.VP4"));
 
-		
-		
 //		File file = new File("target/context.properties");
 //		ContextProperties context=new ContextProperties(file);
 //		context.setProperty("gui.welcome", "×ž×’×™×¢ ×œ×”×•×¤×¢×” ×‘×™×©×¨×�×œ ×•×�×ª×� × ×”× ×™×� ×ž×”×˜×‘×” ×™×™×—×•×“×™×ª");

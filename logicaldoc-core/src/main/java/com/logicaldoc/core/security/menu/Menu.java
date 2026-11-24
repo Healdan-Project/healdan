@@ -4,9 +4,6 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.type.SqlTypes;
-
 import com.logicaldoc.core.PersistentObject;
 import com.logicaldoc.core.security.AccessControlEntry;
 import com.logicaldoc.core.security.Secure;
@@ -97,9 +94,10 @@ public class Menu extends PersistentObject implements Secure<AccessControlEntry>
     public static final long DESTROY_DOCUMENTS = -9;
 
     public static final long SUPPORT_TICKET = 3040;
-
+    
     public static final long ADMINISTRATION_METADATA = 25;
-
+    
+    
     @Column(name = "ld_name", length = 255)
     private String name = "";
 
@@ -115,7 +113,7 @@ public class Menu extends PersistentObject implements Secure<AccessControlEntry>
     @Column(name = "ld_type", nullable = false)
     private int type = TYPE_DEFAULT;
 
-    @JdbcTypeCode(SqlTypes.INTEGER) @Column(name = "ld_enabled", nullable = false)
+    @Column(name = "ld_enabled", nullable = false)
     private boolean enabled = true;
 
     @Column(name = "ld_description", length = 4000)
@@ -133,7 +131,8 @@ public class Menu extends PersistentObject implements Secure<AccessControlEntry>
     @Column(name = "ld_automation")
     private String automation;
 
-    @ElementCollection(fetch = FetchType.EAGER) @CollectionTable(name = "ld_menu_acl", joinColumns = @JoinColumn(name = "ld_menuid"))
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "ld_menu_acl", joinColumns = @JoinColumn(name = "ld_menuid"))
     private Set<AccessControlEntry> accessControlList = new HashSet<>();
 
     public Menu() {

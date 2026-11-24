@@ -7,8 +7,6 @@ import java.util.List;
 import java.util.StringTokenizer;
 
 import org.apache.commons.lang.StringUtils;
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.type.SqlTypes;
 
 import com.logicaldoc.core.PersistentObject;
 
@@ -48,7 +46,7 @@ public class Tenant extends PersistentObject implements Serializable {
     @Column(name = "ld_displayname", length = 4000)
     private String displayName;
 
-    @JdbcTypeCode(SqlTypes.INTEGER) @Column(name = "ld_enabled", nullable = false)
+    @Column(name = "ld_enabled", nullable = false)
     private boolean enabled = true;
 
     @Column(name = "ld_expire", columnDefinition = "DATETIME(3)")
@@ -116,7 +114,7 @@ public class Tenant extends PersistentObject implements Serializable {
 
     @Column(name = "ld_storagequotathr")
     private Integer storageQuotaThreshold;
-
+    
     /**
      * Maximum monthly API calls
      */
@@ -125,28 +123,28 @@ public class Tenant extends PersistentObject implements Serializable {
 
     @Column(name = "ld_apicallsquotathr")
     private Integer apiCallsQuotaThreshold;
-
+    
     @Column(name = "ld_ticketsquota")
     private Long ticketsQuota;
-
+    
     @Column(name = "ld_ticketsquotathr")
     private Integer ticketsQuotaThreshold;
 
     @Column(name = "ld_workflowsquota")
     private Long workflowsQuota;
-
+    
     @Column(name = "ld_workflowsquotathr")
     private Integer workflowsQuotaThreshold;
 
     @Column(name = "ld_formsquota")
     private Long formsQuota;
-
+    
     @Column(name = "ld_formsquotathr")
     private Integer formsQuotaThreshold;
 
     @Column(name = "ld_reportsquota")
     private Long reportsQuota;
-
+    
     @Column(name = "ld_reportsquotathr")
     private Integer reportsQuotaThreshold;
 
@@ -155,19 +153,19 @@ public class Tenant extends PersistentObject implements Serializable {
 
     @Column(name = "ld_stampsquotathr")
     private Integer stampsQuotaThreshold;
-
+    
     @Column(name = "ld_importfoldersquota")
     private Long importFoldersQuota;
 
     @Column(name = "ld_importfoldersquotathr")
     private Integer importFoldersQuotaThreshold;
-
+    
     @Column(name = "ld_emailaccountsquota")
     private Long emailAccountsQuota;
 
     @Column(name = "ld_emailaccountsquotathr")
     private Integer emailAccountsQuotaThreshold;
-
+    
     @Column(name = "ld_qthreshold")
     private Integer quotaThreshold = null;
 
@@ -216,7 +214,7 @@ public class Tenant extends PersistentObject implements Serializable {
         this.importFoldersQuota = source.importFoldersQuota;
         this.importFoldersQuotaThreshold = source.importFoldersQuotaThreshold;
         this.emailAccountsQuota = source.emailAccountsQuota;
-        this.emailAccountsQuotaThreshold = source.emailAccountsQuotaThreshold;
+        this.emailAccountsQuotaThreshold = source.emailAccountsQuotaThreshold;        
         this.enabled = source.enabled;
         this.expire = source.expire;
         this.quotaThreshold = source.quotaThreshold;
@@ -390,7 +388,7 @@ public class Tenant extends PersistentObject implements Serializable {
     public void setStorageQuota(Long storageQuota) {
         this.storageQuota = storageQuota;
     }
-
+    
     public Integer getStorageQuotaThreshold() {
         return storageQuotaThreshold;
     }
@@ -406,7 +404,7 @@ public class Tenant extends PersistentObject implements Serializable {
     public void setApiCallsQuota(Long apiCallsQuota) {
         this.apiCallsQuota = apiCallsQuota;
     }
-
+    
     public Integer getApiCallsQuotaThreshold() {
         return apiCallsQuotaThreshold;
     }
@@ -422,7 +420,7 @@ public class Tenant extends PersistentObject implements Serializable {
     public void setTicketsQuota(Long ticketsQuota) {
         this.ticketsQuota = ticketsQuota;
     }
-
+        
     public Integer getTicketsQuotaThreshold() {
         return ticketsQuotaThreshold;
     }
@@ -438,7 +436,7 @@ public class Tenant extends PersistentObject implements Serializable {
     public void setWorkflowsQuota(Long workflowsQuota) {
         this.workflowsQuota = workflowsQuota;
     }
-
+    
     public Integer getWorkflowsQuotaThreshold() {
         return workflowsQuotaThreshold;
     }
@@ -454,7 +452,7 @@ public class Tenant extends PersistentObject implements Serializable {
     public void setFormsQuota(Long formsQuota) {
         this.formsQuota = formsQuota;
     }
-
+    
     public Integer getFormsQuotaThreshold() {
         return formsQuotaThreshold;
     }
@@ -470,7 +468,7 @@ public class Tenant extends PersistentObject implements Serializable {
     public void setReportsQuota(Long reportsQuota) {
         this.reportsQuota = reportsQuota;
     }
-
+    
     public Integer getReportsQuotaThreshold() {
         return reportsQuotaThreshold;
     }
@@ -486,7 +484,7 @@ public class Tenant extends PersistentObject implements Serializable {
     public void setStampsQuota(Long stampsQuota) {
         this.stampsQuota = stampsQuota;
     }
-
+    
     public Integer getStampsQuotaThreshold() {
         return stampsQuotaThreshold;
     }
@@ -498,10 +496,10 @@ public class Tenant extends PersistentObject implements Serializable {
     public Long getImportFoldersQuota() {
         return importFoldersQuota;
     }
-
+    
     public void setImportFoldersQuota(Long importFoldersQuota) {
         this.importFoldersQuota = importFoldersQuota;
-    }
+    }  
 
     public Integer getImportFoldersQuotaThreshold() {
         return importFoldersQuotaThreshold;
@@ -510,7 +508,7 @@ public class Tenant extends PersistentObject implements Serializable {
     public void setImportFoldersQuotaThreshold(Integer importFoldersQuotaThreshold) {
         this.importFoldersQuotaThreshold = importFoldersQuotaThreshold;
     }
-
+    
     public Long getEmailAccountsQuota() {
         return emailAccountsQuota;
     }
@@ -518,7 +516,7 @@ public class Tenant extends PersistentObject implements Serializable {
     public void setEmailAccountsQuota(Long emailAccountsQuota) {
         this.emailAccountsQuota = emailAccountsQuota;
     }
-
+    
     public Integer getEmailAccountsQuotaThreshold() {
         return emailAccountsQuotaThreshold;
     }

@@ -128,7 +128,7 @@ public final class PersonSessions {
 		if (key.contains(">"))
 			key = StringUtils.substringBefore(key, ">").trim();
 		try {
-			return hashes.contains(Encrypter.encryptSHA256(key));
+			return hashes.contains(Encrypter.encodeSHA256(key));
 		} catch (NoSuchAlgorithmException e) {
 			throw new IllegalStateException(e);
 		}

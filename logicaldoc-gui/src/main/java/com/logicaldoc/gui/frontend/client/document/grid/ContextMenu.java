@@ -887,7 +887,7 @@ public class ContextMenu extends Menu {
 
                         Timer timer = new Timer() {
                             public void run() {
-                                onCheckout(folder, selection);
+                                onDownload(folder, selection);
                             }
                         };
                         timer.schedule(100);
@@ -1250,35 +1250,24 @@ public class ContextMenu extends Menu {
         return false;
     }
 
-    private void onCheckout(final GUIFolder folder, final List<GUIDocument> selection) {
-        if (selection.size() == 1) {
-            DocUtil.downloadForCheckout(selection.get(0).getId());
-        } else {
-            Util.download(urlForZipDownload(folder, selection) + "&download-context=checkout");
-        }
-    }
-
     private void onDownload(final GUIFolder folder, final List<GUIDocument> selection) {
         if (selection.size() == 1) {
-            DocUtil.download(selection.get(0).getId(), null);
+            long id = selection.get(0).getId();
+            DocUtil.download(id, null);
         } else {
-            Util.download(urlForZipDownload(folder, selection).toString());
-        }
-    }
-
-    private String urlForZipDownload(final GUIFolder folder, final List<GUIDocument> selection) {
-        StringBuilder url = new StringBuilder(GWT.getHostPageBaseURL());
-        url.append("zip-export?folderId=");
-        url.append(folder.getId());
-        for (GUIDocument doc : selection) {
-            if (doc.isPasswordProtected()) {
-                SC.warn(I18N.message("somedocsprotected"));
-                break;
+            StringBuilder url = new StringBuilder(GWT.getHostPageBaseURL());
+            url.append("zip-export?folderId=");
+            url.append(folder.getId());
+            for (GUIDocument doc : selection) {
+                if (doc.isPasswordProtected()) {
+                    SC.warn(I18N.message("somedocsprotected"));
+                    break;
+                }
+                url.append("&docId=");
+                url.append(doc.getId());
             }
-            url.append("&docId=");
-            url.append(doc.getId());
+            Util.download(url.toString());
         }
-        return url.toString();
     }
 
     private void executeRoutine(long folderId, List<Long> docIds, GUIAutomationRoutine routine) {

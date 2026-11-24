@@ -55,7 +55,7 @@ public class SmokeWebUserSeedTest extends AbstractHealdanTestCase {
 		assertTrue(user.isEnabled());
 		assertEquals(User.Type.DEFAULT, user.getType());
 		assertEquals(UserSource.DEFAULT, user.getSource());
-		assertEquals(Encrypter.encryptSHA256(SmokeWebUserSeed.PASSWORD), user.getPassword());
+		assertEquals(Encrypter.encodeSHA256(SmokeWebUserSeed.PASSWORD), user.getPassword());
 		assertFalse(user.isAdmin());
 		assertTrue(UserHistoryDAO.get().findByUserId(user.getId()).stream()
 				.anyMatch(h -> UserEvent.CREATED.toString().equals(h.getEvent())));
@@ -81,7 +81,7 @@ public class SmokeWebUserSeedTest extends AbstractHealdanTestCase {
 		User after = UserDAO.get().findByUsername("webuser", true);
 		assertEquals(id, after.getId());
 		assertEquals(password, after.getPassword());
-		assertFalse(Encrypter.encryptSHA256(SmokeWebUserSeed.PASSWORD).equals(after.getPassword()));
+		assertFalse(Encrypter.encodeSHA256(SmokeWebUserSeed.PASSWORD).equals(after.getPassword()));
 	}
 
 	/** The password is published, so a stack with people never gets the user, whoever set the variable */

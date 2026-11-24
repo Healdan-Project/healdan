@@ -381,16 +381,12 @@ public class SecurityServiceImpl extends AbstractRemoteService implements Securi
                 throw new PermissionException(
                         String.format("User %s not allowed to change the password of user %s", requestor, user));
 
-<<<<<<< HEAD
             // Healdan: only Access control's Change password goes without the
             // current password
             if (oldPassword == null && !MenuDAO.get().isReadAllowed(Menu.ACCESS_CONTROL, requestor.getId()))
                 throw new ServerException("The current password is required");
 
-            if (oldPassword != null && !Encrypter.encryptSHA256(oldPassword).equals(user.getPassword()))
-=======
             if (oldPassword != null && !Encrypter.encodeSHA256(oldPassword).equals(user.getPassword()))
->>>>>>> upstream/master
                 throw new ServerException("Wrong old passord");
 
             UserHistory history = null;

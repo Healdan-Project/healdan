@@ -11,9 +11,7 @@ import java.util.stream.Collectors;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang.StringUtils;
 import org.hibernate.LazyInitializationException;
-import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.exception.GenericJDBCException;
-import org.hibernate.type.SqlTypes;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -36,15 +34,20 @@ import jakarta.persistence.Transient;
 /**
  * The Document is the central entity of LogicalDOC. A Document is a persistent
  * business object and represents metadata over a single file stored into the
- * DMS. <p> Each document has one or more Versions. The most recent version is
- * the one used as default when we refer to a Document, but all previous
- * versions are accessible from the history even if the are not indexed. </p>
+ * DMS.
+ * <p>
+ * Each document has one or more Versions. The most recent version is the one
+ * used as default when we refer to a Document, but all previous versions are
+ * accessible from the history even if the are not indexed.
+ * </p>
  * 
- * <p> Each Version carries out two main informations, the version code itself
- * that is called simply 'version', and the file version, called 'fileVersion'.
- * The first identified the Version itself while the second refers to the file
+ * <p>
+ * Each Version carries out two main informations, the version code itself that
+ * is called simply 'version', and the file version, called 'fileVersion'. The
+ * first identified the Version itself while the second refers to the file
  * content. In general not all updates to a document involves the upload of a
- * new file. </p>
+ * new file.
+ * </p>
  * 
  * A Document is written in a single language, this language defines the
  * full-text index in which the document's content will be stored.
@@ -74,7 +77,7 @@ public abstract class AbstractDocument extends Fillable implements Transactional
      */
     public static final int NATURE_DOC = 0;
 
-    @JdbcTypeCode(SqlTypes.INTEGER) @Column(name = "ld_immutable", nullable = false)
+    @Column(name = "ld_immutable", nullable = false)
     private boolean immutable = false;
 
     @Column(name = "ld_customid")
@@ -113,13 +116,16 @@ public abstract class AbstractDocument extends Fillable implements Transactional
     @Column(name = "ld_creatorid", nullable = false)
     private long creatorId;
 
-    @Column(name = "ld_status") @Enumerated(EnumType.ORDINAL)
+    @Column(name = "ld_status")
+    @Enumerated(EnumType.ORDINAL)
     private DocumentStatus status = DocumentStatus.UNLOCKED;
 
-    @Column(name = "ld_indexed", nullable = false) @Enumerated(EnumType.ORDINAL)
+    @Column(name = "ld_indexed", nullable = false)
+    @Enumerated(EnumType.ORDINAL)
     private IndexingStatus indexingStatus = IndexingStatus.TO_INDEX;
 
-    @Column(name = "ld_embedded", nullable = false) @Enumerated(EnumType.ORDINAL)
+    @Column(name = "ld_embedded", nullable = false)
+    @Enumerated(EnumType.ORDINAL)
     private EmbeddingStatus embeddingStatus = EmbeddingStatus.TO_EMBED;
 
     @Column(name = "ld_type", length = 255)
@@ -140,10 +146,10 @@ public abstract class AbstractDocument extends Fillable implements Transactional
     @Column(name = "ld_filesize")
     private long fileSize = 0;
 
-    @JdbcTypeCode(SqlTypes.INTEGER) @Column(name = "ld_signed", nullable = false)
+    @Column(name = "ld_signed", nullable = false)
     private boolean signed = false;
 
-    @JdbcTypeCode(SqlTypes.INTEGER) @Column(name = "ld_stamped", nullable = false)
+    @Column(name = "ld_stamped", nullable = false)
     private boolean stamped = false;
 
     @Column(name = "ld_links", nullable = false)
@@ -182,7 +188,7 @@ public abstract class AbstractDocument extends Fillable implements Transactional
     @Column(name = "ld_color", length = 255)
     private String color;
 
-    @JdbcTypeCode(SqlTypes.INTEGER) @Column(name = "ld_published")
+    @Column(name = "ld_published")
     private boolean published = true;
 
     @Column(name = "ld_startpublishing", columnDefinition = "DATETIME(3)")

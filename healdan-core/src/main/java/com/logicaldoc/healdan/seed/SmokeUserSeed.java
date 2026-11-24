@@ -79,7 +79,7 @@ abstract class SmokeUserSeed implements SeedStep {
 	public void run() throws Exception {
 		User existing = UserDAO.get().findByUsername(username);
 		if (existing != null) {
-			if (existing.isEnabled() && Encrypter.encryptSHA256(password).equals(existing.getPassword()))
+			if (existing.isEnabled() && Encrypter.encodeSHA256(password).equals(existing.getPassword()))
 				log.info("The user {} already exists and is left as it is", username);
 			else
 				log.warn("The user {} already exists, {}, and is left as it is, so {} can't sign in as it", username,

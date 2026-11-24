@@ -107,7 +107,7 @@ public class SignInsTest extends AbstractHealdanTestCase {
 		assertTrue(key, key.matches("[0-9A-F]{64}"));
 		for (String known : new String[] { "jane", String.valueOf(jane.getId()), "jane@firm.example", "sub-jane" }) {
 			assertNotEquals(known, key);
-			assertNotEquals(Encrypter.encryptSHA256(known), key);
+			assertNotEquals(Encrypter.encodeSHA256(known), key);
 		}
 		// CE's label keeps the key's first 7 characters and its last 4
 		assertTrue(session.getKeyLabel(), session.getKeyLabel().startsWith("hd_sign..."));
@@ -117,7 +117,7 @@ public class SignInsTest extends AbstractHealdanTestCase {
 		String oneTime = session.getDecodedKey();
 		assertTrue(oneTime, oneTime.startsWith(SignIns.PREFIX));
 		assertEquals(SignIns.PREFIX.length() + 43, oneTime.length());
-		assertEquals(key, Encrypter.encryptSHA256(oneTime));
+		assertEquals(key, Encrypter.encodeSHA256(oneTime));
 		assertNotEquals(session.getSid(), oneTime);
 
 		// And the key stood for the sign-in alone: no one can open another session with it

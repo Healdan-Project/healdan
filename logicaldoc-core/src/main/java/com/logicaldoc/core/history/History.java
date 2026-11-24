@@ -7,8 +7,6 @@ import java.util.Date;
 import java.util.List;
 
 import org.apache.commons.lang.StringUtils;
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.type.SqlTypes;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.config.BeanDefinition;
@@ -66,7 +64,7 @@ public abstract class History extends PersistentObject implements Comparable<His
     /**
      * Used to mark this event notified by the auditing system
      */
-    @JdbcTypeCode(SqlTypes.INTEGER) @Column(name = "ld_notified", nullable = false)
+    @Column(name = "ld_notified", nullable = false)
     private boolean notified = false;
 
     @Column(name = "ld_sessionid", length = 255)
