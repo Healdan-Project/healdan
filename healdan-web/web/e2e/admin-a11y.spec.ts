@@ -141,8 +141,15 @@ for (const scheme of ['light', 'dark'] as const) {
       await main().getByRole('tab', { name: 'Workspace' }).click()
       // Its own folder chosen, with who can use it
       await expect(main().getByRole('region', { name: 'Who Can Use This Folder' }).getByRole('table')).toBeVisible()
-      await expect(main().getByRole('treegrid').getByRole('row').first()).toBeVisible()
+      const root = main().getByRole('treegrid').getByRole('row').first()
+      await expect(root).toBeVisible()
       await check("a matter's Workspace")
+      await root.getByRole('gridcell').click({ button: 'right' })
+      const menu = page.getByRole('menu')
+      await expect(menu.getByRole('menuitem', { name: 'New Folder', exact: true }).locator('svg')).toHaveAttribute('aria-hidden', 'true')
+      await check("the Workspace Editor's folder menu")
+      await page.keyboard.press('Escape')
+      await expect(menu).toBeHidden()
 
       await pane.getByRole('link', { name: 'Workspace Templates' }).click()
       await expect(list('Workspace Templates').getByRole('row').nth(1)).toBeVisible()

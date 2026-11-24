@@ -24,13 +24,13 @@ export function ActionItem({ action }: { action: DocumentAction | LinkAction | u
   if (!action) return null
   if ('href' in action) {
     return (
-      <MenuItem id={action.id} href={action.href} target="_blank" rel="noopener" isDisabled={action.isDisabled}>
+      <MenuItem id={action.id} icon={action.icon} href={action.href} target="_blank" rel="noopener" isDisabled={action.isDisabled}>
         {action.label}
       </MenuItem>
     )
   }
   return (
-    <MenuItem id={action.id} isDisabled={action.isDisabled || action.isPending === true} onAction={action.perform}>
+    <MenuItem id={action.id} icon={action.icon} isDisabled={action.isDisabled || action.isPending === true} onAction={action.perform}>
       {action.label}
     </MenuItem>
   )

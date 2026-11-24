@@ -233,11 +233,11 @@ export function TrashView({ view: asked, sort, order }: TrashViewProps) {
     items: (key) =>
       byKey.has(key) ? (
         <>
-          <MenuItem id="restore" isDisabled={busy !== undefined} onAction={() => restore(targetsOf(key))}>
+          <MenuItem id="restore" icon="restore" isDisabled={busy !== undefined} onAction={() => restore(targetsOf(key))}>
             {t('trash.restore')}
           </MenuItem>
           {canRemove && (
-            <MenuItem id="remove" isDisabled={busy !== undefined} onAction={() => askRemove(targetsOf(key))}>
+            <MenuItem id="remove" icon="trash" isDisabled={busy !== undefined} onAction={() => askRemove(targetsOf(key))}>
               {t('trash.remove')}
             </MenuItem>
           )}

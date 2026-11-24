@@ -183,7 +183,9 @@ test('renames a folder by keyboard alone', async ({ page }) => {
 test("greys Rename, Move To… and Delete out on a matter's top-level folder for someone who isn't an administrator", async ({ page }) => {
   await open(page, documentsFolder)
   await main(page).getByRole('button', { name: 'More for Documents' }).click()
-  await expect(page.getByRole('menuitem', { name: 'Rename' })).toBeDisabled()
+  const rename = page.getByRole('menuitem', { name: 'Rename' })
+  await expect(rename).toBeDisabled()
+  await expect(rename.locator('svg')).toHaveCSS('color', await rename.evaluate((item) => getComputedStyle(item).color))
   await expect(page.getByRole('menuitem', { name: 'Move To…' })).toBeDisabled()
   await expect(page.getByRole('menuitem', { name: 'Delete' })).toBeDisabled()
   await page.keyboard.press('Escape')

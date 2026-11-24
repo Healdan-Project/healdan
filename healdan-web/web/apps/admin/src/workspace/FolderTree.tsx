@@ -60,13 +60,13 @@ export function actionsOf(node: WorkspaceNode, top: boolean, reindexable = false
   return [...making, 'rename', 'move', 'delete', ...(reindexable && node.kind === 'folder' ? (['reindex'] as const) : [])]
 }
 
-const ACTION_LABELS = {
-  'new-folder': 'admin.workspace.newFolder',
-  'new-search-folder': 'admin.workspace.newSearchFolder',
-  rename: 'admin.workspace.rename',
-  move: 'admin.workspace.move',
-  delete: 'admin.workspace.delete',
-  reindex: 'admin.workspace.reindex',
+const ACTIONS = {
+  'new-folder': { label: 'admin.workspace.newFolder', icon: 'folderPlus' },
+  'new-search-folder': { label: 'admin.workspace.newSearchFolder', icon: 'folderSearch' },
+  rename: { label: 'admin.workspace.rename', icon: 'edit' },
+  move: { label: 'admin.workspace.move', icon: 'folderSymlink' },
+  delete: { label: 'admin.workspace.delete', icon: 'trash' },
+  reindex: { label: 'admin.workspace.reindex', icon: 'refresh' },
 } as const
 
 /**
@@ -88,8 +88,8 @@ export function FolderTree({ root, kind, selected, onSelect, expanded, onExpande
       const node = nodeOf(key)
       if (!node) return undefined
       return actionsOf(node, node.id === root.id, reindexable).map((action) => (
-        <MenuItem key={action} id={action} onAction={() => onAction(action, node)}>
-          {t(ACTION_LABELS[action])}
+        <MenuItem key={action} id={action} icon={ACTIONS[action].icon} onAction={() => onAction(action, node)}>
+          {t(ACTIONS[action].label)}
         </MenuItem>
       ))
     },

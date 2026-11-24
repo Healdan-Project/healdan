@@ -530,7 +530,19 @@ for (const scheme of ['light', 'dark'] as const) {
       await check('New Folder')
       await page.keyboard.press('Escape')
 
-      await main().getByRole('row', { name: new RegExp(TEXT.replace('.', '\\.')) }).getByRole('rowheader').click()
+      const row = main().getByRole('row', { name: escape(TEXT) }).getByRole('rowheader')
+      await row.click()
+      const preview = main().getByRole('toolbar').getByRole('button', { name: 'Preview', exact: true })
+      const previewIcon = await preview.locator('svg').innerHTML()
+      await row.click({ button: 'right' })
+      const rowMenu = page.getByRole('menu', { name: `Actions for ${TEXT}` })
+      const menuIcon = rowMenu.getByRole('menuitem', { name: 'Preview', exact: true }).locator('svg')
+      await expect(menuIcon).toHaveAttribute('aria-hidden', 'true')
+      expect(await menuIcon.innerHTML()).toBe(previewIcon)
+      await check('the document right-click menu')
+      await page.keyboard.press('Escape')
+      await expect(rowMenu).toBeHidden()
+
       await main().getByRole('button', { name: 'More', exact: true }).click()
       await expect(page.getByRole('menu')).toBeVisible()
       await check('the More menu')
@@ -552,7 +564,15 @@ for (const scheme of ['light', 'dark'] as const) {
 
       // The person's menu is the last menu button of the bar (its name is the person's own)
       await page.getByRole('banner').locator('button[aria-haspopup]').last().click()
-      await expect(page.getByRole('menu')).toBeVisible()
+      const personMenu = page.getByRole('menu')
+      await expect(personMenu).toBeVisible()
+      const labelStarts = await personMenu.getByRole('menuitem').evaluateAll((items) => items.map((item) => {
+        const label = [...item.childNodes].find((node) => node.nodeType === Node.TEXT_NODE && node.textContent?.trim())!
+        const range = document.createRange()
+        range.selectNode(label)
+        return range.getBoundingClientRect().left
+      }))
+      expect(new Set(labelStarts).size, 'the person’s name lines up with the actions’ labels').toBe(1)
       await check('the person menu')
       await page.getByRole('menuitem', { name: 'Signed-in Devices' }).click()
       // The dialog is named by its title, which the Revoke question changes: the one dialog on the page is found without it

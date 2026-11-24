@@ -209,9 +209,10 @@ open a document in an app from the page, as each update runs the search again, o
 ## Right-Click Menus
 
 Right-click a document, a folder or a matter, in a list or in the left pane, for a menu of what you can do with it. On
-a Mac, Control-click does the same. Every choice in these menus, but an administrator's own, **Reindex** and **Manage
-in Admin**, is also on the toolbar or beside the item, so the menu is a shortcut, never the only way. An administrator
-finds every matter in the Admin app's **Matters** list too, and reindexes from its **Search Index** as well (see
+a Mac, Control-click does the same. Each action has an icon beside its label. Where the toolbar or a **⋯** menu
+shows an icon for the same action, the icons match. The toolbar or controls beside the item also offer the regular
+menu actions. Administrators can find every matter in the Admin app's **Matters** list and reindex from its
+**Search Index** (see
 [An Administrator's Items](#an-administrators-items)).
 
 - **A document,** in a folder, search results, **Recent Documents**, **Recent Emails**, **Checked Out to Me** or a
@@ -233,6 +234,7 @@ finds every matter in the Admin app's **Matters** list too, and reindexes from i
   [A Matter's Page](../../../admin/clients-and-matters/#a-matters-page)).
 - **An item in My Favorites:** **Open** and **Open in New Tab**; **Rename Favorite**, and **Use Original Name** when it has a
   name of its own (see [A Favourite's Own Name](#a-favourites-own-name)); and **Remove from Favorites**.
+- **An item in the Trash:** **Restore** and, where offered, **Remove…**. See [The Trash](../../documents/the-trash/).
 
 Right-clicking a document that isn't selected selects it first, in place of what was selected, as the Finder does.
 Right-clicking one of several selected documents keeps them all selected, and the menu then acts on all of them: only

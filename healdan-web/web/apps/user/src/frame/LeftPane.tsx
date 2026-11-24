@@ -249,7 +249,7 @@ function MyMattersSection() {
       children: expanded.has(id) ? childrenOf(id) : undefined,
       menu: (
         <Menu variant="quiet" label={<Icon name="dots" />} aria-label={t('tree.more', { name: folder.name })}>
-          <MenuItem id="rename" isDisabled={!folder.canRename} onAction={() => organising.startRename(`f${folder.id}`, 'tree')}>
+          <MenuItem id="rename" icon="edit" isDisabled={!folder.canRename} onAction={() => organising.startRename(`f${folder.id}`, 'tree')}>
             {t('rename.menu')}
           </MenuItem>
           <FolderChangeItems folder={folder} />
@@ -276,10 +276,10 @@ function MyMattersSection() {
       children: expanded.has(id) ? childrenOf(id) : undefined,
       menu: (
         <Menu variant="quiet" label={<Icon name="dots" />} aria-label={t('tree.more', { name: matter.display })}>
-          <MenuItem id="rename" isDisabled>
+          <MenuItem id="rename" icon="edit" isDisabled>
             {t('rename.menu')}
           </MenuItem>
-          <MenuItem id="remove" onAction={() => void change('DELETE', matter.folderId)}>
+          <MenuItem id="remove" icon="minus" onAction={() => void change('DELETE', matter.folderId)}>
             {t('myMatters.remove')}
           </MenuItem>
         </Menu>

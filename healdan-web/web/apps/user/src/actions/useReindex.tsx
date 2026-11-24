@@ -42,7 +42,7 @@ export function useReindex(scope: ReindexScope | undefined): DocumentAction | un
   const reindexing = useReindexing()
   const starting = useIsMutating({ mutationKey: START_KEY }) > 0
   if (!admin || !scope) return undefined
-  return { id: 'reindex', label: t('reindex.menu'), isDisabled: false, isPending: starting, perform: () => reindexing.ask(scope) }
+  return { id: 'reindex', label: t('reindex.menu'), icon: 'refresh', isDisabled: false, isPending: starting, perform: () => reindexing.ask(scope) }
 }
 
 /**

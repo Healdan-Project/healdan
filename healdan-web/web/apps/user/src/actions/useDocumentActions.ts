@@ -22,7 +22,7 @@ type DocumentView = components['schemas']['DocumentView']
 export interface DocumentAction {
   id: string
   label: string
-  /** The toolbar's button shows it */
+  /** Shown wherever the action is offered */
   icon?: IconName
   isDisabled: boolean
   /**
@@ -33,10 +33,11 @@ export interface DocumentAction {
   perform: () => void
 }
 
-/** An action that is a link, which a menu offers as one: Open in New Tab */
+/** An action that a menu offers as a link */
 export interface LinkAction {
   id: string
   label: string
+  icon: IconName
   isDisabled: boolean
   href: string
 }
@@ -73,7 +74,7 @@ export interface DocumentActionsOf {
 
 /**
  * What can be done with the selected documents (spec 6.1, 6.7): the one source of the toolbar's buttons, its More (⋯) and
- * a row's right-click menu, so their labels, the rules that disable them and what they do never differ. Actions on one
+ * a row's right-click menu, so their icons, labels, the rules that disable them and what they do never differ. Actions on one
  * document are disabled with none or several; Release, Move To… and Delete take any number. While a check-out or a
  * release runs, whichever control started it, each control that offers one is pending. Favorites and Open in New Tab
  * are only in the menus, which make them with favoriteAction and newTabAction, so a toolbar doesn't watch My Favorites
@@ -113,6 +114,7 @@ export function useDocumentActions({ document, documents, folders = [], preview 
         ? {
             id: 'checkIn',
             label: t('checkout.checkIn'),
+            icon: 'upload',
             isDisabled: checkout.busy,
             perform: () =>
               void pickFile({ accept: checkInAccept(document.name), label: t('checkout.file') }).then((file) => file && checkout.checkIn(file)),
@@ -128,12 +130,12 @@ export function useDocumentActions({ document, documents, folders = [], preview 
           perform: () => releasing.askRelease(documents),
         }
       : undefined,
-    rename: { id: 'rename', label: t('rename.menu'), isDisabled: !one, perform: () => one && organising.startRename(`d${one.docNumber}`) },
+    rename: { id: 'rename', label: t('rename.menu'), icon: 'edit', isDisabled: !one, perform: () => one && organising.startRename(`d${one.docNumber}`) },
     // Move To… and Delete are there while anything selected can be moved or deleted: a folder of several that can't is said
     // in Refusals while the rest is moved or deleted (folders and Trash spec 7.5)
-    move: { id: 'move', label: t('move.menu'), isDisabled: none || !anyMovable({ documents, folders }), perform: () => organising.askMove({ documents, folders }) },
-    delete: { id: 'delete', label: t('delete.menu'), isDisabled: !anyDeletable({ documents, folders }), perform: () => organising.askDelete({ documents, folders }) },
-    copyLink: { id: 'copyLink', label: t('details.copyLink'), isDisabled: !one, perform: () => one && void copyLink(one.docNumber) },
+    move: { id: 'move', label: t('move.menu'), icon: 'folderSymlink', isDisabled: none || !anyMovable({ documents, folders }), perform: () => organising.askMove({ documents, folders }) },
+    delete: { id: 'delete', label: t('delete.menu'), icon: 'trash', isDisabled: !anyDeletable({ documents, folders }), perform: () => organising.askDelete({ documents, folders }) },
+    copyLink: { id: 'copyLink', label: t('details.copyLink'), icon: 'copy', isDisabled: !one, perform: () => one && void copyLink(one.docNumber) },
   }
 }
 
@@ -142,10 +144,16 @@ export function useDocumentActions({ document, documents, folders = [], preview 
  * disabled while a change runs, as a menu item has no pending state
  */
 export function favoriteAction(favorite: Favorite): DocumentAction {
-  return { id: 'favorite', label: favorite.favorite ? t('favorites.remove') : t('favorites.add'), isDisabled: favorite.isUnknown || favorite.isBusy, perform: () => void favorite.toggle() }
+  return {
+    id: 'favorite',
+    label: favorite.favorite ? t('favorites.remove') : t('favorites.add'),
+    icon: favorite.favorite ? 'starFilled' : 'star',
+    isDisabled: favorite.isUnknown || favorite.isBusy,
+    perform: () => void favorite.toggle(),
+  }
 }
 
 /** Open in New Tab: the item's own page (docHref, folderHref), disabled with none, as with several documents selected */
 export function newTabAction(href: string | undefined): LinkAction {
-  return { id: 'openInNewTab', label: t('menu.openInNewTab'), isDisabled: href === undefined, href: href ?? `${APP_BASE}/` }
+  return { id: 'openInNewTab', label: t('menu.openInNewTab'), icon: 'arrowUpRight', isDisabled: href === undefined, href: href ?? `${APP_BASE}/` }
 }

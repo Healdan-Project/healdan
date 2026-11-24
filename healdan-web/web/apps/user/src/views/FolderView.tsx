@@ -158,7 +158,7 @@ export function FolderView({ folderId, sort, order }: FolderViewProps) {
           {!store && (
             <span data-rename-menu={`f${view.id}`}>
               <Menu variant="quiet" label={<Icon name="dots" />} aria-label={t('folder.more', { name: view.name })}>
-                <MenuItem id="rename" isDisabled={!view.canRename} onAction={() => startRename(`f${view.id}`, 'heading')}>
+                <MenuItem id="rename" icon="edit" isDisabled={!view.canRename} onAction={() => startRename(`f${view.id}`, 'heading')}>
                   {t('rename.menu')}
                 </MenuItem>
                 {view.kind !== 'matter' && <FolderChangeItems folder={view} />}
